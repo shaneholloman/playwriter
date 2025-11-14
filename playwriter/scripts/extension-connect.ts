@@ -21,6 +21,17 @@ async function main() {
             lines.forEach((line, i) => {
                 console.log(`  ${i + 1}: ${line}`);
             });
+            // Watch for browser console logs and log them in Node.js
+            page.on('console', msg => {
+                console.log(`Browser log: [${msg.type()}] ${msg.text()}`);
+            });
+
+            // Evaluate a sum in the browser and log something from inside the browser context
+            const sumResult = await page.evaluate(() => {
+                console.log('Logging from inside browser context!');
+                return 1 + 2 + 3;
+            });
+            console.log(`Sum result evaluated in browser: ${sumResult}`);
         }
     }
 

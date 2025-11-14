@@ -1,8 +1,8 @@
-import { createExtensionContext } from '../src/extension/extensionContextFactory'
+import { startRelayServer } from '../src/extension/extensionContextFactory'
 
 async function main() {
     const controller = new AbortController()
-    const { browserContext, close } = await createExtensionContext(
+    const { cdpRelayServer } = await startRelayServer(
         controller.signal,
     )
 }
