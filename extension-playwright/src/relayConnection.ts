@@ -277,13 +277,38 @@ export class RelayConnection {
     if (message.method === 'forwardCDPCommand') {
       const { sessionId, method, params } = message.params;
 
+      if (method === 'Target.createTarget') {
+        const url = params?.url || 'about:blank';
+        debugLog('Creating new tab with URL:', url);
+        
+        const tab = await chrome.tabs.create({ url, active: false });
+        if (!tab.id) {
+          throw new Error('Failed to create tab');
+        }
+
+        debugLog('Created tab:', tab.id, 'waiting for it to load...');
+        
+        // Wait a bit for tab to initialize
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Attach to the new tab
+        const targetInfo = await this.attachTab(tab.id);
+        
+        return { targetId: targetInfo.targetId };
+      }
+
       if (method === 'Target.closeTarget' && params?.targetId) {
+        debugLog('Closing target:', params.targetId);
+        
         for (const [tabId, tab] of this._attachedTabs) {
           if (tab.targetId === params.targetId) {
+            debugLog('Found tab to close:', tabId);
             await chrome.tabs.remove(tabId);
             return { success: true };
           }
         }
+        
+        debugLog('Target not found:', params.targetId);
         throw new Error(`Target not found: ${params.targetId}`);
       }
 

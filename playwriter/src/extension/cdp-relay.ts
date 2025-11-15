@@ -195,8 +195,18 @@ export async function startRelayServer({ port = 9988 }: { port?: number } = {}) 
         }
       }
 
+      case 'Target.createTarget': {
+        return await sendToExtension({
+          method: 'forwardCDPCommand',
+          params: { method, params }
+        })
+      }
+
       case 'Target.closeTarget': {
-        break
+        return await sendToExtension({
+          method: 'forwardCDPCommand',
+          params: { method, params }
+        })
       }
     }
 
