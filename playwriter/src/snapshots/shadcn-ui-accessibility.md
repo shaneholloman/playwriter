@@ -1,3 +1,4 @@
+Return value:
 - generic [active] [ref=e1]:
   - generic [ref=e2]:
     - banner [ref=e3]:
@@ -5,549 +6,338 @@
         - link "shadcn/ui" [ref=e6] [cursor=pointer]:
           - /url: /
           - img
-          - generic [ref=e11] [cursor=pointer]: shadcn/ui
-        - navigation [ref=e12]:
-          - link "Docs" [ref=e13] [cursor=pointer]:
+          - generic [ref=e7]: shadcn/ui
+        - navigation [ref=e8]:
+          - link "Docs" [ref=e9] [cursor=pointer]:
             - /url: /docs/installation
-          - link "Components" [ref=e14] [cursor=pointer]:
+          - link "Components" [ref=e10] [cursor=pointer]:
             - /url: /docs/components
-          - link "Blocks" [ref=e15] [cursor=pointer]:
+          - link "Blocks" [ref=e11] [cursor=pointer]:
             - /url: /blocks
-          - link "Charts" [ref=e16] [cursor=pointer]:
+          - link "Charts" [ref=e12] [cursor=pointer]:
             - /url: /charts/area
-          - link "Themes" [ref=e17] [cursor=pointer]:
+          - link "Directory" [ref=e13] [cursor=pointer]:
+            - /url: /docs/directory
+          - link "Themes" [ref=e14] [cursor=pointer]:
             - /url: /themes
-          - link "Colors" [ref=e18] [cursor=pointer]:
+          - link "Colors" [ref=e15] [cursor=pointer]:
             - /url: /colors
-        - generic [ref=e19]:
-          - button "Search documentation... ⌘ K" [ref=e21]:
-            - generic [ref=e22]: Search documentation...
-            - generic [ref=e23]:
+        - generic [ref=e16]:
+          - button "Search documentation... ⌘ K" [ref=e18]:
+            - generic [ref=e19]: Search documentation...
+            - generic [ref=e21]:
               - generic: ⌘
               - generic: K
-          - link "91.7k" [ref=e26] [cursor=pointer]:
+          - link "98.7k" [ref=e22] [cursor=pointer]:
             - /url: https://github.com/shadcn-ui/ui
             - img
-            - generic [ref=e29] [cursor=pointer]: 91.7k
-          - button "Toggle layout" [ref=e30]:
-            - generic [ref=e31]: Toggle layout
+            - generic [ref=e23]: 98.7k
+          - button "Toggle layout" [ref=e24]:
+            - generic [ref=e25]: Toggle layout
             - img
-          - button "Toggle theme" [ref=e36]:
+          - button "Toggle theme" [ref=e26]:
             - img
-            - generic [ref=e44]: Toggle theme
-    - main [ref=e45]:
-      - generic [ref=e46]:
-        - generic [ref=e49]:
-          - link "New Calendar Component" [ref=e50] [cursor=pointer]:
-            - /url: /docs/components/calendar
-            - text: New Calendar Component
+            - generic [ref=e27]: Toggle theme
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e32]:
+          - 'link "New New Components: Field, Input Group, Item and more" [ref=e33] [cursor=pointer]':
+            - /url: /docs/changelog
+            - generic "New" [ref=e34]
+            - text: "New Components: Field, Input Group, Item and more"
             - img
-          - heading "The Foundation for your Design System" [level=1] [ref=e54]
-          - paragraph [ref=e55]: A set of beautifully designed components that you can customize, extend, and build on. Start here then make it your own. Open Source. Open Code.
-          - generic [ref=e56]:
-            - link "Get Started" [ref=e57] [cursor=pointer]:
+          - heading "The Foundation for your Design System" [level=1] [ref=e35]
+          - paragraph [ref=e36]: A set of beautifully designed components that you can customize, extend, and build on. Start here then make it your own. Open Source. Open Code.
+          - generic [ref=e37]:
+            - link "Get Started" [ref=e38] [cursor=pointer]:
               - /url: /docs/installation
-            - link "View Components" [ref=e58] [cursor=pointer]:
+            - link "View Components" [ref=e39] [cursor=pointer]:
               - /url: /docs/components
-        - generic [ref=e60]:
-          - generic [ref=e65]:
-            - link "Examples" [ref=e66] [cursor=pointer]:
+        - generic [ref=e41]:
+          - generic [ref=e46]:
+            - link "Examples" [ref=e47] [cursor=pointer]:
               - /url: /
-            - link "Dashboard" [ref=e67] [cursor=pointer]:
+            - link "Dashboard" [ref=e48] [cursor=pointer]:
               - /url: /examples/dashboard
-            - link "Tasks" [ref=e68] [cursor=pointer]:
+            - link "Tasks" [ref=e49] [cursor=pointer]:
               - /url: /examples/tasks
-            - link "Playground" [ref=e69] [cursor=pointer]:
+            - link "Playground" [ref=e50] [cursor=pointer]:
               - /url: /examples/playground
-            - link "Authentication" [ref=e70] [cursor=pointer]:
+            - link "Authentication" [ref=e51] [cursor=pointer]:
               - /url: /examples/authentication
-          - generic [ref=e71]:
-            - generic [ref=e72]: Theme
-            - combobox "Theme" [ref=e73]:
-              - generic [ref=e74]: "Theme:"
-              - generic: Default
+          - generic [ref=e52]:
+            - generic [ref=e53]: Theme
+            - combobox "Theme" [ref=e54]:
+              - generic [ref=e55]: "Theme:"
+              - generic: Neutral
               - img
-        - generic [ref=e81]:
-          - generic [ref=e82]:
-            - generic [ref=e83]:
-              - generic [ref=e84]:
-                - generic [ref=e85]:
-                  - generic [ref=e86]: Total Revenue
-                  - generic [ref=e87]: $15,231.89
-                  - generic [ref=e88]: +20.1% from last month
-                - img [ref=e93]
-              - generic [ref=e99]:
-                - generic [ref=e100]:
-                  - generic [ref=e101]: Subscriptions
-                  - generic [ref=e102]: +2,350
-                  - generic [ref=e103]: +180.1% from last month
-                  - button "View More" [ref=e105]
-                - img [ref=e110]
-            - generic [ref=e123]:
-              - generic [ref=e124]:
-                - generic [ref=e125]:
-                  - generic [ref=e126]:
-                    - generic [ref=e127]: Upgrade your subscription
-                    - generic [ref=e128]: You are currently on the free plan. Upgrade to the pro plan to get access to all features.
-                  - generic [ref=e130]:
-                    - generic [ref=e131]:
-                      - generic [ref=e132]:
-                        - generic [ref=e133]: Name
-                        - textbox "Name" [ref=e134]
-                      - generic [ref=e135]:
-                        - generic [ref=e136]: Email
-                        - textbox "Email" [ref=e137]
-                    - generic [ref=e138]:
-                      - generic [ref=e139]: Card Number
-                      - generic [ref=e140]:
-                        - textbox "Card Number" [ref=e141]
-                        - textbox "MM/YY" [ref=e142]
-                        - textbox "CVC" [ref=e143]
-                    - group "Plan" [ref=e144]:
-                      - generic [ref=e145]: Plan
-                      - paragraph [ref=e146]: Select the plan that best fits your needs.
-                      - radiogroup [ref=e147]:
-                        - generic [ref=e148]:
-                          - radio "Starter Plan Perfect for small businesses." [checked] [ref=e149]:
-                            - img [ref=e151]
-                          - generic [ref=e153]:
-                            - generic [ref=e154]: Starter Plan
-                            - generic [ref=e155]: Perfect for small businesses.
-                        - generic [ref=e156]:
-                          - radio "Pro Plan More features and storage." [ref=e157]
-                          - generic [ref=e158]:
-                            - generic [ref=e159]: Pro Plan
-                            - generic [ref=e160]: More features and storage.
-                    - generic [ref=e161]:
-                      - generic [ref=e162]: Notes
-                      - textbox "Notes" [ref=e163]
-                    - generic [ref=e164]:
-                      - generic [ref=e165]:
-                        - checkbox "I agree to the terms and conditions" [ref=e166]
-                        - generic [ref=e167]: I agree to the terms and conditions
-                      - generic [ref=e168]:
-                        - checkbox "Allow us to send you emails" [checked] [ref=e169]:
-                          - generic:
-                            - img
-                        - generic [ref=e173]: Allow us to send you emails
-                  - generic [ref=e174]:
-                    - button "Cancel" [ref=e175]
-                    - button "Upgrade Plan" [ref=e176]
-                - generic [ref=e177]:
-                  - generic [ref=e178]:
-                    - generic [ref=e179]: Team Members
-                    - generic [ref=e180]: Invite your team members to collaborate.
-                  - generic [ref=e181]:
-                    - generic [ref=e182]:
-                      - generic [ref=e183]:
-                        - img "Image" [ref=e185]
-                        - generic [ref=e186]:
-                          - paragraph [ref=e187]: Sofia Davis
-                          - paragraph [ref=e188]: m@example.com
-                      - button "Owner" [ref=e189]:
-                        - text: Owner
-                        - img
-                    - generic [ref=e192]:
-                      - generic [ref=e193]:
-                        - img "Image" [ref=e195]
-                        - generic [ref=e196]:
-                          - paragraph [ref=e197]: Jackson Lee
-                          - paragraph [ref=e198]: p@example.com
-                      - button "Developer" [ref=e199]:
-                        - text: Developer
-                        - img
-                    - generic [ref=e202]:
-                      - generic [ref=e203]:
-                        - img "Image" [ref=e205]
-                        - generic [ref=e206]:
-                          - paragraph [ref=e207]: Isabella Nguyen
-                          - paragraph [ref=e208]: i@example.com
-                      - button "Billing" [ref=e209]:
-                        - text: Billing
-                        - img
-                - generic [ref=e212]:
-                  - generic [ref=e213]:
-                    - generic [ref=e214]: Cookie Settings
-                    - generic [ref=e215]: Manage your cookie settings here.
-                  - generic [ref=e216]:
-                    - generic [ref=e217]:
-                      - generic [ref=e218]:
-                        - generic [ref=e219]: Strictly Necessary
-                        - generic [ref=e220]: These cookies are essential in order to use the website and use its features.
-                      - switch "Necessary" [checked] [ref=e221]
-                    - generic [ref=e223]:
-                      - generic [ref=e224]:
-                        - generic [ref=e225]: Functional Cookies
-                        - generic [ref=e226]: These cookies allow the website to provide personalized functionality.
-                      - switch "Functional" [ref=e227]
-                  - button "Save preferences" [ref=e230]
-              - generic [ref=e231]:
-                - generic [ref=e232]:
-                  - generic [ref=e233]:
-                    - generic [ref=e234]: Create an account
-                    - generic [ref=e235]: Enter your email below to create your account
-                  - generic [ref=e236]:
-                    - generic [ref=e237]:
-                      - button "GitHub" [ref=e238]:
-                        - img
-                        - text: GitHub
-                      - button "Google" [ref=e241]:
-                        - img
-                        - text: Google
-                    - generic [ref=e248]: Or continue with
-                    - generic [ref=e249]:
-                      - generic [ref=e250]: Email
-                      - textbox "Email" [ref=e251]
-                    - generic [ref=e252]:
-                      - generic [ref=e253]: Password
-                      - textbox "Password" [ref=e254]
-                  - button "Create account" [ref=e256]
-                - generic [ref=e257]:
-                  - generic [ref=e258]:
-                    - generic [ref=e259]:
-                      - img "Image" [ref=e261]
-                      - generic [ref=e262]:
-                        - paragraph [ref=e263]: Sofia Davis
-                        - paragraph [ref=e264]: m@example.com
-                    - button "New message" [ref=e265]:
+            - button "Copy Code" [ref=e56]:
+              - img
+              - generic [ref=e57]: Copy Code
+        - generic [ref=e61]:
+          - generic [ref=e65]:
+            - group "Payment Method" [ref=e66]:
+              - generic [ref=e67]: Payment Method
+              - paragraph [ref=e68]: All transactions are secure and encrypted
+              - generic [ref=e69]:
+                - group [ref=e70]:
+                  - generic [ref=e71]: Name on Card
+                  - textbox "Name on Card" [ref=e72]:
+                    - /placeholder: John Doe
+                - generic [ref=e73]:
+                  - group [ref=e74]:
+                    - generic [ref=e75]: Card Number
+                    - textbox "Card Number" [ref=e76]:
+                      - /placeholder: 1234 5678 9012 3456
+                    - paragraph [ref=e77]: Enter your 16-digit number.
+                  - group [ref=e78]:
+                    - generic [ref=e79]: CVV
+                    - textbox "CVV" [ref=e80]:
+                      - /placeholder: "123"
+                - generic [ref=e81]:
+                  - group [ref=e82]:
+                    - generic [ref=e83]: Month
+                    - combobox "Month" [ref=e84]:
+                      - generic: MM
                       - img
-                      - generic [ref=e269]: New message
-                  - generic [ref=e271]:
-                    - generic [ref=e272]: Hi, how can I help you today?
-                    - generic [ref=e273]: Hey, I'm having trouble with my account.
-                    - generic [ref=e274]: What seems to be the problem?
-                    - generic [ref=e275]: I can't log in.
-                  - generic [ref=e277]:
-                    - textbox "Type your message..." [ref=e278]
-                    - button "Send" [disabled]:
+                    - combobox [ref=e85]
+                  - group [ref=e86]:
+                    - generic [ref=e87]: Year
+                    - combobox "Year" [ref=e88]:
+                      - generic: YYYY
                       - img
-                      - generic: Send
-                - generic [ref=e285]:
-                  - generic [ref=e286]:
-                    - generic [ref=e287]: Report an issue
-                    - generic [ref=e288]: What area are you having problems with?
-                  - generic [ref=e289]:
-                    - generic [ref=e290]:
-                      - generic [ref=e291]:
-                        - generic [ref=e292]: Area
-                        - combobox "Area" [ref=e293]:
-                          - generic: Billing
-                          - img
-                      - generic [ref=e297]:
-                        - generic [ref=e298]: Security Level
-                        - combobox "Security Level" [ref=e299]:
-                          - generic: Severity 2
-                          - img
-                    - generic [ref=e303]:
-                      - generic [ref=e304]: Subject
-                      - textbox "Subject" [ref=e305]
-                    - generic [ref=e306]:
-                      - generic [ref=e307]: Description
-                      - textbox "Description" [ref=e308]
-                  - generic [ref=e309]:
-                    - button "Cancel" [ref=e310]
-                    - button "Submit" [ref=e311]
-          - generic [ref=e312]:
-            - generic [ref=e313]:
-              - generic [ref=e317]:
-                - navigation [ref=e318]:
-                  - button "Go to the Previous Month" [ref=e319]:
-                    - img
-                  - button "Go to the Next Month" [ref=e322]:
-                    - img
-                - generic [ref=e325]:
-                  - status [ref=e327]: June 2025
-                  - grid "June 2025" [ref=e328]:
-                    - rowgroup [ref=e329]:
-                      - row [ref=e330]:
-                        - columnheader [ref=e331]: Su
-                        - columnheader [ref=e332]: Mo
-                        - columnheader [ref=e333]: Tu
-                        - columnheader [ref=e334]: We
-                        - columnheader [ref=e335]: Th
-                        - columnheader [ref=e336]: Fr
-                        - columnheader [ref=e337]: Sa
-                    - rowgroup [ref=e338]:
-                      - row "Sunday, June 1st, 2025 Monday, June 2nd, 2025 Tuesday, June 3rd, 2025 Wednesday, June 4th, 2025 Thursday, June 5th, 2025, selected Friday, June 6th, 2025, selected Saturday, June 7th, 2025, selected" [ref=e339]:
-                        - gridcell "Sunday, June 1st, 2025" [ref=e340]:
-                          - button "Sunday, June 1st, 2025" [ref=e341]: "1"
-                        - gridcell "Monday, June 2nd, 2025" [ref=e342]:
-                          - button "Monday, June 2nd, 2025" [ref=e343]: "2"
-                        - gridcell "Tuesday, June 3rd, 2025" [ref=e344]:
-                          - button "Tuesday, June 3rd, 2025" [ref=e345]: "3"
-                        - gridcell "Wednesday, June 4th, 2025" [ref=e346]:
-                          - button "Wednesday, June 4th, 2025" [ref=e347]: "4"
-                        - gridcell "Thursday, June 5th, 2025, selected" [selected] [ref=e348]:
-                          - button "Thursday, June 5th, 2025, selected" [ref=e349]: "5"
-                        - gridcell "Friday, June 6th, 2025, selected" [selected] [ref=e350]:
-                          - button "Friday, June 6th, 2025, selected" [ref=e351]: "6"
-                        - gridcell "Saturday, June 7th, 2025, selected" [selected] [ref=e352]:
-                          - button "Saturday, June 7th, 2025, selected" [ref=e353]: "7"
-                      - row "Sunday, June 8th, 2025, selected Monday, June 9th, 2025, selected Tuesday, June 10th, 2025, selected Wednesday, June 11th, 2025, selected Thursday, June 12th, 2025, selected Friday, June 13th, 2025, selected Saturday, June 14th, 2025" [ref=e354]:
-                        - gridcell "Sunday, June 8th, 2025, selected" [selected] [ref=e355]:
-                          - button "Sunday, June 8th, 2025, selected" [ref=e356]: "8"
-                        - gridcell "Monday, June 9th, 2025, selected" [selected] [ref=e357]:
-                          - button "Monday, June 9th, 2025, selected" [ref=e358]: "9"
-                        - gridcell "Tuesday, June 10th, 2025, selected" [selected] [ref=e359]:
-                          - button "Tuesday, June 10th, 2025, selected" [ref=e360]: "10"
-                        - gridcell "Wednesday, June 11th, 2025, selected" [selected] [ref=e361]:
-                          - button "Wednesday, June 11th, 2025, selected" [ref=e362]: "11"
-                        - gridcell "Thursday, June 12th, 2025, selected" [selected] [ref=e363]:
-                          - button "Thursday, June 12th, 2025, selected" [ref=e364]: "12"
-                        - gridcell "Friday, June 13th, 2025, selected" [selected] [ref=e365]:
-                          - button "Friday, June 13th, 2025, selected" [ref=e366]: "13"
-                        - gridcell "Saturday, June 14th, 2025" [ref=e367]:
-                          - button "Saturday, June 14th, 2025" [ref=e368]: "14"
-                      - row "Sunday, June 15th, 2025 Monday, June 16th, 2025 Tuesday, June 17th, 2025 Wednesday, June 18th, 2025 Thursday, June 19th, 2025 Friday, June 20th, 2025 Saturday, June 21st, 2025" [ref=e369]:
-                        - gridcell "Sunday, June 15th, 2025" [ref=e370]:
-                          - button "Sunday, June 15th, 2025" [ref=e371]: "15"
-                        - gridcell "Monday, June 16th, 2025" [ref=e372]:
-                          - button "Monday, June 16th, 2025" [ref=e373]: "16"
-                        - gridcell "Tuesday, June 17th, 2025" [ref=e374]:
-                          - button "Tuesday, June 17th, 2025" [ref=e375]: "17"
-                        - gridcell "Wednesday, June 18th, 2025" [ref=e376]:
-                          - button "Wednesday, June 18th, 2025" [ref=e377]: "18"
-                        - gridcell "Thursday, June 19th, 2025" [ref=e378]:
-                          - button "Thursday, June 19th, 2025" [ref=e379]: "19"
-                        - gridcell "Friday, June 20th, 2025" [ref=e380]:
-                          - button "Friday, June 20th, 2025" [ref=e381]: "20"
-                        - gridcell "Saturday, June 21st, 2025" [ref=e382]:
-                          - button "Saturday, June 21st, 2025" [ref=e383]: "21"
-                      - row "Sunday, June 22nd, 2025 Monday, June 23rd, 2025 Tuesday, June 24th, 2025 Wednesday, June 25th, 2025 Thursday, June 26th, 2025 Friday, June 27th, 2025 Saturday, June 28th, 2025" [ref=e384]:
-                        - gridcell "Sunday, June 22nd, 2025" [ref=e385]:
-                          - button "Sunday, June 22nd, 2025" [ref=e386]: "22"
-                        - gridcell "Monday, June 23rd, 2025" [ref=e387]:
-                          - button "Monday, June 23rd, 2025" [ref=e388]: "23"
-                        - gridcell "Tuesday, June 24th, 2025" [ref=e389]:
-                          - button "Tuesday, June 24th, 2025" [ref=e390]: "24"
-                        - gridcell "Wednesday, June 25th, 2025" [ref=e391]:
-                          - button "Wednesday, June 25th, 2025" [ref=e392]: "25"
-                        - gridcell "Thursday, June 26th, 2025" [ref=e393]:
-                          - button "Thursday, June 26th, 2025" [ref=e394]: "26"
-                        - gridcell "Friday, June 27th, 2025" [ref=e395]:
-                          - button "Friday, June 27th, 2025" [ref=e396]: "27"
-                        - gridcell "Saturday, June 28th, 2025" [ref=e397]:
-                          - button "Saturday, June 28th, 2025" [ref=e398]: "28"
-                      - row "Sunday, June 29th, 2025 Monday, June 30th, 2025 Tuesday, July 1st, 2025 Wednesday, July 2nd, 2025 Thursday, July 3rd, 2025 Friday, July 4th, 2025 Saturday, July 5th, 2025" [ref=e399]:
-                        - gridcell "Sunday, June 29th, 2025" [ref=e400]:
-                          - button "Sunday, June 29th, 2025" [ref=e401]: "29"
-                        - gridcell "Monday, June 30th, 2025" [ref=e402]:
-                          - button "Monday, June 30th, 2025" [ref=e403]: "30"
-                        - gridcell "Tuesday, July 1st, 2025" [ref=e404]:
-                          - button "Tuesday, July 1st, 2025" [ref=e405]: "1"
-                        - gridcell "Wednesday, July 2nd, 2025" [ref=e406]:
-                          - button "Wednesday, July 2nd, 2025" [ref=e407]: "2"
-                        - gridcell "Thursday, July 3rd, 2025" [ref=e408]:
-                          - button "Thursday, July 3rd, 2025" [ref=e409]: "3"
-                        - gridcell "Friday, July 4th, 2025" [ref=e410]:
-                          - button "Friday, July 4th, 2025" [ref=e411]: "4"
-                        - gridcell "Saturday, July 5th, 2025" [ref=e412]:
-                          - button "Saturday, July 5th, 2025" [ref=e413]: "5"
-              - generic [ref=e415]:
-                - generic [ref=e416]:
-                  - generic [ref=e417]: Move Goal
-                  - generic [ref=e418]: Set your daily activity goal.
-                - generic [ref=e419]:
-                  - generic [ref=e420]:
-                    - button "Decrease" [ref=e421]:
-                      - img
-                      - generic [ref=e424]: Decrease
-                    - generic [ref=e425]:
-                      - generic [ref=e426]: "350"
-                      - generic [ref=e427]: Calories/day
-                    - button "Increase" [ref=e428]:
-                      - img
-                      - generic [ref=e432]: Increase
-                  - img [ref=e437]
-                - button "Set Goal" [ref=e472]
-              - generic [ref=e474]:
-                - generic [ref=e475]:
-                  - generic [ref=e476]: Exercise Minutes
-                  - generic [ref=e477]: Your exercise minutes are ahead of where you normally are.
-                - generic [ref=e481]:
-                  - application [ref=e482]:
-                    - generic [ref=e494]:
-                      - generic [ref=e497]: Mon
-                      - generic [ref=e500]: Tue
-                      - generic [ref=e503]: Wed
-                      - generic [ref=e506]: Thu
-                      - generic [ref=e509]: Fri
-                      - generic [ref=e512]: Sat
-                      - generic [ref=e515]: Sun
+                    - combobox [ref=e89]
+            - group "Billing Address" [ref=e91]:
+              - generic [ref=e92]: Billing Address
+              - paragraph [ref=e93]: The billing address associated with your payment method
+              - group [ref=e95]:
+                - checkbox "Same as shipping address" [checked] [ref=e96]:
                   - generic:
+                    - img
+                - checkbox [checked]
+                - generic [ref=e97]: Same as shipping address
+            - group [ref=e99]:
+              - group [ref=e101]:
+                - generic [ref=e102]: Comments
+                - textbox "Comments" [ref=e103]:
+                  - /placeholder: Add any additional comments
+            - group [ref=e104]:
+              - button "Submit" [ref=e105]
+              - button "Cancel" [ref=e106]
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - generic [ref=e111]:
+                  - img "@shadcn" [ref=e113]
+                  - img "@maxleiter" [ref=e115]
+                  - img "@evilrabbit" [ref=e117]
+                - generic [ref=e118]: No Team Members
+                - generic [ref=e119]: Invite your team to collaborate on this project.
+              - button "Invite Members" [ref=e121]:
+                - img
+                - text: Invite Members
+            - generic [ref=e122]:
+              - generic [ref=e123]:
+                - status "Loading"
+                - text: Syncing
+              - generic [ref=e124]:
+                - status "Loading"
+                - text: Updating
+              - generic [ref=e125]:
+                - status "Loading"
+                - text: Loading
+            - group [ref=e126]:
+              - group [ref=e127]:
+                - button "Add" [ref=e128]:
+                  - img
+              - group [ref=e129]:
+                - group [ref=e130]:
+                  - textbox "Send a message..." [ref=e131]
+                  - group [ref=e132]:
+                    - button "Voice Mode" [ref=e133]:
+                      - img
+            - group [ref=e135]:
+              - generic [ref=e136]: Price Range
+              - paragraph [ref=e137]: Set your budget range ($200 - 800).
+              - generic "Price Range" [ref=e138]:
+                - slider "Minimum" [ref=e142]
+                - slider "Maximum" [ref=e144]
+            - generic [ref=e145]:
+              - group [ref=e146]:
+                - textbox "Search..." [ref=e147]
+                - group [ref=e148]:
+                  - img [ref=e149]
+                - group [ref=e152]: 12 results
+              - group [ref=e153]:
+                - textbox "example.com" [ref=e154]
+                - group [ref=e155]:
+                  - generic [ref=e156]: https://
+                - group [ref=e157]:
+                  - button "Info" [ref=e158]:
+                    - img
+              - group [ref=e159]:
+                - textbox "Ask, Search or Chat..." [ref=e160]
+                - group [ref=e161]:
+                  - button "Add" [ref=e162]:
+                    - img
+                  - button "Auto" [ref=e163]
+                  - generic [ref=e164]: 52% used
+                  - button "Send" [ref=e165]:
+                    - img
+                    - generic [ref=e166]: Send
+              - group [ref=e167]:
+                - textbox "@shadcn" [ref=e168]
+                - group [ref=e169]:
+                  - img [ref=e171]
+          - generic [ref=e173]:
+            - generic [ref=e174]:
+              - generic [ref=e175]: Input Secure
+              - group [ref=e176]:
+                - textbox "Input Secure" [ref=e177]
+                - group [ref=e178]:
+                  - button "Info" [ref=e179]:
+                    - img
+                - group [ref=e180]: https://
+                - group [ref=e181]:
+                  - button "Favorite" [ref=e182]:
+                    - img
+            - generic [ref=e183]:
+              - generic [ref=e184]:
+                - generic [ref=e185]:
+                  - generic [ref=e186]: Two-factor authentication
+                  - paragraph [ref=e187]: Verify via email or phone number.
+                - button "Enable" [ref=e189]
+              - link "Your profile has been verified." [ref=e190] [cursor=pointer]:
+                - /url: "#"
+                - generic [ref=e191]:
+                  - img
+                - generic [ref=e193]: Your profile has been verified.
+                - img [ref=e195]
+            - generic [ref=e198]: Appearance Settings
+            - group [ref=e199]:
+              - generic [ref=e200]:
+                - group "Compute Environment" [ref=e201]:
+                  - generic [ref=e202]: Compute Environment
+                  - paragraph [ref=e203]: Select the compute environment for your cluster.
+                  - radiogroup [ref=e204]:
+                    - group [ref=e206]:
+                      - generic [ref=e207]:
+                        - generic [ref=e208]: Kubernetes
+                        - paragraph [ref=e209]: Run GPU workloads on a K8s configured cluster. This is the default.
+                      - radio "Kubernetes" [checked] [ref=e210]:
+                        - img [ref=e211]
+                    - group [ref=e214]:
+                      - generic [ref=e215]:
+                        - generic [ref=e216]: Virtual Machine
+                        - paragraph [ref=e217]: Access a VM configured cluster to run workloads. (Coming soon)
+                      - radio "Virtual Machine" [ref=e218]
+                - group [ref=e220]:
+                  - generic [ref=e221]:
+                    - generic [ref=e222]: Number of GPUs
+                    - paragraph [ref=e223]: You can add more later.
+                  - group [ref=e224]:
+                    - textbox "Number of GPUs" [ref=e225]: "8"
+                    - button "Decrement" [ref=e226]:
+                      - img
+                    - button "Increment" [ref=e227]:
+                      - img
+                - group [ref=e229]:
+                  - generic [ref=e230]:
+                    - generic [ref=e231]: Wallpaper Tinting
+                    - paragraph [ref=e232]: Allow the wallpaper to be tinted.
+                  - switch "Wallpaper Tinting" [checked] [ref=e233]
+          - generic [ref=e234]:
+            - group [ref=e236]:
+              - generic [ref=e237]: Prompt
+              - group [ref=e238]:
+                - textbox "Prompt" [ref=e239]:
+                  - /placeholder: Ask, search, or make anything...
+                - group [ref=e240]:
+                  - button "Add context" [ref=e241]:
+                    - img
+                    - text: Add context
+                - group [ref=e243]:
+                  - button "Attach file" [ref=e244]:
+                    - img
+                  - button "Auto" [ref=e245]
+                  - button "All Sources" [ref=e246]:
+                    - img
+                    - text: All Sources
+                  - button "Send" [ref=e247]:
+                    - img
+            - group [ref=e248]:
+              - group [ref=e249]:
+                - button "Go Back" [ref=e250]:
+                  - img
+              - group [ref=e251]:
+                - button "Archive" [ref=e252]
+                - button "Report" [ref=e253]
+              - group [ref=e254]:
+                - button "Snooze" [ref=e255]
+                - button "More Options" [ref=e256]:
+                  - img
+            - group [ref=e258]:
+              - checkbox "I agree to the terms and conditions" [checked] [ref=e259]:
+                - generic:
+                  - img
+              - generic [ref=e260]: I agree to the terms and conditions
+            - generic [ref=e261]:
+              - group [ref=e262]:
+                - group [ref=e263]:
+                  - button "1" [ref=e264]
+                  - button "2" [ref=e265]
+                  - button "3" [ref=e266]
+                - group [ref=e267]:
+                  - button "Previous" [ref=e268]:
+                    - img
+                  - button "Next" [ref=e269]:
+                    - img
+              - group [ref=e270]:
+                - button "Copilot" [ref=e271]:
+                  - img
+                  - text: Copilot
+                - button "Open Popover" [ref=e272]:
+                  - img
+            - group "How did you hear about us?" [ref=e277]:
+              - generic [ref=e278]: How did you hear about us?
+              - paragraph [ref=e279]: Select the option that best describes how you heard about us.
+              - generic [ref=e280]:
+                - group [ref=e282]:
+                  - checkbox "Social Media" [checked] [ref=e283]:
                     - generic:
-                      - generic: Thursday
-                      - generic:
-                        - generic:
-                          - generic:
-                            - generic:
-                              - generic: Today
-                            - generic: "390"
-                        - generic:
-                          - generic:
-                            - generic:
-                              - generic: Average
-                            - generic: "278"
-            - generic [ref=e542]:
-              - generic [ref=e543]:
-                - generic [ref=e544]: Payments
-                - generic [ref=e545]: Manage your payments.
-                - button "Add Payment" [ref=e547]
-              - generic [ref=e548]:
-                - table [ref=e551]:
-                  - rowgroup [ref=e552]:
-                    - row "Select all Status Email Amount" [ref=e553]:
-                      - cell "Select all" [ref=e554]:
-                        - checkbox "Select all" [ref=e555]
-                      - cell "Status" [ref=e556]
-                      - cell "Email" [ref=e557]
-                      - cell "Amount" [ref=e558]:
-                        - generic [ref=e559]: Amount
-                      - cell [ref=e560]
-                  - rowgroup [ref=e561]:
-                    - row "Select row success ken99@example.com $316.00 Open menu" [ref=e562]:
-                      - cell "Select row" [ref=e563]:
-                        - checkbox "Select row" [ref=e564]
-                      - cell "success" [ref=e565]:
-                        - generic [ref=e566]: success
-                      - cell "ken99@example.com" [ref=e567]:
-                        - generic [ref=e568]: ken99@example.com
-                      - cell "$316.00" [ref=e569]:
-                        - generic [ref=e570]: $316.00
-                      - cell "Open menu" [ref=e571]:
-                        - button "Open menu" [ref=e572]:
-                          - generic [ref=e573]: Open menu
-                          - img
-                    - row "Select row success Abe45@example.com $242.00 Open menu" [ref=e578]:
-                      - cell "Select row" [ref=e579]:
-                        - checkbox "Select row" [ref=e580]
-                      - cell "success" [ref=e581]:
-                        - generic [ref=e582]: success
-                      - cell "Abe45@example.com" [ref=e583]:
-                        - generic [ref=e584]: Abe45@example.com
-                      - cell "$242.00" [ref=e585]:
-                        - generic [ref=e586]: $242.00
-                      - cell "Open menu" [ref=e587]:
-                        - button "Open menu" [ref=e588]:
-                          - generic [ref=e589]: Open menu
-                          - img
-                    - row "Select row processing Monserrat44@example.com $837.00 Open menu" [ref=e594]:
-                      - cell "Select row" [ref=e595]:
-                        - checkbox "Select row" [ref=e596]
-                      - cell "processing" [ref=e597]:
-                        - generic [ref=e598]: processing
-                      - cell "Monserrat44@example.com" [ref=e599]:
-                        - generic [ref=e600]: Monserrat44@example.com
-                      - cell "$837.00" [ref=e601]:
-                        - generic [ref=e602]: $837.00
-                      - cell "Open menu" [ref=e603]:
-                        - button "Open menu" [ref=e604]:
-                          - generic [ref=e605]: Open menu
-                          - img
-                    - row "Select row failed carmella@example.com $721.00 Open menu" [ref=e610]:
-                      - cell "Select row" [ref=e611]:
-                        - checkbox "Select row" [ref=e612]
-                      - cell "failed" [ref=e613]:
-                        - generic [ref=e614]: failed
-                      - cell "carmella@example.com" [ref=e615]:
-                        - generic [ref=e616]: carmella@example.com
-                      - cell "$721.00" [ref=e617]:
-                        - generic [ref=e618]: $721.00
-                      - cell "Open menu" [ref=e619]:
-                        - button "Open menu" [ref=e620]:
-                          - generic [ref=e621]: Open menu
-                          - img
-                    - row "Select row pending jason78@example.com $450.00 Open menu" [ref=e626]:
-                      - cell "Select row" [ref=e627]:
-                        - checkbox "Select row" [ref=e628]
-                      - cell "pending" [ref=e629]:
-                        - generic [ref=e630]: pending
-                      - cell "jason78@example.com" [ref=e631]:
-                        - generic [ref=e632]: jason78@example.com
-                      - cell "$450.00" [ref=e633]:
-                        - generic [ref=e634]: $450.00
-                      - cell "Open menu" [ref=e635]:
-                        - button "Open menu" [ref=e636]:
-                          - generic [ref=e637]: Open menu
-                          - img
-                    - row "Select row success sarah23@example.com $1,280.00 Open menu" [ref=e642]:
-                      - cell "Select row" [ref=e643]:
-                        - checkbox "Select row" [ref=e644]
-                      - cell "success" [ref=e645]:
-                        - generic [ref=e646]: success
-                      - cell "sarah23@example.com" [ref=e647]:
-                        - generic [ref=e648]: sarah23@example.com
-                      - cell "$1,280.00" [ref=e649]:
-                        - generic [ref=e650]: $1,280.00
-                      - cell "Open menu" [ref=e651]:
-                        - button "Open menu" [ref=e652]:
-                          - generic [ref=e653]: Open menu
-                          - img
-                - generic [ref=e658]:
-                  - generic [ref=e659]: 0 of 6 row(s) selected.
-                  - generic [ref=e660]:
-                    - button "Previous" [disabled]
-                    - button "Next" [disabled]
-            - generic [ref=e663]:
-              - generic [ref=e664]:
-                - generic [ref=e665]: Share this document
-                - generic [ref=e666]: Anyone with the link can view this document.
-              - generic [ref=e667]:
-                - generic [ref=e668]:
-                  - generic [ref=e669]: Link
-                  - textbox "Link" [ref=e670]: http://example.com/link/to/document
-                  - button "Copy Link" [ref=e671]
-                - generic [ref=e672]:
-                  - generic [ref=e673]: People with access
-                  - generic [ref=e674]:
-                    - generic [ref=e675]:
-                      - generic [ref=e676]:
-                        - img "Image" [ref=e678]
-                        - generic [ref=e679]:
-                          - paragraph [ref=e680]: Olivia Martin
-                          - paragraph [ref=e681]: m@example.com
-                      - combobox "Edit" [ref=e682]:
-                        - generic: Can edit
-                        - img
-                    - generic [ref=e686]:
-                      - generic [ref=e687]:
-                        - img "Image" [ref=e689]
-                        - generic [ref=e690]:
-                          - paragraph [ref=e691]: Isabella Nguyen
-                          - paragraph [ref=e692]: b@example.com
-                      - combobox "Edit" [ref=e693]:
-                        - generic: Can edit
-                        - img
-                    - generic [ref=e697]:
-                      - generic [ref=e698]:
-                        - img "Image" [ref=e700]
-                        - generic [ref=e701]:
-                          - paragraph [ref=e702]: Sofia Davis
-                          - paragraph [ref=e703]: p@example.com
-                      - combobox "Edit" [ref=e704]:
-                        - generic: Can edit
-                        - img
-                    - generic [ref=e708]:
-                      - generic [ref=e709]:
-                        - img "Image" [ref=e711]
-                        - generic [ref=e712]:
-                          - paragraph [ref=e713]: Ethan Thompson
-                          - paragraph [ref=e714]: e@example.com
-                      - combobox "Edit" [ref=e715]:
-                        - generic: Can edit
-                        - img
-    - contentinfo [ref=e719]:
-      - generic [ref=e722]:
+                      - img
+                  - checkbox [checked]
+                  - generic [ref=e284]: Social Media
+                - group [ref=e286]:
+                  - checkbox "Search Engine" [ref=e287]
+                  - checkbox
+                  - generic [ref=e288]: Search Engine
+                - group [ref=e290]:
+                  - checkbox "Referral" [ref=e291]
+                  - checkbox
+                  - generic [ref=e292]: Referral
+                - group [ref=e294]:
+                  - checkbox "Other" [ref=e295]
+                  - checkbox
+                  - generic [ref=e296]: Other
+            - generic [ref=e297]:
+              - generic [ref=e298]:
+                - generic [ref=e299]:
+                  - status "Loading"
+                - generic [ref=e300]: Processing your request
+                - generic [ref=e301]: Please wait while we process your request. Do not refresh the page.
+              - button "Cancel" [ref=e303]
+    - contentinfo [ref=e304]:
+      - generic [ref=e307]:
         - text: Built by
-        - link "shadcn" [ref=e723] [cursor=pointer]:
+        - link "shadcn" [ref=e308] [cursor=pointer]:
           - /url: https://twitter.com/shadcn
         - text: at
-        - link "Vercel" [ref=e724] [cursor=pointer]:
+        - link "Vercel" [ref=e309] [cursor=pointer]:
           - /url: https://vercel.com/new?utm_source=shadcn_site&utm_medium=web&utm_campaign=docs_cta_deploy_now_callout
         - text: . The source code is available on
-        - link "GitHub" [ref=e725] [cursor=pointer]:
+        - link "GitHub" [ref=e310] [cursor=pointer]:
           - /url: https://github.com/shadcn-ui/ui
         - text: .
   - region "Notifications alt+T"
-  - alert [ref=e728]
-  - generic [ref=e729]: Mon
+  - alert [ref=e311]
