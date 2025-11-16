@@ -18,6 +18,22 @@ interface State {
   context: BrowserContext | null
 }
 
+interface VMContext {
+  page: Page
+  context: BrowserContext
+  state: Record<string, any>
+  console: {
+    log: (...args: any[]) => void
+    info: (...args: any[]) => void
+    warn: (...args: any[]) => void
+    error: (...args: any[]) => void
+    debug: (...args: any[]) => void
+  }
+  accessibilitySnapshot: (page: Page) => Promise<string>
+  activateTab: (page: Page) => Promise<void>
+  resetPlaywright: () => Promise<{ page: Page; context: BrowserContext }>
+}
+
 const state: State = {
   isConnected: false,
   page: null,
@@ -106,6 +122,39 @@ async function getCurrentPage() {
   throw new Error('No page available')
 }
 
+async function resetConnection(): Promise<{ browser: Browser; page: Page; context: BrowserContext }> {
+  if (state.browser) {
+    try {
+      await state.browser.close()
+    } catch (e) {
+      console.error('Error closing browser:', e)
+    }
+  }
+
+  state.browser = null
+  state.page = null
+  state.context = null
+  state.isConnected = false
+
+  await ensureRelayServer()
+
+  const cdpEndpoint = getCdpUrl({ port: RELAY_PORT })
+  const browser = await chromium.connectOverCDP(cdpEndpoint)
+
+  const contexts = browser.contexts()
+  const context = contexts.length > 0 ? contexts[0] : await browser.newContext()
+
+  const pages = context.pages()
+  const page = pages.length > 0 ? pages[0] : await context.newPage()
+
+  state.browser = browser
+  state.page = page
+  state.context = context
+  state.isConnected = true
+
+  return { browser, page, context }
+}
+
 const server = new McpServer({
   name: 'playwriter',
   title: 'The better playwright MCP: works as a browser extension. No context bloat. More capable.',
@@ -173,14 +222,34 @@ server.tool(
         await cdp.detach()
       }
 
-      const vmContext = vm.createContext({
+      let vmContextObj: VMContext = {
         page,
         context,
         state,
         console: customConsole,
         accessibilitySnapshot,
         activateTab,
-      })
+        resetPlaywright: async () => {
+          const { page: newPage, context: newContext } = await resetConnection()
+          
+          Object.keys(state).forEach(key => delete state[key])
+          
+          const resetObj: VMContext = {
+            page: newPage,
+            context: newContext,
+            state,
+            console: customConsole,
+            accessibilitySnapshot,
+            activateTab,
+            resetPlaywright: vmContextObj.resetPlaywright
+          }
+          Object.keys(vmContextObj).forEach(key => delete (vmContextObj as any)[key])
+          Object.assign(vmContextObj, resetObj)
+          return { page: newPage, context: newContext }
+        }
+      }
+
+      const vmContext = vm.createContext(vmContextObj)
 
       const wrappedCode = `(async () => { ${code} })()`
 

@@ -86,7 +86,7 @@ server.close()
 
 ## Comparison
 
-### vs Playwright
+### vs Playwright MCP
 
 Playwriter uses a Chrome extension instead of launching a full new Chrome window. This approach has several benefits:
 
