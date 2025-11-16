@@ -54,6 +54,7 @@ export async function startRelayServer({ port = 9988, logger = console }: { port
       'Network.responseReceived',
       'Network.responseReceivedExtraInfo',
       'Network.dataReceived',
+      'Network.requestWillBeSent',
       'Network.loadingFinished'
     ]
 
@@ -385,20 +386,27 @@ export async function startRelayServer({ port = 9988, logger = console }: { port
 
           if (method === 'Target.attachedToTarget') {
             const targetParams = params as Protocol.Target.AttachedToTargetEvent
+
+            // Check if we already sent this target to clients (e.g., from Target.setAutoAttach response)
+            const alreadyConnected = connectedTargets.has(targetParams.sessionId)
+
+            // Always update our local state with latest target info
             connectedTargets.set(targetParams.sessionId, {
               sessionId: targetParams.sessionId,
               targetId: targetParams.targetInfo.targetId,
               targetInfo: targetParams.targetInfo
             })
 
-
-            sendToPlaywright({
-              message: {
-                method: 'Target.attachedToTarget',
-                params: targetParams
-              } as CDPEvent,
-              source: 'extension'
-            })
+            // Only forward to Playwright if this is a new target to avoid duplicates
+            if (!alreadyConnected) {
+              sendToPlaywright({
+                message: {
+                  method: 'Target.attachedToTarget',
+                  params: targetParams
+                } as CDPEvent,
+                source: 'extension'
+              })
+            }
           } else if (method === 'Target.detachedFromTarget') {
             const detachParams = params as Protocol.Target.DetachedFromTargetEvent
             connectedTargets.delete(detachParams.sessionId)
