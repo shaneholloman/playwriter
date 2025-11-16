@@ -31,6 +31,8 @@ interface VMContext {
   }
   accessibilitySnapshot: (page: Page) => Promise<string>
   resetPlaywright: () => Promise<{ page: Page; context: BrowserContext }>
+  require: NodeRequire
+  import: (specifier: string) => Promise<any>
 }
 
 const state: State = {
@@ -230,12 +232,16 @@ server.tool(
             state,
             console: customConsole,
             accessibilitySnapshot,
-            resetPlaywright: vmContextObj.resetPlaywright
+            resetPlaywright: vmContextObj.resetPlaywright,
+            require,
+            import: vmContextObj.import
           }
           Object.keys(vmContextObj).forEach(key => delete (vmContextObj as any)[key])
           Object.assign(vmContextObj, resetObj)
           return { page: newPage, context: newContext }
-        }
+        },
+        require,
+        import: (specifier: string) => import(specifier)
       }
 
       const vmContext = vm.createContext(vmContextObj)
