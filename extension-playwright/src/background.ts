@@ -5,13 +5,14 @@ import { create } from 'zustand';
 // Relay URL - fixed port for MCP bridge
 const RELAY_URL = 'ws://localhost:9988/extension';
 
-type ConnectionState = 'disconnected' | 'reconnecting' | 'connected';
+type ConnectionState = 'disconnected' | 'reconnecting' | 'connected' | 'error';
 
 interface ExtensionState {
   connection: RelayConnection | undefined;
   connectedTabs: Map<number, string>;
   connectionState: ConnectionState;
   currentTabId: number | undefined;
+  errorText: string | undefined;
 }
 
 const useExtensionStore = create<ExtensionState>(() => ({
@@ -19,110 +20,81 @@ const useExtensionStore = create<ExtensionState>(() => ({
   connectedTabs: new Map(),
   connectionState: 'disconnected',
   currentTabId: undefined,
+  errorText: undefined,
 }));
 
-async function updateIcon(tabId: number, state: 'connected' | 'disconnected' | 'connecting'): Promise<void> {
-  try {
-    switch (state) {
-      case 'connected':
-        await chrome.action.setIcon({
-          tabId,
-          path: {
-            '16': '/icons/icon-green-16.png',
-            '32': '/icons/icon-green-32.png',
-            '48': '/icons/icon-green-48.png',
-            '128': '/icons/icon-green-128.png'
-          }
-        });
-        await chrome.action.setBadgeText({ tabId, text: '' });
-        await chrome.action.setTitle({ tabId, title: 'Connected - Click to disconnect' });
-        break;
-
-      case 'connecting':
-        await chrome.action.setIcon({
-          tabId,
-          path: {
-            '16': '/icons/icon-gray-16.png',
-            '32': '/icons/icon-gray-32.png',
-            '48': '/icons/icon-gray-48.png',
-            '128': '/icons/icon-gray-128.png'
-          }
-        });
-        await chrome.action.setBadgeText({ tabId, text: '...' });
-        await chrome.action.setBadgeBackgroundColor({ tabId, color: '#FF9800' });
-        await chrome.action.setTitle({ tabId, title: 'Connecting...' });
-        break;
-
-      case 'disconnected':
-      default:
-        await chrome.action.setIcon({
-          tabId,
-          path: {
-            '16': '/icons/icon-gray-16.png',
-            '32': '/icons/icon-gray-32.png',
-            '48': '/icons/icon-gray-48.png',
-            '128': '/icons/icon-gray-128.png'
-          }
-        });
-        await chrome.action.setBadgeText({ tabId, text: '' });
-        await chrome.action.setTitle({ tabId, title: 'Click to attach debugger' });
-        break;
-    }
-  } catch (error: any) {
-    debugLog(`Error updating icon: ${error.message}`);
+const icons = {
+  connected: {
+    path: {
+      '16': '/icons/icon-green-16.png',
+      '32': '/icons/icon-green-32.png',
+      '48': '/icons/icon-green-48.png',
+      '128': '/icons/icon-green-128.png'
+    },
+    title: 'Connected - Click to disconnect',
+    badgeText: '',
+    badgeColor: undefined
+  },
+  connecting: {
+    path: {
+      '16': '/icons/icon-gray-16.png',
+      '32': '/icons/icon-gray-32.png',
+      '48': '/icons/icon-gray-48.png',
+      '128': '/icons/icon-gray-128.png'
+    },
+    title: 'Connecting...',
+    badgeText: '...',
+    badgeColor: '#FF9800'
+  },
+  disconnected: {
+    path: {
+      '16': '/icons/icon-gray-16.png',
+      '32': '/icons/icon-gray-32.png',
+      '48': '/icons/icon-gray-48.png',
+      '128': '/icons/icon-gray-48.png'
+    },
+    title: 'Click to attach debugger',
+    badgeText: '',
+    badgeColor: undefined
+  },
+  error: {
+    path: {
+      '16': '/icons/icon-gray-16.png',
+      '32': '/icons/icon-gray-32.png',
+      '48': '/icons/icon-gray-48.png',
+      '128': '/icons/icon-gray-48.png'
+    },
+    title: 'Error',
+    badgeText: '!',
+    badgeColor: '#f44336'
   }
-}
+} as const;
 
-useExtensionStore.subscribe((state, prevState) => {
-  const prevTabs = new Set(prevState.connectedTabs.keys());
-  const currentTabs = new Set(state.connectedTabs.keys());
-  const prevConnectionState = prevState.connectionState;
-  const currentConnectionState = state.connectionState;
-  const prevCurrentTabId = prevState.currentTabId;
-  const currentTabId = state.currentTabId;
+useExtensionStore.subscribe(async (state, prevState) => {
+  console.log(state)
+  const { connectionState, connectedTabs, errorText } = state;
 
-  const connectionStateChanged = prevConnectionState !== currentConnectionState;
-  const currentTabChanged = prevCurrentTabId !== currentTabId;
+  const tabs = await chrome.tabs.query({});
+  const allTabIds = [undefined, ...tabs.map(tab => tab.id).filter((id): id is number => id !== undefined)];
 
-  const tabsToUpdate = new Set<number>();
-
-  if (connectionStateChanged) {
-    debugLog('Connection state changed:', prevConnectionState, '->', currentConnectionState);
-    for (const tabId of currentTabs) {
-      tabsToUpdate.add(tabId);
-    }
-  }
-
-  const addedTabs = [...currentTabs].filter(id => !prevTabs.has(id));
-  const removedTabs = [...prevTabs].filter(id => !currentTabs.has(id));
-
-  for (const tabId of addedTabs) {
-    tabsToUpdate.add(tabId);
-  }
-
-  for (const tabId of removedTabs) {
-    tabsToUpdate.add(tabId);
-  }
-
-  if (currentTabChanged && currentTabId !== undefined) {
-    tabsToUpdate.add(currentTabId);
-  }
-
-  for (const tabId of tabsToUpdate) {
-    const isTracked = currentTabs.has(tabId);
-    let iconState: 'connected' | 'disconnected' | 'connecting';
-
-    if (currentConnectionState === 'disconnected') {
-      iconState = 'disconnected';
-    } else    if (!isTracked) {
-      iconState = 'disconnected';
-    } else if (currentConnectionState === 'connected') {
-      iconState = 'connected';
-    } else {
-      iconState = 'connecting';
-    }
-
-    void updateIcon(tabId, iconState);
+  for (const tabId of allTabIds) {
+    const iconConfig = (() => {
+      if (connectionState === 'error') {
+        return icons.error;
+      }
+      if (connectionState === 'reconnecting') {
+        return icons.connecting;
+      }
+      if (tabId !== undefined && connectedTabs.has(tabId) && connectionState === 'connected') {
+        return icons.connected;
+      }
+      return icons.disconnected;
+    })();
+    const title = connectionState === 'error' && errorText ? errorText : iconConfig.title;
+    void chrome.action.setIcon({ tabId, path: iconConfig.path });
+    void chrome.action.setTitle({ tabId, title });
+    if (iconConfig.badgeColor) void chrome.action.setBadgeBackgroundColor({ tabId, color: iconConfig.badgeColor });
+    void chrome.action.setBadgeText({ tabId, text: iconConfig.badgeText });
   }
 });
 
@@ -133,11 +105,12 @@ async function ensureConnection(): Promise<void> {
       return;
     }
 
-    useExtensionStore.setState({ connectionState: 'reconnecting' });
+
     debugLog('No existing connection, creating new relay connection');
     debugLog('Waiting for server at http://localhost:9988...');
 
-    while (useExtensionStore.getState().connectionState !== 'disconnected') {
+    useExtensionStore.setState({ connectionState: 'reconnecting' });
+    while (true) {
       try {
         await fetch('http://localhost:9988', { method: 'HEAD' });
         debugLog('Server is available');
@@ -146,11 +119,6 @@ async function ensureConnection(): Promise<void> {
         debugLog('Server not available, retrying in 1 second...');
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    }
-
-    if (useExtensionStore.getState().connectionState === 'disconnected') {
-      debugLog('Connection cancelled by user');
-      return;
     }
 
     debugLog('Server is ready, creating WebSocket connection to:', RELAY_URL);
@@ -220,15 +188,19 @@ async function ensureConnection(): Promise<void> {
           debugLog('No tabs to reconnect');
         }
       },
-      onTabDetached: (tabId) => {
+      onTabDetached: (tabId, reason) => {
         debugLog('=== Manual tab detachment detected for tab:', tabId, '===');
         debugLog('User closed debugger via Chrome automation bar');
 
         useExtensionStore.setState((state) => {
           const newTabs = new Map(state.connectedTabs);
           newTabs.delete(tabId);
-          return { connectionState: 'disconnected', connectedTabs: newTabs };
+          return { connectedTabs: newTabs };
         });
+        if (reason=== chrome.debugger.DetachReason.CANCELED_BY_USER) {
+          // if user cancels debugger. disconnect everything
+          useExtensionStore.setState({  connectionState: 'disconnected' });
+        }
         debugLog('Removed tab from _connectedTabs map');
       }
     });
@@ -270,20 +242,8 @@ async function connectTab(tabId: number): Promise<void> {
       useExtensionStore.setState((state) => {
         const newTabs = new Map(state.connectedTabs);
         newTabs.delete(tabId);
-        return { connectedTabs: newTabs };
+        return { connectedTabs: newTabs, connectionState: 'error', errorText: `Error: ${error.message}` };
       });
-
-      chrome.action.setBadgeText({ tabId, text: '!' });
-      chrome.action.setBadgeBackgroundColor({ tabId, color: '#f44336' });
-      chrome.action.setTitle({ tabId, title: `Error: ${error.message}` });
-
-      setTimeout(() => {
-        const { connectedTabs } = useExtensionStore.getState();
-        if (!connectedTabs.has(tabId)) {
-          chrome.action.setBadgeText({ tabId, text: '' });
-          chrome.action.setTitle({ tabId, title: 'Click to attach debugger' });
-        }
-      }, 3000);
     }
   }
 
@@ -370,14 +330,11 @@ async function reconnect(): Promise<void> {
     } catch (error: any) {
       debugLog('=== Reconnection failed ===', error);
 
-      const { connectedTabs: failedTabs } = useExtensionStore.getState();
-      for (const tabId of failedTabs.keys()) {
-        chrome.action.setBadgeText({ tabId, text: '!' });
-        chrome.action.setBadgeBackgroundColor({ tabId, color: '#f44336' });
-        chrome.action.setTitle({ tabId, title: 'Reconnection failed - Click to retry' });
-      }
-
-      useExtensionStore.setState({ connectedTabs: new Map(), connectionState: 'disconnected' });
+      useExtensionStore.setState({ 
+        connectedTabs: new Map(), 
+        connectionState: 'error', 
+        errorText: 'Reconnection failed - Click to retry' 
+      });
     }
   }
 
@@ -403,8 +360,8 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
 
   const { connectedTabs, connectionState, connection } = useExtensionStore.getState();
 
-  if (connectionState === 'reconnecting') {
-    debugLog('User clicked during reconnection, canceling reconnection and disconnecting all tabs');
+  if (connectionState === 'reconnecting' || connectionState === 'error') {
+    debugLog('User clicked during reconnection/error, canceling and disconnecting all tabs');
 
     const tabsToDisconnect = Array.from(connectedTabs.keys());
 
@@ -412,7 +369,7 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
       connection?.detachTab(tabId);
     }
 
-    useExtensionStore.setState({ connectionState: 'disconnected', connectedTabs: new Map() });
+    useExtensionStore.setState({ connectionState: 'disconnected', connectedTabs: new Map(), errorText: undefined });
 
     if (connection) {
       connection.close('User cancelled reconnection');
