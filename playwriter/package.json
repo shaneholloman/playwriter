@@ -1,7 +1,7 @@
 {
   "name": "playwriter",
   "description": "",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "repository": "https://github.com/remorses/playwriter",
   "scripts": {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.5
+
+### Patch Changes
+
+- Added `activateTab(page)` utility function to bring browser tabs to front and focus them
+- Added `Playwriter.activateTab` CDP command support in relay server
+- Added `activateTab` message type to extension protocol
+- Extension now handles tab activation via `chrome.tabs.update` and `chrome.windows.update`
+
 ## 0.0.4
 
 ### Patch Changes
