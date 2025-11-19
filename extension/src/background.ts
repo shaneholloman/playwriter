@@ -5,10 +5,17 @@ import { create } from 'zustand'
 const RELAY_URL = 'ws://localhost:19988/extension'
 
 type ConnectionState = 'disconnected' | 'reconnecting' | 'connected' | 'error'
+type TabState = 'connecting' | 'connected' | 'error'
+
+interface TabInfo {
+  targetId: string
+  state: TabState
+  errorText?: string
+}
 
 interface ExtensionState {
   connection: RelayConnection | undefined
-  connectedTabs: Map<number, string>
+  connectedTabs: Map<number, TabInfo>
   connectionState: ConnectionState
   currentTabId: number | undefined
   errorText: string | undefined
@@ -94,6 +101,8 @@ useExtensionStore.subscribe(async (state, prevState) => {
   const allTabIds = [undefined, ...tabs.map((tab) => tab.id).filter((id): id is number => id !== undefined)]
 
   for (const tabId of allTabIds) {
+    const tabInfo = tabId !== undefined ? connectedTabs.get(tabId) : undefined
+    
     const iconConfig = (() => {
       if (connectionState === 'error') {
         return icons.error
@@ -101,12 +110,28 @@ useExtensionStore.subscribe(async (state, prevState) => {
       if (connectionState === 'reconnecting') {
         return icons.connecting
       }
-      if (tabId !== undefined && connectedTabs.has(tabId) && connectionState === 'connected') {
+      if (tabInfo?.state === 'error') {
+        return icons.error
+      }
+      if (tabInfo?.state === 'connecting') {
+        return icons.connecting
+      }
+      if (tabInfo?.state === 'connected') {
         return icons.connected
       }
       return icons.disconnected
     })()
-    const title = connectionState === 'error' && errorText ? errorText : iconConfig.title
+    
+    const title = (() => {
+      if (connectionState === 'error' && errorText) {
+        return errorText
+      }
+      if (tabInfo?.errorText) {
+        return tabInfo.errorText
+      }
+      return iconConfig.title
+    })()
+    
     void chrome.action.setIcon({ tabId, path: iconConfig.path })
     void chrome.action.setTitle({ tabId, title })
     if (iconConfig.badgeColor) void chrome.action.setBadgeBackgroundColor({ tabId, color: iconConfig.badgeColor })
@@ -230,7 +255,10 @@ async function connectTab(tabId: number): Promise<void> {
 
     useExtensionStore.setState((state) => {
       const newTabs = new Map(state.connectedTabs)
-      newTabs.set(tabId, '')
+      newTabs.set(tabId, {
+        targetId: '',
+        state: 'connecting',
+      })
       return { connectedTabs: newTabs }
     })
 
@@ -243,8 +271,10 @@ async function connectTab(tabId: number): Promise<void> {
     debugLog('attachTab completed, updating targetId in connectedTabs map')
     useExtensionStore.setState((state) => {
       const newTabs = new Map(state.connectedTabs)
-
-      newTabs.set(tabId, targetInfo?.targetId)
+      newTabs.set(tabId, {
+        targetId: targetInfo?.targetId,
+        state: 'connected',
+      })
       return { connectedTabs: newTabs, connectionState: 'connected' }
     })
 
@@ -256,8 +286,20 @@ async function connectTab(tabId: number): Promise<void> {
 
     useExtensionStore.setState((state) => {
       const newTabs = new Map(state.connectedTabs)
-      newTabs.delete(tabId)
-      return { connectedTabs: newTabs, connectionState: 'error', errorText: `Error: ${error.message}` }
+      newTabs.set(tabId, {
+        targetId: '',
+        state: 'error',
+        errorText: `Error: ${error.message}`,
+      })
+      
+      // If we were trying to establish a connection and failed, reset the global state
+      // so we don't get stuck in 'reconnecting' which triggers destructive click behavior
+      let nextConnectionState = state.connectionState
+      if (state.connectionState === 'reconnecting') {
+        nextConnectionState = 'disconnected'
+      }
+
+      return { connectedTabs: newTabs, connectionState: nextConnectionState }
     })
   }
 }
@@ -317,7 +359,10 @@ async function reconnect(): Promise<void> {
         const targetInfo = await connection.attachTab(tabId)
         useExtensionStore.setState((state) => {
           const newTabs = new Map(state.connectedTabs)
-          newTabs.set(tabId, targetInfo.targetId)
+          newTabs.set(tabId, {
+            targetId: targetInfo.targetId,
+            state: 'connected',
+          })
           return { connectedTabs: newTabs }
         })
         debugLog('Successfully re-attached tab:', tabId)
@@ -374,9 +419,16 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
   }
 
   const { connectedTabs, connectionState, connection } = useExtensionStore.getState()
+  const tabInfo = connectedTabs.get(tab.id)
 
-  if (connectionState === 'reconnecting' || connectionState === 'error') {
-    debugLog('User clicked during reconnection/error, canceling and disconnecting all tabs')
+  if (connectionState === 'error') {
+    debugLog('Global error state - retrying reconnection')
+    await reconnect()
+    return
+  }
+
+  if (connectionState === 'reconnecting') {
+    debugLog('User clicked during reconnection, canceling and disconnecting all tabs')
 
     const tabsToDisconnect = Array.from(connectedTabs.keys())
 
@@ -393,7 +445,13 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
     return
   }
 
-  if (connectedTabs.has(tab.id)) {
+  if (tabInfo?.state === 'error') {
+    debugLog('Tab has error - disconnecting to clear state')
+    await disconnectTab(tab.id)
+    return
+  }
+
+  if (tabInfo?.state === 'connected') {
     await disconnectTab(tab.id)
   } else {
     await connectTab(tab.id)
