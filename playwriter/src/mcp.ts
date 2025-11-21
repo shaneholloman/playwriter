@@ -415,28 +415,7 @@ server.tool(
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
-  console.error('Playwright MCP server running on stdio')
+  // console.error('Playwright MCP server running on stdio')
 }
-
-async function cleanup() {
-  console.error('Shutting down MCP server...')
-
-  if (state.browser) {
-    try {
-      await state.browser.close()
-    } catch (e) {
-      // Ignore errors during browser close
-    }
-  }
-
-  process.exit(0)
-}
-
-// Handle process termination
-process.on('SIGINT', cleanup)
-process.on('SIGTERM', cleanup)
-process.on('exit', () => {
-  // Browser cleanup is handled by the async cleanup function
-})
 
 main().catch(console.error)
