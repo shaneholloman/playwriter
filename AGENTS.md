@@ -50,6 +50,8 @@ each test() block should reset the extension connection to make sure tests are i
 
 NEVER call browser.close() in the tests
 
+remember that every time the extension is activated in a tab that tab gets added to the available pages. so if you toggle the extension and then do .newPage() there will be 2 pages, not 1.
+
 # core guidelines
 
 when summarizing changes at the end of the message, be super short, a few words and in bullet points, use bold text to highlight important keywords. use markdown.
