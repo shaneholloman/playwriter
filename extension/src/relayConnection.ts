@@ -72,11 +72,6 @@ interface AttachedTab {
   targetId: string;
   sessionId: string;
   targetInfo: Protocol.Target.TargetInfo;
-  // Cache execution contexts for this tab. When Playwright reconnects and calls Runtime.enable,
-  // Chrome's debugger does NOT re-send Runtime.executionContextCreated events for contexts that
-  // already exist. We must manually replay them so Playwright knows what contexts are available.
-  // Without this, page.evaluate() hangs because Playwright has no valid execution context IDs.
-  executionContexts: Map<number, Protocol.Runtime.ExecutionContextCreatedEvent>;
 }
 
 export class RelayConnection {
@@ -180,7 +175,6 @@ export class RelayConnection {
       targetId: targetInfo.targetId,
       sessionId,
       targetInfo,
-      executionContexts: new Map()
     });
 
     logger.debug('Sending Target.attachedToTarget event, WebSocket state:', this._ws.readyState);
@@ -291,18 +285,6 @@ export class RelayConnection {
     // Track execution contexts so we can replay them when Playwright reconnects.
     // Chrome's debugger only sends Runtime.executionContextCreated events once per context,
     // not on every Runtime.enable call. We cache them here and replay on reconnection.
-    if (method === 'Runtime.executionContextCreated') {
-      const contextEvent = params as Protocol.Runtime.ExecutionContextCreatedEvent;
-      tab.executionContexts.set(contextEvent.context.id, contextEvent);
-      logger.debug('Cached execution context:', contextEvent.context.id, 'for tab:', source.tabId, 'total contexts:', tab.executionContexts.size);
-    } else if (method === 'Runtime.executionContextDestroyed') {
-      const destroyedEvent = params as Protocol.Runtime.ExecutionContextDestroyedEvent;
-      tab.executionContexts.delete(destroyedEvent.executionContextId);
-      logger.debug('Removed execution context:', destroyedEvent.executionContextId, 'from tab:', source.tabId, 'remaining:', tab.executionContexts.size);
-    } else if (method === 'Runtime.executionContextsCleared') {
-      tab.executionContexts.clear();
-      logger.debug('Cleared all execution contexts for tab:', source.tabId);
-    }
 
     logger.debug('Forwarding CDP event:', method, 'from tab:', source.tabId);
 
@@ -401,34 +383,25 @@ export class RelayConnection {
         sessionId: msg.params.sessionId !== targetTab.sessionId ? msg.params.sessionId : undefined,
       };
 
+      if (msg.params.method === 'Runtime.enable') {
+        logger.debug('Runtime.enable called, disabling first to force context refresh for tab:', targetTab.debuggee.tabId);
+        try {
+          await chrome.debugger.sendCommand(debuggerSession, 'Runtime.disable');
+          await new Promise(resolve => setTimeout(resolve, 50));
+        } catch (e) {
+          logger.debug('Error disabling Runtime (ignoring):', e);
+        }
+      }
+
       const result = await chrome.debugger.sendCommand(
         debuggerSession,
         msg.params.method,
         msg.params.params
       );
 
-      // When Playwright reconnects and calls Runtime.enable, Chrome does NOT automatically
-      // re-send Runtime.executionContextCreated events for contexts that already exist.
-      // This causes page.evaluate() to hang because Playwright has no execution context IDs.
-      // Solution: manually replay all cached contexts so Playwright gets fresh, valid IDs.
-      if (msg.params.method === 'Runtime.enable' && targetTab.executionContexts.size > 0) {
-        logger.debug('Runtime.enable called, replaying', targetTab.executionContexts.size, 'cached execution contexts for tab:', targetTab.debuggee.tabId);
-
-        for (const contextEvent of targetTab.executionContexts.values()) {
-          logger.debug('Replaying execution context:', contextEvent.context.id);
-          this._sendMessage({
-            method: 'forwardCDPEvent',
-            params: {
-              sessionId: msg.params.sessionId,
-              method: 'Runtime.executionContextCreated',
-              params: contextEvent,
-            },
-          });
-        }
-      }
-
       return result;
     }
+
   }
 
   private _sendMessage(message: any): void {
@@ -437,10 +410,12 @@ export class RelayConnection {
         this._ws.send(JSON.stringify(message));
         // logger.debug('Message sent successfully, type:', message.method || 'response');
       } catch (error: any) {
-        logger.debug('ERROR sending message:', error, 'message type:', message.method || 'response');
+        // Use console directly to avoid infinite recursion if logger tries to send log over this same connection
+        console.debug('ERROR sending message:', error, 'message type:', message.method || 'response');
       }
     } else {
-      logger.debug('Cannot send message, WebSocket not open. State:', this._ws.readyState, 'message type:', message.method || 'response');
+       // Use console directly to avoid infinite recursion
+      console.debug('Cannot send message, WebSocket not open. State:', this._ws.readyState, 'message type:', message.method || 'response');
     }
   }
 }
