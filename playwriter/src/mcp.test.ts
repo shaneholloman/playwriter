@@ -39,11 +39,11 @@ function js(strings: TemplateStringsArray, ...values: any[]): string {
 async function killProcessOnPort(port: number): Promise<void> {
     try {
         const { stdout } = await execAsync(`lsof -ti:${port}`)
-        const pid = stdout.trim()
-        if (pid) {
-            await execAsync(`kill -9 ${pid}`)
-            console.log(`Killed process ${pid} on port ${port}`)
-            await new Promise((resolve) => setTimeout(resolve, 500))
+        const pids = stdout.trim().split('\n').filter(Boolean)
+        if (pids.length > 0) {
+            await execAsync(`kill -9 ${pids.join(' ')}`)
+            console.log(`Killed processes ${pids.join(', ')} on port ${port}`)
+            await new Promise((resolve) => setTimeout(resolve, 1000))
         }
     } catch (error) {
         // No process running on port or already killed
@@ -53,6 +53,7 @@ async function killProcessOnPort(port: number): Promise<void> {
 declare global {
     var toggleExtensionForActiveTab: () => Promise<{ isConnected: boolean; state: any }>;
     var getExtensionState: () => { connectedTabs: Map<number, { targetId: string }> };
+    var disconnectEverything: () => Promise<void>;
     var chrome: any;
 }
 
@@ -115,6 +116,16 @@ describe('MCP Server Tests', () => {
 
         // Wait for service worker and connect
         const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        // Wait for extension to initialize global functions
+        for (let i = 0; i < 50; i++) {
+             const isReady = await serviceWorker.evaluate(() => {
+                 // @ts-ignore
+                 return typeof globalThis.toggleExtensionForActiveTab === 'function'
+             })
+             if (isReady) break
+             await new Promise(r => setTimeout(r, 100))
+        }
 
         // Create a page to attach to
         const page = await browserContext.newPage()
@@ -660,6 +671,43 @@ describe('MCP Server Tests', () => {
         await browser.close()
         await pageA.close()
         await pageB.close()
+    })
+
+    it('should show correct url when enabling extension after navigation', async () => {
+        if (!browserContext) throw new Error('Browser not initialized')
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        // 1. Ensure clean state (disconnected)
+        await serviceWorker.evaluate(async () => {
+            await globalThis.disconnectEverything()
+        })
+
+        // 2. Open page and navigate
+        const page = await browserContext.newPage()
+        const targetUrl = 'https://example.com/late-enable'
+        await page.goto(targetUrl)
+        await page.bringToFront()
+        
+        // Wait for load
+        await page.waitForLoadState('networkidle')
+
+        // 3. Enable extension
+        await serviceWorker.evaluate(async () => {
+            await globalThis.toggleExtensionForActiveTab()
+        })
+
+        // 4. Verify via CDP
+        const browser = await chromium.connectOverCDP(getCdpUrl())
+        // Wait for sync
+        await new Promise(r => setTimeout(r, 1000))
+        
+        const cdpPage = browser.contexts()[0].pages().find(p => p.url() === targetUrl)
+        
+        expect(cdpPage).toBeDefined()
+        expect(cdpPage?.url()).toBe(targetUrl)
+        
+        await browser.close()
+        await page.close()
     })
 
 })

@@ -69,12 +69,37 @@ async function toggleExtensionForActiveTab(): Promise<{ isConnected: boolean; st
 }
 
 // @ts-ignore
+globalThis.disconnectEverything = disconnectEverything
+
+async function disconnectEverything() {
+  const { connectedTabs, connection } = useExtensionStore.getState()
+  
+  // Disconnect all tabs
+  for (const tabId of connectedTabs.keys()) {
+    await disconnectTab(tabId)
+  }
+
+  // Force close connection if it still exists
+  const state = useExtensionStore.getState()
+  if (state.connection) {
+    state.connection.close('Manual full disconnect')
+    useExtensionStore.setState({ 
+      connection: undefined, 
+      connectionState: 'disconnected',
+      connectedTabs: new Map(),
+      errorText: undefined
+    })
+  }
+}
+
+// @ts-ignore
 globalThis.getExtensionState = () => useExtensionStore.getState()
 
 declare global {
   var state: typeof useExtensionStore
   var toggleExtensionForActiveTab: () => Promise<{ isConnected: boolean; state: ExtensionState }>
   var getExtensionState: () => ExtensionState
+  var disconnectEverything: () => Promise<void>
 }
 
 async function resetDebugger() {
