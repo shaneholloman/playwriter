@@ -83,7 +83,9 @@ const NO_TABS_ERROR = `No browser tabs are connected. Please install and enable 
 
 async function isPortTaken(port: number): Promise<boolean> {
   try {
-    const response = await fetch(`http://localhost:${port}/`)
+    const response = await fetch(`http://localhost:${port}/`, {
+      signal: AbortSignal.timeout(500)
+    })
     return response.ok
   } catch {
     return false
@@ -94,11 +96,10 @@ async function ensureRelayServer(): Promise<void> {
   const portTaken = await isPortTaken(RELAY_PORT)
 
   if (portTaken) {
-    console.error('CDP relay server already running')
     return
   }
 
-  console.error('Starting CDP relay server...')
+  console.error('CDP relay server not running, starting it...')
 
   const scriptPath = require.resolve('../dist/start-relay-server.js')
 
@@ -109,10 +110,16 @@ async function ensureRelayServer(): Promise<void> {
 
   serverProcess.unref()
 
-  // wait for extension to connect
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const isRunning = await isPortTaken(RELAY_PORT)
+    if (isRunning) {
+      console.error('CDP relay server started successfully')
+      return
+    }
+  }
 
-  console.error('CDP relay server started')
+  throw new Error('Failed to start CDP relay server after 5 seconds')
 }
 
 async function ensureConnection(): Promise<{ browser: Browser; page: Page }> {
@@ -138,7 +145,7 @@ async function ensureConnection(): Promise<{ browser: Browser; page: Page }> {
     throw new Error(NO_TABS_ERROR)
   }
   const page = pages[0]
-  
+
   // Set up console listener for all existing pages
   context.pages().forEach(p => setupPageConsoleListener(p))
 
@@ -154,19 +161,19 @@ async function getPageTargetId(page: Page): Promise<string> {
   if (!page) {
     throw new Error('Page is null or undefined')
   }
-  
+
   // Always use internal _guid for consistency and speed
   const guid = (page as any)._guid
   if (guid) {
     return guid
   }
-  
+
   try {
     // Fallback to CDP if _guid is not available
     const client = await page.context().newCDPSession(page)
     const { targetInfo } = await client.send('Target.getTargetInfo')
     await client.detach()
-    
+
     return targetInfo.targetId
   } catch (e) {
     throw new Error(`Could not get page identifier: ${e}`)
@@ -176,17 +183,17 @@ async function getPageTargetId(page: Page): Promise<string> {
 function setupPageConsoleListener(page: Page) {
   // Get targetId synchronously using _guid
   const targetId = (page as any)._guid as string | undefined
-  
+
   if (!targetId) {
     // If no _guid, silently fail - this shouldn't happen in normal operation
     return
   }
-  
+
   // Initialize logs array for this page
   if (!browserLogs.has(targetId)) {
     browserLogs.set(targetId, [])
   }
-  
+
   // Clear logs on navigation/reload
   page.on('framenavigated', (frame) => {
     // Only clear if it's the main frame navigating (page reload/navigation)
@@ -194,21 +201,21 @@ function setupPageConsoleListener(page: Page) {
       browserLogs.set(targetId, [])
     }
   })
-  
+
   // Delete logs when page is closed
   page.on('close', () => {
     browserLogs.delete(targetId)
   })
-  
+
   page.on('console', (msg) => {
     const logEntry = `[${msg.type()}] ${msg.text()}`
-    
+
     // Get or create logs array for this page targetId
     if (!browserLogs.has(targetId)) {
       browserLogs.set(targetId, [])
     }
     const pageLogs = browserLogs.get(targetId)!
-    
+
     pageLogs.push(logEntry)
     if (pageLogs.length > MAX_LOGS_PER_PAGE) {
       pageLogs.shift()
@@ -251,7 +258,7 @@ async function resetConnection(): Promise<{ browser: Browser; page: Page; contex
   state.page = null
   state.context = null
   state.isConnected = false
-  
+
   // DO NOT clear browser logs on reset - logs should persist across reconnections
   // browserLogs.clear()
 
@@ -273,7 +280,7 @@ async function resetConnection(): Promise<{ browser: Browser; page: Page; contex
     throw new Error(NO_TABS_ERROR)
   }
   const page = pages[0]
-  
+
   // Set up console listener for all existing pages
   context.pages().forEach(p => setupPageConsoleListener(p))
 
@@ -305,6 +312,7 @@ server.tool(
     timeout: z.number().default(5000).describe('Timeout in milliseconds for code execution (default: 5000ms)'),
   },
   async ({ code, timeout }) => {
+    await ensureRelayServer()
     await ensureConnection()
 
     const page = await getCurrentPage(timeout)
@@ -415,9 +423,9 @@ server.tool(
         searchFilter?: string | RegExp
       }) => {
         const { page: filterPage, count, searchFilter } = options || {}
-        
+
         let allLogs: string[] = []
-        
+
         // Get logs from specific page or all pages
         if (filterPage) {
           const targetId = await getPageTargetId(filterPage)
@@ -429,7 +437,7 @@ server.tool(
             allLogs.push(...pageLogs)
           }
         }
-        
+
         // Filter by search string or regex
         if (searchFilter) {
           allLogs = allLogs.filter(log => {
@@ -441,11 +449,11 @@ server.tool(
             return false
           })
         }
-        
+
         // Return all logs or limited count
         return count !== undefined ? allLogs.slice(-count) : allLogs
       }
-      
+
       const clearAllLogs = () => {
         browserLogs.clear()
       }
