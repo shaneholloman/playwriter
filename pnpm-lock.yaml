@@ -94,6 +94,9 @@ importers:
       '@mizchi/selector-generator':
         specifier: 1.50.0-next
         version: 1.50.0-next
+      '@types/chrome':
+        specifier: ^0.0.315
+        version: 0.0.315
       '@types/node':
         specifier: ^24.10.1
         version: 24.10.1

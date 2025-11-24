@@ -1,25 +1,9 @@
 import { RelayConnection, logger } from './relayConnection'
 import { createStore } from 'zustand/vanilla'
+import type { ExtensionState, ConnectionState, TabState, TabInfo } from './types'
 
 // Relay URL - fixed port for MCP bridge
 const RELAY_URL = 'ws://localhost:19988/extension'
-
-type ConnectionState = 'disconnected' | 'reconnecting' | 'connected' | 'error'
-type TabState = 'connecting' | 'connected' | 'error'
-
-interface TabInfo {
-  targetId: string
-  state: TabState
-  errorText?: string
-}
-
-interface ExtensionState {
-  connection: RelayConnection | undefined
-  connectedTabs: Map<number, TabInfo>
-  connectionState: ConnectionState
-  currentTabId: number | undefined
-  errorText: string | undefined
-}
 
 const useExtensionStore = createStore<ExtensionState>((set) => ({
   connection: undefined,

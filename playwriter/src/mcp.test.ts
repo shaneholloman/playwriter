@@ -55,7 +55,6 @@ declare global {
     var toggleExtensionForActiveTab: () => Promise<{ isConnected: boolean; state: ExtensionState }>;
     var getExtensionState: () => ExtensionState;
     var disconnectEverything: () => Promise<void>;
-    var chrome: any;
 }
 
 describe('MCP Server Tests', () => {
@@ -224,13 +223,12 @@ describe('MCP Server Tests', () => {
         // Get extension state to verify the page is marked as connected
         const extensionState = await serviceWorker.evaluate(async () => {
             const state = globalThis.getExtensionState()
-            const chrome = globalThis.chrome
             const tabs = await chrome.tabs.query({})
             const testTab = tabs.find((t: any) => t.url?.includes('mcp-test'))
             return {
-                connected: !!testTab && state.connectedTabs.has(testTab.id),
+                connected: !!testTab && !!testTab.id && state.connectedTabs.has(testTab.id),
                 tabId: testTab?.id,
-                tabInfo: testTab ? state.connectedTabs.get(testTab.id) : null,
+                tabInfo: testTab?.id ? state.connectedTabs.get(testTab.id) : null,
                 connectionState: state.connectionState
             }
         })
@@ -583,8 +581,8 @@ describe('MCP Server Tests', () => {
              const tabA = tabs.find((t: any) => t.url?.includes('tab-a'))
              const tabB = tabs.find((t: any) => t.url?.includes('tab-b'))
              return {
-                 idA: state.connectedTabs.get(tabA?.id)?.targetId,
-                 idB: state.connectedTabs.get(tabB?.id)?.targetId
+                 idA: state.connectedTabs.get(tabA?.id ?? -1)?.targetId,
+                 idB: state.connectedTabs.get(tabB?.id ?? -1)?.targetId
              }
         })
 
@@ -669,8 +667,8 @@ describe('MCP Server Tests', () => {
              const tabA = tabs.find((t: any) => t.url?.includes('tab-a'))
              const tabB = tabs.find((t: any) => t.url?.includes('tab-b'))
              return {
-                 idA: state.connectedTabs.get(tabA?.id)?.targetId,
-                 idB: state.connectedTabs.get(tabB?.id)?.targetId
+                 idA: state.connectedTabs.get(tabA?.id ?? -1)?.targetId,
+                 idB: state.connectedTabs.get(tabB?.id ?? -1)?.targetId
              }
         })
 
