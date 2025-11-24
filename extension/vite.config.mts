@@ -25,12 +25,14 @@ export default defineConfig({
           dest: '.',
           transform: (content) => {
             const manifest = JSON.parse(content);
-            
+
             // Only include tabs permission during testing
-            if (!process.env.TESTING) {
-              manifest.permissions = manifest.permissions.filter((p: string) => p !== 'tabs');
+            if (process.env.TESTING) {
+              if (!manifest.permissions.includes('tabs')) {
+                manifest.permissions.push('tabs');
+              }
             }
-            
+
             return JSON.stringify(manifest, null, 2);
           }
         },
