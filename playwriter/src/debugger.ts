@@ -243,9 +243,10 @@ export class Debugger {
   }
 
   /**
-   * Evaluates a JavaScript expression in the current context.
-   * When paused at a breakpoint, evaluates in the call frame context (can access local variables).
-   * Otherwise evaluates in the global context.
+   * Evaluates a JavaScript expression and returns the result.
+   * When paused at a breakpoint, evaluates in the current stack frame scope,
+   * allowing access to local variables. Otherwise evaluates in global scope.
+   * Values are not truncated, use this for full control over reading specific variables.
    *
    * @param options - Options
    * @param options.expression - JavaScript expression to evaluate
@@ -256,9 +257,8 @@ export class Debugger {
    * // When paused, can access local variables:
    * const result = await dbg.evaluate({ expression: 'localVar + 1' })
    *
-   * // Global context when not paused:
-   * const result = await dbg.evaluate({ expression: 'process.env.NODE_ENV' })
-   * console.log(result.value) // 'development'
+   * // Read a large string that would be truncated in inspectLocalVariables:
+   * const full = await dbg.evaluate({ expression: 'largeStringVar' })
    * ```
    */
   async evaluate({ expression }: { expression: string }): Promise<EvaluateResult> {
