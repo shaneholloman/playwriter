@@ -232,7 +232,7 @@ async function handleCommand(msg: ExtensionCommandMessage): Promise<any> {
       }
       try {
         await chrome.debugger.sendCommand(debuggee, 'Runtime.disable')
-        await sleep(400)
+        await sleep(200)
       } catch (e) {
         logger.debug('Error disabling Runtime (ignoring):', e)
       }
@@ -507,15 +507,7 @@ function handleConnectionClose(reason: string, code: number): void {
     return
   }
 
-  store.setState((state) => {
-    const newTabs = new Map(state.tabs)
-    for (const [tabId, tab] of newTabs) {
-      if (tab.state === 'connected') {
-        newTabs.set(tabId, { ...tab, state: 'connecting' })
-      }
-    }
-    return { tabs: newTabs, connectionState: 'disconnected', errorText: undefined }
-  })
+  store.setState({ connectionState: 'disconnected', errorText: undefined })
 
   if (tabs.size > 0) {
     logger.debug('Tabs still connected, triggering reconnection')
