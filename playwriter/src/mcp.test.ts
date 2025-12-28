@@ -1586,13 +1586,13 @@ describe('MCP Server Tests', () => {
         expect(normalized).toMatchInlineSnapshot(`
           {
             "cssLayoutViewport": {
-              "clientHeight": 720,
+              "clientHeight": 528,
               "clientWidth": 1280,
               "pageX": 0,
               "pageY": 0,
             },
             "cssVisualViewport": {
-              "clientHeight": 720,
+              "clientHeight": 528,
               "clientWidth": 1280,
               "offsetX": 0,
               "offsetY": 0,
@@ -1603,13 +1603,13 @@ describe('MCP Server Tests', () => {
             },
             "devicePixelRatio": 1,
             "layoutViewport": {
-              "clientHeight": 720,
+              "clientHeight": 528,
               "clientWidth": 1280,
               "pageX": 0,
               "pageY": 0,
             },
             "visualViewport": {
-              "clientHeight": 720,
+              "clientHeight": 528,
               "clientWidth": 1280,
               "offsetX": 0,
               "offsetY": 0,
