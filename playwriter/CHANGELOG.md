@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.33
+
+### Patch Changes
+
+- **Fixed prompt.md not found error**: Read `prompt.md` from `src/` instead of `dist/`, fixing `ENOENT: no such file or directory` error when running the MCP
+
 ## 0.0.32
 
 ### Patch Changes
