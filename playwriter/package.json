@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "repository": "https://github.com/remorses/playwriter",
   "scripts": {
-    "build": "rm -rf dist *.tsbuildinfo && mkdir dist && cp src/resource.md src/prompt.md src/debugger-examples.ts dist/ && bun scripts/build-selector-generator.ts && bun scripts/build-bippy.ts && tsc",
+    "build": "rm -rf dist *.tsbuildinfo && mkdir dist && bun scripts/build-selector-generator.ts && bun scripts/build-bippy.ts && tsc",
     "prepublishOnly": "pnpm build",
     "watch": "tsc -w",
     "typecheck": "tsc --noEmit",

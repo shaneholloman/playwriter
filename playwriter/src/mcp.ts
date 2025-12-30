@@ -433,13 +433,13 @@ const promptContent =
 
 server.resource('debugger-api', 'playwriter://debugger-api', { mimeType: 'text/plain' }, async () => {
   const packageJsonPath = require.resolve('playwriter/package.json')
-  const distDir = path.join(path.dirname(packageJsonPath), 'dist')
+  const packageDir = path.dirname(packageJsonPath)
 
   const debuggerTypes = fs
-    .readFileSync(path.join(distDir, 'debugger.d.ts'), 'utf-8')
+    .readFileSync(path.join(packageDir, 'dist', 'debugger.d.ts'), 'utf-8')
     .replace(/\/\/# sourceMappingURL=.*$/gm, '')
     .trim()
-  const debuggerExamples = fs.readFileSync(path.join(distDir, 'debugger-examples.ts'), 'utf-8')
+  const debuggerExamples = fs.readFileSync(path.join(packageDir, 'src', 'debugger-examples.ts'), 'utf-8')
 
   return {
     contents: [
@@ -468,13 +468,13 @@ server.resource('debugger-api', 'playwriter://debugger-api', { mimeType: 'text/p
 
 server.resource('editor-api', 'playwriter://editor-api', { mimeType: 'text/plain' }, async () => {
   const packageJsonPath = require.resolve('playwriter/package.json')
-  const distDir = path.join(path.dirname(packageJsonPath), 'dist')
+  const packageDir = path.dirname(packageJsonPath)
 
   const editorTypes = fs
-    .readFileSync(path.join(distDir, 'editor.d.ts'), 'utf-8')
+    .readFileSync(path.join(packageDir, 'dist', 'editor.d.ts'), 'utf-8')
     .replace(/\/\/# sourceMappingURL=.*$/gm, '')
     .trim()
-  const editorExamples = fs.readFileSync(path.join(distDir, 'editor-examples.ts'), 'utf-8')
+  const editorExamples = fs.readFileSync(path.join(packageDir, 'src', 'editor-examples.ts'), 'utf-8')
 
   return {
     contents: [
@@ -505,13 +505,13 @@ server.resource('editor-api', 'playwriter://editor-api', { mimeType: 'text/plain
 
 server.resource('styles-api', 'playwriter://styles-api', { mimeType: 'text/plain' }, async () => {
   const packageJsonPath = require.resolve('playwriter/package.json')
-  const distDir = path.join(path.dirname(packageJsonPath), 'dist')
+  const packageDir = path.dirname(packageJsonPath)
 
   const stylesTypes = fs
-    .readFileSync(path.join(distDir, 'styles.d.ts'), 'utf-8')
+    .readFileSync(path.join(packageDir, 'dist', 'styles.d.ts'), 'utf-8')
     .replace(/\/\/# sourceMappingURL=.*$/gm, '')
     .trim()
-  const stylesExamples = fs.readFileSync(path.join(distDir, 'styles-examples.ts'), 'utf-8')
+  const stylesExamples = fs.readFileSync(path.join(packageDir, 'src', 'styles-examples.ts'), 'utf-8')
 
   return {
     contents: [
