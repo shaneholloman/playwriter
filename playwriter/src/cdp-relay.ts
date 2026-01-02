@@ -220,7 +220,7 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
           targetId: result.targetInfo.targetId,
           targetInfo: result.targetInfo
         })
-        logger?.log(chalk.blue(`Auto-created tab, now have ${connectedTargets.size} targets`))
+        logger?.log(chalk.blue(`Auto-created tab, now have ${connectedTargets.size} targets, url: ${result.targetInfo.url}`))
       }
     } catch (e) {
       logger?.error('Failed to auto-create initial tab:', e)
@@ -460,6 +460,9 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
                   waitingForDebugger: false
                 }
               } satisfies CDPEventFor<'Target.attachedToTarget'>
+              if (!target.targetInfo.url) {
+                logger?.error(chalk.red('[Server] WARNING: Target.attachedToTarget sent with empty URL!'), JSON.stringify(attachedPayload))
+              }
               logger?.log(chalk.magenta('[Server] Target.attachedToTarget full payload:'), JSON.stringify(attachedPayload))
               sendToPlaywright({
                 message: attachedPayload,
@@ -480,6 +483,9 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
                   }
                 }
               } satisfies CDPEventFor<'Target.targetCreated'>
+              if (!target.targetInfo.url) {
+                logger?.error(chalk.red('[Server] WARNING: Target.targetCreated sent with empty URL!'), JSON.stringify(targetCreatedPayload))
+              }
               logger?.log(chalk.magenta('[Server] Target.targetCreated full payload:'), JSON.stringify(targetCreatedPayload))
               sendToPlaywright({
                 message: targetCreatedPayload,
@@ -504,6 +510,9 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
                   waitingForDebugger: false
                 }
               } satisfies CDPEventFor<'Target.attachedToTarget'>
+              if (!target.targetInfo.url) {
+                logger?.error(chalk.red('[Server] WARNING: Target.attachedToTarget (from attachToTarget) sent with empty URL!'), JSON.stringify(attachedPayload))
+              }
               logger?.log(chalk.magenta('[Server] Target.attachedToTarget (from attachToTarget) payload:'), JSON.stringify(attachedPayload))
               sendToPlaywright({
                 message: attachedPayload,
@@ -617,6 +626,9 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
           if (method === 'Target.attachedToTarget') {
             const targetParams = params as Protocol.Target.AttachedToTargetEvent
 
+            if (!targetParams.targetInfo.url) {
+              logger?.error(chalk.red('[Extension] WARNING: Target.attachedToTarget received with empty URL!'), JSON.stringify({ method, params: targetParams, sessionId }))
+            }
             logger?.log(chalk.yellow('[Extension] Target.attachedToTarget full payload:'), JSON.stringify({ method, params: targetParams, sessionId }))
 
             // Check if we already sent this target to clients (e.g., from Target.setAutoAttach response)
