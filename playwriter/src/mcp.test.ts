@@ -2648,6 +2648,11 @@ describe('CDP Session Tests', () => {
         const browserContext = getBrowserContext()
         const serviceWorker = await getExtensionServiceWorker(browserContext)
 
+        // Clear any existing connected tabs from previous tests
+        await serviceWorker.evaluate(async () => {
+            await globalThis.disconnectEverything()
+        })
+
         const page = await browserContext.newPage()
         await page.goto('https://example.com/')
         await page.bringToFront()
@@ -2691,6 +2696,11 @@ describe('CDP Session Tests', () => {
     it('should return correct targets for multiple pages via Target.getTargets', async () => {
         const browserContext = getBrowserContext()
         const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        // Clear any existing connected tabs from previous tests
+        await serviceWorker.evaluate(async () => {
+            await globalThis.disconnectEverything()
+        })
 
         const page1 = await browserContext.newPage()
         await page1.goto('https://example.com/')
@@ -3266,6 +3276,12 @@ describe('Auto-enable Tests', () => {
     it('should auto-create a tab when Playwright connects and no tabs exist', async () => {
         const browserContext = getBrowserContext()
         const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        // Ensure clean state - disconnect any tabs from previous tests or setup
+        await serviceWorker.evaluate(async () => {
+            await globalThis.disconnectEverything()
+        })
+        await new Promise(r => setTimeout(r, 100))
 
         // Verify no tabs are connected
         const tabCountBefore = await serviceWorker.evaluate(() => {
