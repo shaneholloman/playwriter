@@ -3,8 +3,8 @@ import { formatHtmlForPrompt } from './htmlrewrite.js'
 
 test('formatHtmlForPrompt', async () => {
   const res = await fetch('https://framer.com')
-  // const html = await res.text()
-  const newHtml = await formatHtmlForPrompt(res)
+  const html = await res.text()
+  const newHtml = await formatHtmlForPrompt(html)
   expect(newHtml).toMatchInlineSnapshot(
     `
       "<!doctype html>

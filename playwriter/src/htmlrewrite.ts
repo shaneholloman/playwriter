@@ -1,13 +1,7 @@
-import { FlatCache } from 'flat-cache'
-
 import posthtml from 'posthtml'
 import beautify from 'posthtml-beautify'
 
-export async function formatHtmlForPrompt(
-    input: Response,
-) {
-    const html = await input.text()
-
+export async function formatHtmlForPrompt(html: string) {
     const tagsToRemove = [
         'hint',
         'style',
@@ -114,80 +108,4 @@ export async function formatHtmlForPrompt(
     const result = await processor.process(html)
 
     return result.html
-}
-
-const htmlCache = new FlatCache({
-    cacheDir: '.htmlcache',
-    cacheId: 'htmlcache.json',
-    lruSize: 100,
-})
-export async function fetchFormattedHtml({
-    url,
-    signal,
-    timeout = 5000,
-}: {
-    url: string
-    signal?: AbortSignal
-    timeout?: number
-}): Promise<string> {
-    if (!url) {
-        return ''
-    }
-    if (htmlCache.get(url)) {
-        return htmlCache.get(url) || ''
-    }
-    // if there is no https:// or http:// prefix, add it
-    if (!url.startsWith('https://') && !url.startsWith('http://')) {
-        url = 'https://' + url
-    }
-    console.time(`fetchFormattedHtml: ${url}`)
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => {
-        controller.abort()
-    }, timeout)
-
-    if (signal) {
-        signal.addEventListener('abort', () => {
-            controller.abort()
-        })
-    }
-
-    try {
-        const res = await fetch(url, {
-            headers: {
-                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                Connection: 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                // Referer: 'https://www.google.com/',
-                'User-Agent':
-                    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-            },
-            signal: controller.signal,
-        })
-
-        if (!res.ok) {
-            console.timeEnd(`fetchFormattedHtml: ${url}`)
-            throw new Error(
-                `Could not get content, server responded with ${res.status}`,
-            )
-        }
-
-        console.time(`formatHtmlForPrompt: ${url}`)
-        const formattedHtml = await formatHtmlForPrompt(res)
-        htmlCache.set(url, formattedHtml)
-        htmlCache.save(true)
-        console.timeEnd(`formatHtmlForPrompt: ${url}`)
-        console.timeEnd(`fetchFormattedHtml: ${url}`)
-        return formattedHtml
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.timeEnd(`fetchFormattedHtml: ${url}`)
-            throw new Error(`${url} took too long to respond`)
-        }
-        throw error
-    } finally {
-        clearTimeout(timeoutId)
-    }
 }
