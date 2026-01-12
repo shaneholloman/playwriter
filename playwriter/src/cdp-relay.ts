@@ -763,6 +763,15 @@ export async function startPlayWriterCDPRelayServer({ port = 19988, host = '127.
 
           if (method === 'Target.attachedToTarget') {
             const targetParams = params as Protocol.Target.AttachedToTargetEvent
+            const targetType = targetParams.targetInfo.type
+
+            // Filter out non-page targets (service workers, web workers, etc.)
+            // These targets can't be properly controlled through chrome.debugger API
+            // and cause issues when Playwright tries to initialize them (issue #14)
+            if (targetType !== 'page') {
+              logger?.log(chalk.gray(`[Server] Ignoring non-page target: ${targetType} (${targetParams.targetInfo.url})`))
+              return
+            }
 
             if (!targetParams.targetInfo.url) {
               logger?.error(chalk.red('[Extension] WARNING: Target.attachedToTarget received with empty URL!'), JSON.stringify({ method, params: targetParams, sessionId }))

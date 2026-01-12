@@ -2,6 +2,10 @@
 
 ## 0.0.44
 
+### Bug Fixes
+
+- **Filter non-page targets from Playwright (issue #14)**: Service workers, web workers, and other non-page targets are now filtered out at the server level. This prevents Playwright from trying to initialize these targets, which would cause timeouts waiting for `executionContextCreated` events and errors on `Target.detachFromTarget`.
+
 ### Features
 
 - **Search context lines**: `accessibilitySnapshot`, `getCleanHTML`, and `getLatestLogs` now include 5 lines of context above and below each search match

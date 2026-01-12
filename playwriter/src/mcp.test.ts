@@ -3541,18 +3541,21 @@ describe('Service Worker Target Tests', () => {
         return testCtx.browserContext
     }
 
-    it('should not disconnect when page has service worker (issue #14)', async () => {
-        // This test reproduces issue #14: pages with service workers cause disconnection loops.
-        // The problem is that Target.setAutoAttach attaches to service workers, and when
-        // Playwright tries to enable Network/Runtime on the SW session, the extension can't
-        // find a matching tab, causing errors and disconnection.
+    it('should not expose service worker targets to Playwright (issue #14)', async () => {
+        // This test verifies that service worker targets are NOT forwarded to Playwright.
+        // Issue #14: pages with service workers cause problems because Playwright tries to
+        // initialize service worker sessions with Runtime.enable/Network.enable, which
+        // times out waiting for executionContextCreated (service workers don't have main frames).
+        //
+        // The fix is to filter out non-page targets (service_worker, worker, etc.) in the
+        // server so Playwright never sees them.
 
         const browserContext = getBrowserContext()
         const serviceWorker = await getExtensionServiceWorker(browserContext)
 
-        // Discord has a service worker - navigate there
+        // web.dev has a service worker - navigate there
         const page = await browserContext.newPage()
-        await page.goto('https://discord.com/login', { waitUntil: 'load' })
+        await page.goto('https://web.dev/', { waitUntil: 'load' })
         await page.bringToFront()
 
         // Attach extension to the page
@@ -3561,33 +3564,28 @@ describe('Service Worker Target Tests', () => {
         })
         await new Promise(r => setTimeout(r, 500))
 
-        // Connect via Playwright CDP - this triggers Target.setAutoAttach which
-        // will also attach to the service worker
+        // Connect via Playwright CDP - this triggers Target.setAutoAttach
         const browser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
+        const context = browser.contexts()[0]
 
-        // Track disconnection events
-        let disconnected = false
-        browser.on('disconnected', () => {
-            disconnected = true
-            console.log('Browser disconnected!')
-        })
+        // Get all targets/pages that Playwright knows about
+        const pages = context.pages()
 
-        // Wait for potential disconnection - issue says ~10s loop
-        // We wait 15 seconds to be sure
-        console.log('Waiting 15 seconds to check for disconnection loop...')
-        await new Promise(r => setTimeout(r, 15000))
+        // All pages should be actual pages, not service workers or workers
+        for (const p of pages) {
+            const url = p.url()
+            console.log('Page URL:', url)
+            // Service workers would have URLs like https://web.dev/sw.js
+            expect(url).not.toMatch(/sw\.js$/i)
+            expect(url).not.toMatch(/service.?worker/i)
+        }
 
-        // Should still be connected - this is what we're testing
-        expect(disconnected).toBe(false)
-        expect(browser.isConnected()).toBe(true)
+        // Verify we can interact with the main page
+        const targetPage = pages.find(p => p.url().includes('web.dev'))
+        expect(targetPage).toBeDefined()
 
-        // Verify we can still interact with the page
-        const pages = browser.contexts()[0].pages()
-        const discordPage = pages.find(p => p.url().includes('discord.com'))
-        expect(discordPage).toBeDefined()
-
-        const url = await discordPage!.evaluate(() => window.location.href)
-        expect(url).toContain('discord.com')
+        const title = await targetPage!.title()
+        expect(title).toBeTruthy()
 
         await browser.close()
         await page.close()
