@@ -890,11 +890,24 @@ async function resetDebugger(): Promise<void> {
   }
 }
 
+// Our extension IDs - allow attaching to our own extension pages for debugging
+const OUR_EXTENSION_IDS = [
+  'jfeammnjpkecdekppnclgkkffahnhfhe', // Production extension (Chrome Web Store)
+  'elnnakgjclnapgflmidlpobefkdmapdm', // Dev extension (loaded unpacked)
+]
+
 // undefined URL is for about:blank pages (not restricted) and chrome:// URLs (restricted).
 // We can't distinguish them without the `tabs` permission, so we just let attachment fail.
 function isRestrictedUrl(url: string | undefined): boolean {
   if (!url) return false
-  const restrictedPrefixes = ['chrome://', 'chrome-extension://', 'devtools://', 'edge://', 'https://chrome.google.com/', 'https://chromewebstore.google.com/']
+
+  // Allow our own extension pages, block all other extensions
+  if (url.startsWith('chrome-extension://')) {
+    const extensionId = url.replace('chrome-extension://', '').split('/')[0]
+    return !OUR_EXTENSION_IDS.includes(extensionId)
+  }
+
+  const restrictedPrefixes = ['chrome://', 'devtools://', 'edge://', 'https://chrome.google.com/', 'https://chromewebstore.google.com/']
   return restrictedPrefixes.some((prefix) => url.startsWith(prefix))
 }
 
