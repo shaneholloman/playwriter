@@ -6,7 +6,7 @@ import type { CDPEvent, Protocol } from 'playwriter/src/cdp-types'
 import type { ExtensionCommandMessage, ExtensionResponseMessage } from 'playwriter/src/protocol'
 
 const RELAY_PORT = process.env.PLAYWRITER_PORT
-const RELAY_URL = `ws://localhost:${RELAY_PORT}/extension`
+const RELAY_URL = `ws://127.0.0.1:${RELAY_PORT}/extension`
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -34,7 +34,19 @@ class ConnectionManager {
       return this.connectionPromise
     }
 
-    this.connectionPromise = this.connect()
+    // Wrap connect() with a global timeout to ensure it never hangs forever.
+    // This protects against edge cases where individual timeouts don't fire
+    // (e.g., DNS resolution hangs, AbortSignal doesn't work, etc.)
+    const GLOBAL_TIMEOUT_MS = 15000
+    this.connectionPromise = Promise.race([
+      this.connect(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Connection timeout (global)'))
+        }, GLOBAL_TIMEOUT_MS)
+      })
+    ])
+
     try {
       await this.connectionPromise
     } finally {
@@ -43,22 +55,21 @@ class ConnectionManager {
   }
 
   private async connect(): Promise<void> {
-    logger.debug(`Waiting for server at http://localhost:${RELAY_PORT}...`)
+    logger.debug(`Waiting for server at http://127.0.0.1:${RELAY_PORT}...`)
 
-    // Retry for up to 30 seconds with 1s intervals, then give up (maintain loop will retry later)
-    const maxAttempts = 30
+    // Retry for up to 5 seconds with 1s intervals, then give up (maintain loop will retry later)
+    // Using fewer attempts since maintainLoop retries every 3 seconds anyway
+    const maxAttempts = 5
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        await fetch(`http://localhost:${RELAY_PORT}`, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
+        await fetch(`http://127.0.0.1:${RELAY_PORT}`, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
         logger.debug('Server is available')
         break
       } catch {
         if (attempt === maxAttempts - 1) {
           throw new Error('Server not available')
         }
-        if (attempt % 5 === 0) {
-          logger.debug(`Server not available, retrying... (attempt ${attempt + 1}/${maxAttempts})`)
-        }
+        logger.debug(`Server not available, retrying... (attempt ${attempt + 1}/${maxAttempts})`)
         await sleep(1000)
       }
     }
@@ -67,17 +78,20 @@ class ConnectionManager {
     const socket = new WebSocket(RELAY_URL)
 
     await new Promise<void>((resolve, reject) => {
-      let timeoutFired = false
+      let settled = false
       const timeout = setTimeout(() => {
-        timeoutFired = true
+        if (settled) return
+        settled = true
         logger.debug('WebSocket connection TIMEOUT after 5 seconds')
+        try {
+          socket.close()
+        } catch {}
         reject(new Error('Connection timeout'))
       }, 5000)
 
       socket.onopen = () => {
-        if (timeoutFired) {
-          return
-        }
+        if (settled) return
+        settled = true
         logger.debug('WebSocket connected')
         clearTimeout(timeout)
         resolve()
@@ -85,18 +99,18 @@ class ConnectionManager {
 
       socket.onerror = (error) => {
         logger.debug('WebSocket error during connection:', error)
-        if (!timeoutFired) {
-          clearTimeout(timeout)
-          reject(new Error('WebSocket connection failed'))
-        }
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        reject(new Error('WebSocket connection failed'))
       }
 
       socket.onclose = (event) => {
         logger.debug('WebSocket closed during connection:', { code: event.code, reason: event.reason })
-        if (!timeoutFired) {
-          clearTimeout(timeout)
-          reject(new Error(`WebSocket closed: ${event.reason || event.code}`))
-        }
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        reject(new Error(`WebSocket closed: ${event.reason || event.code}`))
       }
     })
 
@@ -236,7 +250,7 @@ class ConnectionManager {
       // When replaced by another extension, poll until slot is free
       if (store.getState().connectionState === 'extension-replaced') {
         try {
-          const response = await fetch(`http://localhost:${RELAY_PORT}/extension/status`, { method: 'GET', signal: AbortSignal.timeout(2000) })
+          const response = await fetch(`http://127.0.0.1:${RELAY_PORT}/extension/status`, { method: 'GET', signal: AbortSignal.timeout(2000) })
           const data = await response.json()
           if (!data.connected) {
             store.setState({ connectionState: 'idle', errorText: undefined })
