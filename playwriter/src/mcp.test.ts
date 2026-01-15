@@ -3668,6 +3668,56 @@ describe('Service Worker Target Tests', () => {
         await browser.close()
         await page.close()
     }, 60000)
+
+    it('should allow reading response bodies after re-enabling Network buffering', async () => {
+        // By default, the relay sets maxTotalBufferSize: 0 to fix SSE streaming.
+        // This test verifies that agents can re-enable buffering to read response bodies
+        // using Playwright's response.body() API after re-enabling Network buffering via CDP.
+
+        const browserContext = getBrowserContext()
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        const page = await browserContext.newPage()
+        await page.goto('https://example.com/')
+        await page.bringToFront()
+
+        await serviceWorker.evaluate(async () => {
+            await globalThis.toggleExtensionForActiveTab()
+        })
+        await new Promise(r => setTimeout(r, 100))
+
+        const browser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
+        const cdpPage = browser.contexts()[0].pages().find(p => p.url().includes('example.com'))
+        expect(cdpPage).toBeDefined()
+
+        // Get CDP session to re-enable buffering (must use getCDPSessionForPage, not newCDPSession)
+        const wsUrl = getCdpUrl({ port: TEST_PORT })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+
+        // Re-enable Network domain with buffering to allow response.body() to work
+        await cdpSession.send('Network.disable')
+        await cdpSession.send('Network.enable', {
+            maxTotalBufferSize: 10000000,
+            maxResourceBufferSize: 5000000
+        })
+
+        // Use Playwright's response API to capture and read response body
+        const [response] = await Promise.all([
+            cdpPage!.waitForResponse(resp => resp.url() === 'https://example.com/'),
+            cdpPage!.goto('https://example.com/')
+        ])
+
+        // Now response.body() should work because we re-enabled buffering
+        const body = await response.text()
+
+        expect(body).toBeDefined()
+        expect(body).toContain('Example Domain')
+        expect(body).toContain('</html>')
+
+        cdpSession.close()
+        await browser.close()
+        await page.close()
+    }, 60000)
 })
 
 describe('Auto-enable Tests', () => {
