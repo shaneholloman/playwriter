@@ -1,7 +1,6 @@
 import type { Page, Locator, ElementHandle } from 'playwright-core'
 import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
 
 export interface AriaRef {
   role: string
@@ -579,23 +578,36 @@ export async function screenshotWithAccessibilityLabels({ page, interactiveOnly 
   }
   const screenshotPath = path.join(tmpDir, filename)
 
-  // Get actual viewport size (innerWidth/innerHeight, not outer window size)
-  const viewport = await page.evaluate('(() => ({ width: window.innerWidth, height: window.innerHeight }))()') as { width: number; height: number }
+  // Get viewport size to clip screenshot to visible area
+  const viewport = await page.evaluate('({ width: window.innerWidth, height: window.innerHeight })') as { width: number; height: number }
 
-  // Take screenshot clipped to actual viewport (excludes browser chrome)
-  // Limit to 2000px max to avoid Claude API rejection for many-image requests
-  const MAX_SCREENSHOT_DIMENSION = 2000
-  const buffer = await page.screenshot({
+  // Take viewport screenshot with scale: 'css' to ignore device pixel ratio
+  const rawBuffer = await page.screenshot({
     type: 'jpeg',
     quality: 80,
     scale: 'css',
-    clip: {
-      x: 0,
-      y: 0,
-      width: Math.min(viewport.width, MAX_SCREENSHOT_DIMENSION),
-      height: Math.min(viewport.height, MAX_SCREENSHOT_DIMENSION),
-    },
+    clip: { x: 0, y: 0, width: viewport.width, height: viewport.height },
   })
+
+  // Resize to fit within Claude's optimal limits:
+  // - Max 1568px on any edge (larger gets auto-resized by Claude, adding latency)
+  // - Target ~1.15 megapixels for optimal token usage (~1,533 tokens)
+  // Token formula: tokens = (width * height) / 750
+  const buffer = await Promise.resolve()
+    .then(() => import('sharp'))
+    .then(async ({ default: sharp }) => {
+      const MAX_DIMENSION = 1568
+      return sharp(rawBuffer)
+        .resize({
+          width: MAX_DIMENSION,
+          height: MAX_DIMENSION,
+          fit: 'inside', // Scale down to fit, preserving aspect ratio
+          withoutEnlargement: true, // Don't upscale small images
+        })
+        .jpeg({ quality: 80 })
+        .toBuffer()
+    })
+    .catch(() => rawBuffer) // sharp not available, Claude will auto-resize
 
   // Save to file
   fs.writeFileSync(screenshotPath, buffer)
