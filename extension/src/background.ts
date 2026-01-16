@@ -26,7 +26,7 @@ class ConnectionManager {
     }
 
     if (store.getState().connectionState === 'extension-replaced') {
-      throw new Error('Connection replaced by another extension')
+      throw new Error('Another Playwriter extension is already connected')
     }
 
     // Reuse in-progress connection attempt - prevents races between user clicks and maintain loop
@@ -220,12 +220,14 @@ class ConnectionManager {
     childSessions.clear()
     this.ws = null
 
+    // Only one extension can connect to the relay server at a time.
+    // This happens when another Playwriter extension (dev/prod, or another Chrome profile) connects.
     if (reason === 'Extension Replaced' || code === 4001) {
-      logger.debug('Connection replaced by another extension instance')
+      logger.debug('Disconnected: another Playwriter extension connected to the relay server')
       store.setState({
         tabs: new Map(),
         connectionState: 'extension-replaced',
-        errorText: 'Disconnected: Replaced by another extension',
+        errorText: 'Another Playwriter extension took over the connection',
       })
       return
     }
@@ -247,7 +249,7 @@ class ConnectionManager {
         continue
       }
 
-      // When replaced by another extension, poll until slot is free
+      // When another Playwriter extension took over, poll until slot is free
       if (store.getState().connectionState === 'extension-replaced') {
         try {
           const response = await fetch(`http://127.0.0.1:${RELAY_PORT}/extension/status`, { method: 'GET', signal: AbortSignal.timeout(2000) })
@@ -829,7 +831,7 @@ async function connectTab(tabId: number): Promise<void> {
     const isWsError =
       error.message === 'Server not available' ||
       error.message === 'Connection timeout' ||
-      error.message === 'Connection replaced by another extension' ||
+      error.message === 'Another Playwriter extension is already connected' ||
       error.message.startsWith('WebSocket')
 
     if (isWsError) {
@@ -977,7 +979,7 @@ const icons = {
       '48': '/icons/icon-gray-48.png',
       '128': '/icons/icon-gray-128.png',
     },
-    title: 'Replaced by another extension - Click to retry',
+    title: 'Another Playwriter extension connected - Click to retry',
     badgeText: '!',
     badgeColor: [220, 38, 38, 255] as [number, number, number, number],
   },
@@ -1062,9 +1064,9 @@ async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
   const { tabs, connectionState } = store.getState()
   const tabInfo = tabs.get(tab.id)
 
-  // If in extension-replaced state, clear it and connect the clicked tab
+  // If another Playwriter extension took over, clear error state and try to reconnect this tab
   if (connectionState === 'extension-replaced') {
-    logger.debug('Clearing extension-replaced state, connecting clicked tab')
+    logger.debug('Clearing extension-replaced state, attempting to reconnect')
     store.setState({ connectionState: 'idle', errorText: undefined })
     await connectTab(tab.id)
     return
