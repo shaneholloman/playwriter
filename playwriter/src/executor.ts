@@ -52,7 +52,11 @@ const usefulGlobals = {
   structuredClone,
 } as const
 
-const NO_TABS_ERROR = `No browser tabs are connected. Please install and enable the Playwriter extension on at least one tab: https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe`
+const EXTENSION_NOT_CONNECTED_ERROR = `The Playwriter Chrome extension is not connected. Make sure you have:
+1. Installed the extension: https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
+2. Clicked the extension icon on a tab to enable it (or refreshed the page if just installed)`
+
+const NO_TABS_ENABLED_ERROR = `No browser tabs have Playwriter enabled. Click the extension icon on at least one tab to enable it.`
 
 const MAX_LOGS_PER_PAGE = 5000
 
@@ -225,9 +229,30 @@ export class PlaywrightExecutor {
     })
   }
   
+  private async checkExtensionStatus(): Promise<{ connected: boolean; activeTargets: number }> {
+    const { host = '127.0.0.1', port = 19988 } = this.cdpConfig
+    try {
+      const response = await fetch(`http://${host}:${port}/extension/status`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (!response.ok) {
+        return { connected: false, activeTargets: 0 }
+      }
+      return await response.json() as { connected: boolean; activeTargets: number }
+    } catch {
+      return { connected: false, activeTargets: 0 }
+    }
+  }
+  
   private async ensureConnection(): Promise<{ browser: Browser; page: Page }> {
     if (this.isConnected && this.browser && this.page) {
       return { browser: this.browser, page: this.page }
+    }
+    
+    // Check extension status first to provide better error messages
+    const extensionStatus = await this.checkExtensionStatus()
+    if (!extensionStatus.connected) {
+      throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
     }
     
     // Generate a fresh unique URL for each Playwright connection
@@ -248,7 +273,7 @@ export class PlaywrightExecutor {
     
     const pages = context.pages()
     if (pages.length === 0) {
-      throw new Error(NO_TABS_ERROR)
+      throw new Error(NO_TABS_ENABLED_ERROR)
     }
     const page = pages[0]
     
@@ -283,7 +308,7 @@ export class PlaywrightExecutor {
       }
     }
     
-    throw new Error(NO_TABS_ERROR)
+    throw new Error(NO_TABS_ENABLED_ERROR)
   }
   
   async reset(): Promise<{ page: Page; context: BrowserContext }> {
@@ -297,6 +322,12 @@ export class PlaywrightExecutor {
     
     this.clearConnectionState()
     this.clearUserState()
+    
+    // Check extension status first to provide better error messages
+    const extensionStatus = await this.checkExtensionStatus()
+    if (!extensionStatus.connected) {
+      throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
+    }
     
     // Generate a fresh unique URL for each Playwright connection
     const cdpUrl = getCdpUrl(this.cdpConfig)
@@ -316,7 +347,7 @@ export class PlaywrightExecutor {
     
     const pages = context.pages()
     if (pages.length === 0) {
-      throw new Error(NO_TABS_ERROR)
+      throw new Error(NO_TABS_ENABLED_ERROR)
     }
     const page = pages[0]
     
