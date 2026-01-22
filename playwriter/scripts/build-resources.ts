@@ -183,8 +183,13 @@ function buildSkill() {
   const skillsDir = path.join(playwriterDir, '..', 'skills', 'playwriter')
   ensureDir(skillsDir)
   fs.writeFileSync(path.join(skillsDir, 'SKILL.md'), content, 'utf-8')
-  
   console.log('Generated skills/playwriter/SKILL.md')
+  
+  // Write to website/public/ for hosting at playwriter.dev/prompt.md
+  const websitePublicRoot = path.join(playwriterDir, '..', 'website', 'public')
+  ensureDir(websitePublicRoot)
+  fs.writeFileSync(path.join(websitePublicRoot, 'prompt.md'), content, 'utf-8')
+  console.log('Generated website/public/prompt.md')
 }
 
 // Run all builds

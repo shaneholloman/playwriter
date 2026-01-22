@@ -7,7 +7,7 @@ import { ensureRelayServer, RELAY_PORT } from './relay-client.js'
 const cli = cac('playwriter')
 
 cli
-  .command('', 'Start the MCP server (default)')
+  .command('', 'Start the MCP server. See https://playwriter.dev/prompt.md for usage')
   .option('--host <host>', 'Remote relay server host to connect to (or use PLAYWRITER_HOST env var)')
   .option('--token <token>', 'Authentication token (or use PLAYWRITER_TOKEN env var)')
   .option('-e, --eval <code>', 'Execute JavaScript code and exit')
