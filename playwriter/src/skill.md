@@ -423,6 +423,8 @@ Labels are color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkbo
 
 **startRecording / stopRecording** - record the page as a video at native FPS (30-60fps). Uses `chrome.tabCapture` in the extension context, so **recording survives page navigation**. Video is saved as WebM.
 
+**Important**: Recording requires the user to have clicked the playwriter extension icon on the target tab first. This grants the `activeTab` permission which is required for `chrome.tabCapture`. If recording fails with "Extension has not been invoked for the current page", ask the user to click the extension icon on the tab they want to record.
+
 ```js
 // Start recording - outputPath must be specified upfront
 await startRecording({ 
@@ -540,3 +542,9 @@ Examples of what playwriter can do:
 - Use visual screenshots to understand complex layouts like image grids, dashboards, or maps
 - Debug issues by collecting logs and controlling the page simultaneously
 - Handle popups, downloads, iframes, and dialog boxes
+- Record videos of browser sessions that survive page navigation
+
+
+## debugging playwriter issues
+
+if some internal critical error happens you can read your own relay ws logs to understand the issue, it will show logs from extension, mcp and ws server together. then you can create a gh issue using `gh issue create -R remorses/playwriter --title title --body body`. ask for user confirmation before doing this.

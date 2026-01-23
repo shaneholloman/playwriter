@@ -19,13 +19,10 @@ export interface ExtensionState {
 }
 
 /** 
- * Recording state - kept separate from store since MediaRecorder/MediaStream can't be serialized.
- * Note: MediaRecorder and MediaStream types are available in the extension's browser context.
+ * Recording state - stored in service worker to track active recordings.
+ * The actual MediaRecorder/MediaStream live in the offscreen document.
  */
 export interface RecordingInfo {
   tabId: number
   startedAt: number
-  recorder: any // MediaRecorder - using any to avoid DOM type dependency
-  stream: any // MediaStream - using any to avoid DOM type dependency
-  mimeType: string
 }

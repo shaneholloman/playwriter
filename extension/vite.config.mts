@@ -2,7 +2,6 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { defineConfig } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
-import fs from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,9 +55,16 @@ export default defineConfig({
       input: {
         background: resolve(__dirname, 'src/background.ts'),
         welcome: resolve(__dirname, 'src/welcome.html'),
+        offscreen: resolve(__dirname, 'src/offscreen.html'),
       },
       output: {
-        entryFileNames: '[name].js',
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'background') {
+            return 'lib/background.mjs';
+          }
+          return '[name].js';
+        },
+        format: 'es',
       },
     },
   },

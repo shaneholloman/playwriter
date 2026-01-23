@@ -5,14 +5,14 @@
  * - Future: audio processing, canvas operations, etc.
  */
 
-interface RecordingState {
-  recorder: MediaRecorder | null
-  stream: MediaStream | null
+interface OffscreenRecordingState {
+  recorder: MediaRecorder
+  stream: MediaStream
   startedAt: number
   tabId: number
 }
 
-let recording: RecordingState | null = null
+let recording: OffscreenRecordingState | null = null
 
 // Message types
 type StartRecordingMessage = {
@@ -119,8 +119,8 @@ async function handleStartRecording(params: StartRecordingMessage): Promise<any>
       }
     }
 
-    recorder.onerror = (event: any) => {
-      console.error('MediaRecorder error:', event.error)
+    recorder.onerror = (event: Event) => {
+      console.error('MediaRecorder error:', (event as ErrorEvent).error)
       handleCancelRecording()
     }
 
@@ -149,7 +149,7 @@ async function handleStopRecording(): Promise<any> {
     // Stop recorder and wait for final data
     await new Promise<void>((resolve) => {
       const originalOnStop = recorder.onstop
-      recorder.onstop = (event) => {
+      recorder.onstop = (event: Event) => {
         if (originalOnStop) {
           originalOnStop.call(recorder, event)
         }
@@ -163,7 +163,7 @@ async function handleStopRecording(): Promise<any> {
     })
 
     // Stop all tracks
-    stream.getTracks().forEach((track) => track.stop())
+    stream.getTracks().forEach((track: MediaStreamTrack) => { track.stop() })
 
     const duration = Date.now() - startedAt
 
@@ -205,7 +205,7 @@ function handleCancelRecording(): any {
     if (recorder.state !== 'inactive') {
       recorder.stop()
     }
-    stream.getTracks().forEach((track) => track.stop())
+    stream.getTracks().forEach((track: MediaStreamTrack) => { track.stop() })
 
     chrome.runtime.sendMessage({
       action: 'recordingCancelled',
