@@ -1,11 +1,31 @@
 # Changelog
 
-## 0.0.51
+## 0.0.52
 
 ### Features
 
 - **First extension keeps connection**: When multiple Playwriter extensions are installed (e.g., dev and prod), the first one with active tabs now keeps the connection instead of being replaced by newer connections. Idle extensions (no tabs) can still be replaced.
 - **Smarter extension slot detection**: `/extension/status` endpoint now returns `activeTargets` count, allowing extensions to know when the slot becomes available (no active tabs).
+- **Accessibility snapshot format options**: `accessibilitySnapshot` now supports `format` option (`'yaml'` or `'markdown'`) with deduplication of interactive refs
+- **Session management CLI commands**: New CLI commands for managing relay sessions (`playwriter sessions list`, `playwriter sessions kill`)
+- **Eval CLI flag**: New `-e/--eval` CLI flag for quick code execution from command line
+- **Auto-enable environment variable**: CLI now passes `PLAYWRITER_AUTO_ENABLE` when starting relay server
+
+### Bug Fixes
+
+- **Relay server auto-recovery**: Restored auto-recovery on every execute call
+- **Preserve tabs during relay reconnects**: Tabs now persist correctly when relay reconnects
+- **Show log file path on connection refused error**: Better debugging experience with log file location in errors
+- **Improved error messages for extension connection states**: Clearer error messages when extension isn't connected
+
+### Security
+
+- **Block browser access to CLI endpoints**: Prevents browsers from accessing CLI-specific endpoints
+
+### Internal
+
+- **SKILL.md as source of truth**: Refactored to generate `prompt.md` from `SKILL.md`
+- **Aria snapshot module**: New `aria-snapshot.ts` with dedicated accessibility snapshot functions
 
 ## 0.0.50
 
