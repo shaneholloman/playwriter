@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.53
+
+### Bug Fixes
+
+- **Fix CLI relay server startup from source**: Detect source vs compiled via `__filename.endsWith('.ts')` instead of env var, fixing `tsx` and `vite-node` execution
+- **Wait for extension to reconnect**: CLI now waits up to 10 seconds for extension to reconnect after server (re)start before executing commands
+
+### Improvements
+
+- **Colored CLI output**: Setup messages now use colors (dim for progress, green for success, yellow for warnings)
+
 ## 0.0.52
 
 ### Features
