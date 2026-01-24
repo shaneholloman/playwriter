@@ -30,7 +30,7 @@
 ## Quick Start
 
 ```bash
-playwriter session new                                              # get session id
+playwriter session new  # creates stateful sandbox, outputs session id (e.g. 1)
 playwriter -s 1 -e "await page.goto('https://example.com')"
 playwriter -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
 playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"
@@ -42,7 +42,7 @@ Each session has **isolated state**. Browser tabs are **shared** across sessions
 
 ```bash
 # Session management
-playwriter session new              # outputs: 1
+playwriter session new              # creates stateful sandbox, outputs id (e.g. 1)
 playwriter session list             # show sessions + state keys
 playwriter session reset <id>       # fix connection issues
 
