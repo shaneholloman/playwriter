@@ -58,12 +58,11 @@ function compareVersions(v1: string, v2: string): number {
 }
 
 export interface EnsureRelayServerOptions {
-  /** Optional logger for status messages */
-  logger?: {
-    log: (...args: any[]) => void
-  }
+  logger?: { log: (...args: any[]) => void }
   /** If true, will kill and restart server on version mismatch. Default: true */
   restartOnVersionMismatch?: boolean
+  /** Pass additional environment variables to the relay server process */
+  env?: Record<string, string>
 }
 
 /**
@@ -71,7 +70,7 @@ export interface EnsureRelayServerOptions {
  * Optionally restarts on version mismatch.
  */
 export async function ensureRelayServer(options: EnsureRelayServerOptions = {}): Promise<void> {
-  const { logger, restartOnVersionMismatch = true } = options
+  const { logger, restartOnVersionMismatch = true, env: additionalEnv } = options
   const serverVersion = await getRelayServerVersion(RELAY_PORT)
 
   if (serverVersion === VERSION) {
@@ -104,7 +103,7 @@ export async function ensureRelayServer(options: EnsureRelayServerOptions = {}):
   const serverProcess = spawn(dev ? 'tsx' : process.execPath, [scriptPath], {
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env },
+    env: { ...process.env, ...additionalEnv },
   })
 
   serverProcess.unref()

@@ -4,6 +4,8 @@ import { cac } from '@xmorse/cac'
 import { VERSION, LOG_FILE_PATH } from './utils.js'
 import { ensureRelayServer, RELAY_PORT } from './relay-client.js'
 
+const cliRelayEnv = { PLAYWRITER_AUTO_ENABLE: '1' }
+
 const cli = cac('playwriter')
 
 cli
@@ -54,7 +56,7 @@ async function executeCode(options: {
 
   // Ensure relay server is running (only for local)
   if (!host && !process.env.PLAYWRITER_HOST) {
-    await ensureRelayServer({ logger: console })
+    await ensureRelayServer({ logger: console, env: cliRelayEnv })
   }
 
   // Session is required
@@ -122,7 +124,7 @@ cli
     const serverUrl = await getServerUrl(options.host)
 
     if (!options.host && !process.env.PLAYWRITER_HOST) {
-      await ensureRelayServer({ logger: console })
+      await ensureRelayServer({ logger: console, env: cliRelayEnv })
     }
 
     try {
@@ -142,7 +144,7 @@ cli
     const serverUrl = await getServerUrl(options.host)
 
     if (!options.host && !process.env.PLAYWRITER_HOST) {
-      await ensureRelayServer({ logger: console })
+      await ensureRelayServer({ logger: console, env: cliRelayEnv })
     }
 
     try {
@@ -186,7 +188,7 @@ cli
     const serverUrl = await getServerUrl(options.host)
 
     if (!options.host && !process.env.PLAYWRITER_HOST) {
-      await ensureRelayServer({ logger: console })
+      await ensureRelayServer({ logger: console, env: cliRelayEnv })
     }
 
     try {
