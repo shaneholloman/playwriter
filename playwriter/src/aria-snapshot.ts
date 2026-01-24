@@ -7,6 +7,281 @@ const sharpPromise = import('sharp')
   .then((m) => { return m.default })
   .catch(() => { return null })
 
+// ============================================================================
+// Snapshot Compression Functions
+// ============================================================================
+
+export interface CompactSnapshotOptions {
+  /** Remove [cursor=pointer] hints (default: true) */
+  removeCursorPointer?: boolean
+  /** Remove [active] markers (default: true) */
+  removeActive?: boolean
+  /** Remove empty structural rows/cells (default: true) */
+  removeEmptyStructural?: boolean
+  /** Remove text separators like "|" (default: true) */
+  removeTextSeparators?: boolean
+  /** Remove /url: metadata lines (default: false) */
+  removeUrls?: boolean
+}
+
+export interface InteractiveSnapshotOptions {
+  /** Keep /url: metadata for links (default: false) */
+  keepUrls?: boolean
+  /** Keep image elements (default: true) */
+  keepImages?: boolean
+  /** Keep tree structure, removing only empty branches (default: true) */
+  keepStructure?: boolean
+  /** Keep headings for context (default: true) */
+  keepHeadings?: boolean
+  /** Remove unnamed generic/group wrappers (default: true) */
+  removeGenericWrappers?: boolean
+}
+
+/**
+ * Post-process a snapshot to make it more compact.
+ * Removes noise while preserving structure.
+ * Typical reduction: 15-25%
+ */
+export function compactSnapshot(snapshot: string, options: CompactSnapshotOptions = {}): string {
+  const {
+    removeCursorPointer = true,
+    removeActive = true,
+    removeEmptyStructural = true,
+    removeTextSeparators = true,
+    removeUrls = false,
+  } = options
+
+  let lines = snapshot.split('\n')
+
+  // Line-by-line transformations
+  lines = lines.map((line) => {
+    let result = line
+    if (removeCursorPointer) {
+      result = result.replace(/ \[cursor=pointer\]/g, '')
+    }
+    if (removeActive) {
+      result = result.replace(/ \[active\]/g, '')
+    }
+    return result
+  })
+
+  // Filter out unwanted lines
+  lines = lines.filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      return false
+    }
+    // Remove text separators
+    if (removeTextSeparators && /^- text: ["']?[|·•–—]/.test(trimmed)) {
+      return false
+    }
+    // Remove empty structural elements
+    if (removeEmptyStructural) {
+      if (/^- (row|cell|rowgroup|generic|listitem|group)\s*(\[ref=\w+\])?\s*$/.test(trimmed)) {
+        return false
+      }
+    }
+    // Remove /url: lines
+    if (removeUrls && /^- \/url:/.test(trimmed)) {
+      return false
+    }
+    return true
+  })
+
+  return lines.join('\n')
+}
+
+/**
+ * Post-process a snapshot to show only interactive elements.
+ * Like agent-browser's compact mode - keeps structure but only refs on interactive elements.
+ * Typical reduction: 50-65% with structure, 80-90% flat
+ */
+export function interactiveSnapshot(snapshot: string, options: InteractiveSnapshotOptions = {}): string {
+  const {
+    keepUrls = false,
+    keepImages = true,
+    keepStructure = true,
+    keepHeadings = true,
+    removeGenericWrappers = true,
+  } = options
+
+  const interactiveRoles = new Set([
+    'link', 'button', 'textbox', 'combobox', 'searchbox', 'checkbox', 'radio',
+    'slider', 'spinbutton', 'switch', 'menuitem', 'menuitemcheckbox',
+    'menuitemradio', 'option', 'tab', 'treeitem',
+  ])
+
+  if (keepImages) {
+    interactiveRoles.add('img')
+    interactiveRoles.add('video')
+    interactiveRoles.add('audio')
+  }
+
+  const contentRoles = new Set(keepHeadings ? ['heading'] : [])
+
+  const lines = snapshot.split('\n')
+
+  if (!keepStructure) {
+    return extractInteractiveFlat(lines, interactiveRoles, keepUrls)
+  }
+
+  let result = extractInteractiveWithStructure(lines, interactiveRoles, contentRoles, keepUrls)
+
+  if (removeGenericWrappers) {
+    result = collapseGenericWrappers(result)
+  }
+
+  return result
+}
+
+function extractInteractiveFlat(lines: string[], interactiveRoles: Set<string>, keepUrls: boolean): string {
+  const result: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed) {
+      continue
+    }
+
+    const match = trimmed.match(/^-\s+(\w+)(?:\s+"[^"]*")?(?:\s+\[[^\]]+\])*\s*\[ref=(\w+)\]/)
+    if (!match || !interactiveRoles.has(match[1])) {
+      continue
+    }
+
+    let cleanLine = trimmed
+      .replace(/ \[cursor=pointer\]/g, '')
+      .replace(/ \[active\]/g, '')
+      .replace(/:$/, '')
+
+    result.push(cleanLine)
+
+    if (keepUrls && match[1] === 'link' && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim()
+      if (nextLine.startsWith('- /url:')) {
+        result.push('  ' + nextLine)
+      }
+    }
+  }
+
+  return result.join('\n')
+}
+
+function extractInteractiveWithStructure(
+  lines: string[],
+  interactiveRoles: Set<string>,
+  contentRoles: Set<string>,
+  keepUrls: boolean
+): string {
+  const lineHasInteractive = new Array(lines.length).fill(false)
+  const lineIsInteractive = new Array(lines.length).fill(false)
+  const lineIndents = lines.map((l) => l.length - l.trimStart().length)
+  const lineRoles = lines.map((l) => {
+    const m = l.trim().match(/^-\s+(\w+)/)
+    return m ? m[1] : null
+  })
+
+  // Mark interactive lines
+  for (let i = 0; i < lines.length; i++) {
+    const role = lineRoles[i]
+    if (role && interactiveRoles.has(role)) {
+      lineHasInteractive[i] = true
+      lineIsInteractive[i] = true
+    } else if (role && contentRoles.has(role)) {
+      lineHasInteractive[i] = true
+    }
+  }
+
+  // Propagate up to ancestors
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lineHasInteractive[i]) {
+      continue
+    }
+    const myIndent = lineIndents[i]
+    for (let j = i - 1; j >= 0; j--) {
+      if (lineIndents[j] < myIndent && lines[j].trim()) {
+        lineHasInteractive[j] = true
+        break
+      }
+    }
+  }
+
+  // Build result
+  const result: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed || !lineHasInteractive[i]) {
+      continue
+    }
+
+    // Skip /url: unless wanted
+    if (trimmed.startsWith('- /url:')) {
+      if (keepUrls && i > 0 && lineRoles[i - 1] === 'link') {
+        result.push(cleanSnapshotLine(lines[i]))
+      }
+      continue
+    }
+
+    // Skip text nodes
+    if (trimmed.startsWith('- text:')) {
+      continue
+    }
+
+    // Clean line and strip refs from non-interactive
+    let cleanedLine = cleanSnapshotLine(lines[i])
+    if (!lineIsInteractive[i]) {
+      cleanedLine = cleanedLine.replace(/\s*\[ref=\w+\]/g, '')
+    }
+
+    result.push(cleanedLine)
+  }
+
+  return result.join('\n')
+}
+
+function collapseGenericWrappers(snapshot: string): string {
+  const lines = snapshot.split('\n')
+  const result: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      continue
+    }
+
+    // Check for unnamed wrapper: - generic: or - group:
+    if (/^-\s+(generic|group|region):$/.test(trimmed)) {
+      const currentIndent = line.length - line.trimStart().length
+      // Dedent children
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextLine = lines[j]
+        if (!nextLine.trim()) {
+          continue
+        }
+        const nextIndent = nextLine.length - nextLine.trimStart().length
+        if (nextIndent <= currentIndent) {
+          break
+        }
+        lines[j] = nextLine.slice(0, currentIndent) + nextLine.slice(currentIndent + 2)
+      }
+      continue
+    }
+
+    result.push(line)
+  }
+
+  return result.join('\n')
+}
+
+function cleanSnapshotLine(line: string): string {
+  return line.replace(/ \[cursor=pointer\]/g, '').replace(/ \[active\]/g, '')
+}
+
+// ============================================================================
+// Original Aria Snapshot Types and Functions
+// ============================================================================
+
 export interface AriaRef {
   role: string
   name: string
