@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cac } from 'cac'
+import { cac } from '@xmorse/cac'
 import { VERSION, LOG_FILE_PATH } from './utils.js'
 import { ensureRelayServer, RELAY_PORT } from './relay-client.js'
 
@@ -10,9 +10,9 @@ cli
   .command('', 'Start the MCP server or controls the browser with -e')
   .option('--host <host>', 'Remote relay server host to connect to (or use PLAYWRITER_HOST env var)')
   .option('--token <token>', 'Authentication token (or use PLAYWRITER_TOKEN env var)')
+  .option('-s, --session <name>', 'Session ID (required for -e, get one with `playwriter session new`)')
   .option('-e, --eval <code>', 'Execute JavaScript code and exit, read https://playwriter.dev/SKILL.md for usage')
   .option('--timeout <ms>', 'Execution timeout in milliseconds', { default: 5000 })
-  .option('-s, --session <name>', 'Session name (required for -e)')
   .action(async (options: { host?: string; token?: string; eval?: string; timeout?: number; session?: string }) => {
     // If -e flag is provided, execute code via relay server
     if (options.eval) {
@@ -34,6 +34,11 @@ cli
     })
   })
 
+async function getServerUrl(host?: string): Promise<string> {
+  const serverHost = host || process.env.PLAYWRITER_HOST || '127.0.0.1'
+  return `http://${serverHost}:${RELAY_PORT}`
+}
+
 async function executeCode(options: {
   code: string
   timeout: number
@@ -45,9 +50,7 @@ async function executeCode(options: {
   const cwd = process.cwd()
   const sessionId = options.sessionId || process.env.PLAYWRITER_SESSION
 
-  // Determine server URL
-  const serverHost = host || process.env.PLAYWRITER_HOST || '127.0.0.1'
-  const serverUrl = `http://${serverHost}:${RELAY_PORT}`
+  const serverUrl = await getServerUrl(host)
 
   // Ensure relay server is running (only for local)
   if (!host && !process.env.PLAYWRITER_HOST) {
@@ -56,13 +59,8 @@ async function executeCode(options: {
 
   // Session is required
   if (!sessionId) {
-    try {
-      const res = await fetch(`${serverUrl}/cli/session/suggest`)
-      const { next } = await res.json() as { next: number }
-      console.error(`Error: -s/--session is required. Use -s ${next} for a new session.`)
-    } catch {
-      console.error(`Error: -s/--session is required. Use -s 1 for a new session.`)
-    }
+    console.error('Error: -s/--session is required.')
+    console.error('Run `playwriter session new` to get a session ID.')
     process.exit(1)
   }
 
@@ -116,30 +114,79 @@ async function executeCode(options: {
   }
 }
 
-// Reset command for CLI
+// Session management commands
 cli
-  .command('reset', 'Reset the browser connection for current session')
-  .option('-s, --session <name>', 'Session name (required)')
+  .command('session new', 'Create a new session and print the session ID')
   .option('--host <host>', 'Remote relay server host')
-  .action(async (options: { session?: string; host?: string }) => {
-    const cwd = process.cwd()
-    const sessionId = options.session || process.env.PLAYWRITER_SESSION
-    const serverHost = options.host || process.env.PLAYWRITER_HOST || '127.0.0.1'
-    const serverUrl = `http://${serverHost}:${RELAY_PORT}`
+  .action(async (options: { host?: string }) => {
+    const serverUrl = await getServerUrl(options.host)
 
     if (!options.host && !process.env.PLAYWRITER_HOST) {
       await ensureRelayServer({ logger: console })
     }
 
-    if (!sessionId) {
-      try {
-        const res = await fetch(`${serverUrl}/cli/session/suggest`)
-        const { next } = await res.json() as { next: number }
-        console.error(`Error: -s/--session is required. Use -s ${next} for a new session.`)
-      } catch {
-        console.error(`Error: -s/--session is required. Use -s 1 for a new session.`)
-      }
+    try {
+      const res = await fetch(`${serverUrl}/cli/session/suggest`)
+      const { next } = await res.json() as { next: number }
+      console.log(next)
+    } catch (error: any) {
+      console.error(`Error: ${error.message}`)
       process.exit(1)
+    }
+  })
+
+cli
+  .command('session list', 'List all active sessions')
+  .option('--host <host>', 'Remote relay server host')
+  .action(async (options: { host?: string }) => {
+    const serverUrl = await getServerUrl(options.host)
+
+    if (!options.host && !process.env.PLAYWRITER_HOST) {
+      await ensureRelayServer({ logger: console })
+    }
+
+    try {
+      const res = await fetch(`${serverUrl}/cli/sessions`)
+      const { sessions } = await res.json() as { 
+        sessions: Array<{ 
+          id: string
+          stateKeys: string[]
+        }> 
+      }
+      
+      if (sessions.length === 0) {
+        console.log('No active sessions')
+        return
+      }
+      
+      // Calculate column widths for aligned table
+      const idWidth = Math.max(2, ...sessions.map((s) => { return String(s.id).length }))
+      const stateWidth = Math.max(10, ...sessions.map((s) => { return s.stateKeys.join(', ').length || 1 }))
+      
+      // Header
+      console.log('ID'.padEnd(idWidth) + '  ' + 'State Keys')
+      console.log('-'.repeat(idWidth + stateWidth + 2))
+      
+      // Rows
+      for (const session of sessions) {
+        const stateStr = session.stateKeys.length > 0 ? session.stateKeys.join(', ') : '-'
+        console.log(String(session.id).padEnd(idWidth) + '  ' + stateStr)
+      }
+    } catch (error: any) {
+      console.error(`Error: ${error.message}`)
+      process.exit(1)
+    }
+  })
+
+cli
+  .command('session reset <sessionId>', 'Reset the browser connection for a session')
+  .option('--host <host>', 'Remote relay server host')
+  .action(async (sessionId: string, options: { host?: string }) => {
+    const cwd = process.cwd()
+    const serverUrl = await getServerUrl(options.host)
+
+    if (!options.host && !process.env.PLAYWRITER_HOST) {
+      await ensureRelayServer({ logger: console })
     }
 
     try {

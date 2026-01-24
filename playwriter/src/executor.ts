@@ -674,6 +674,11 @@ export class PlaywrightExecutor {
       pagesCount: this.context?.pages().length || 0,
     }
   }
+  
+  /** Get keys of user-defined state */
+  getStateKeys(): string[] {
+    return Object.keys(this.userState)
+  }
 }
 
 /**
@@ -706,8 +711,13 @@ export class ExecutorManager {
     return this.executors.delete(sessionId)
   }
   
-  listSessions(): string[] {
-    return [...this.executors.keys()]
+  listSessions(): Array<{ id: string; stateKeys: string[] }> {
+    return [...this.executors.entries()].map(([id, executor]) => {
+      return {
+        id,
+        stateKeys: executor.getStateKeys(),
+      }
+    })
   }
 }
 

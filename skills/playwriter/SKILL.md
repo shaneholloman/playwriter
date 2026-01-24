@@ -8,45 +8,80 @@ description: Control Chrome browser via Playwright code snippets. Automate web i
 If `playwriter` command is not found, install globally or use npx/bunx:
 
 ```bash
-npm install -g playwriter
+npm install -g playwriter@latest
 # or use without installing:
-npx playwriter -e "..." -s 1
-bunx playwriter -e "..." -s 1
+npx playwriter session new
+bunx playwriter session new
+```
+
+### Session management
+
+Get a new session ID to use in commands:
+
+```bash
+playwriter session new
+# outputs: 1
+```
+
+List all active sessions with their state:
+
+```bash
+playwriter session list
+# ID  State Keys
+# --------------
+# 1   myPage, userData
+# 2   -
+```
+
+Reset a session if the browser connection is stale or broken:
+
+```bash
+playwriter session reset <sessionId>
 ```
 
 ### Execute code
 
 ```bash
-playwriter -e "<code>" -s <session>
+playwriter -s <sessionId> -e "<code>"
 ```
 
-The `-s` flag specifies a session name (required). Use the same session to persist state across commands.
+The `-s` flag specifies a session ID (required). Get one with `playwriter session new`. Use the same session to persist state across commands.
 
 **Examples:**
 
 ```bash
 # Navigate to a page
-playwriter -e "await page.goto('https://example.com')" -s 1
+playwriter -s 1 -e "await page.goto('https://example.com')"
 
 # Click a button
-playwriter -e "await page.click('button')" -s 1
+playwriter -s 1 -e "await page.click('button')"
 
 # Get page title
-playwriter -e "console.log(await page.title())" -s 1
+playwriter -s 1 -e "console.log(await page.title())"
 
 # Take a screenshot
-playwriter -e "await page.screenshot({ path: 'screenshot.png', scale: 'css' })" -s 1
+playwriter -s 1 -e "await page.screenshot({ path: 'screenshot.png', scale: 'css' })"
 
 # Get accessibility snapshot
-playwriter -e "console.log(await accessibilitySnapshot({ page }))" -s 1
+playwriter -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
 ```
 
-### Reset connection
-
-If the browser connection is stale or broken:
+**Multiline code:**
 
 ```bash
-playwriter reset -s <session>
+# Using $'...' syntax for multiline code
+playwriter -s 1 -e $'
+const title = await page.title();
+const url = page.url();
+console.log({ title, url });
+'
+
+# Or use heredoc
+playwriter -s 1 -e "$(cat <<'EOF'
+const links = await page.$$eval('a', els => els.map(e => e.href));
+console.log('Found', links.length, 'links');
+EOF
+)"
 ```
 
 # playwriter execute
