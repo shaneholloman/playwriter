@@ -6,14 +6,18 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 
 ## context variables
 
-- `state` - object persisted between calls, use to store data/pages (e.g., `state.myPage = await context.newPage()`)
+- `state` - object persisted between calls **within your session**. Each session has its own isolated state. Use to store pages, data, listeners (e.g., `state.myPage = await context.newPage()`)
 - `page` - default page the user activated, use this unless working with multiple pages
 - `context` - browser context, access all pages via `context.pages()`
 - `require` - load Node.js modules like fs
 - Node.js globals: `setTimeout`, `setInterval`, `fetch`, `URL`, `Buffer`, `crypto`, etc.
 
+**Important:** `state` is **session-isolated** but `context.pages()` is **shared** across all sessions. All agents see the same browser tabs. If another agent navigates or closes a page, you'll see it. To avoid interference, create your own page and store it in `state` (see "working with pages").
+
 ## rules
 
+- **Use your own session**: always pass `-s <sessionId>` to commands. Get a session ID with `playwriter session new`. This isolates your state from other agents.
+- **Store pages in state**: when working on a task, create a page with `context.newPage()` and store it in `state.myPage`. This prevents other agents from interfering with your page.
 - **Multiple calls**: use multiple execute calls for complex logic - helps understand intermediate state and isolate which action failed
 - **Never close**: never call `browser.close()` or `context.close()`. Only close pages you created or if user asks
 - **No bringToFront**: never call unless user asks - it's disruptive and unnecessary, you can interact with background pages
@@ -121,7 +125,30 @@ await page.locator('li').nth(3).click()       // 4th item (0-indexed)
 
 ## working with pages
 
-Find a specific page:
+**Understanding page sharing:** `context.pages()` returns all browser tabs with playwriter enabled. These are **shared across all sessions** - if multiple agents are running, they all see the same tabs. However, each session's `state` is isolated, so storing a page reference in `state.myPage` keeps it safe from other sessions overwriting your reference.
+
+**Create your own page (recommended for automation):**
+
+When automating tasks, create a dedicated page and store it in `state`. This prevents other agents from interfering with your work:
+
+```js
+state.myPage = await context.newPage();
+await state.myPage.goto('https://example.com');
+// Use state.myPage for all subsequent operations in this session
+```
+
+**Find a page the user opened:**
+
+Sometimes the user enables playwriter on a specific tab they want you to control (e.g., they're logged into an app). Find it by URL pattern:
+
+```js
+const pages = context.pages().filter(x => x.url().includes('myapp.com'));
+if (pages.length === 0) throw new Error('No myapp.com page found. Ask user to enable playwriter on it.');
+if (pages.length > 1) throw new Error(`Found ${pages.length} matching pages, expected 1`);
+state.targetPage = pages[0];
+```
+
+**Find a specific page by partial URL:**
 
 ```js
 const pages = context.pages().filter(x => x.url().includes('localhost'));
@@ -129,11 +156,10 @@ if (pages.length !== 1) throw new Error(`Expected 1 page, found ${pages.length}`
 state.targetPage = pages[0];
 ```
 
-Create new page:
+**List all available pages:**
 
 ```js
-state.newPage = await context.newPage();
-await state.newPage.goto('https://example.com');
+console.log(context.pages().map(p => p.url()));
 ```
 
 ## navigation

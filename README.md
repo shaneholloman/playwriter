@@ -7,10 +7,10 @@
     </picture>
     <br/>
     <br/>
-    <p>Like Playwright MCP but via extension + cli. No context window usage. 10x more capable (full playwright API)</p>
+    <p>Control your browser via Playwright API. Uses extension + CLI. No context bloat.</p>
     <br/>
     <a href="https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe">
-        <strong>Install Extension from Chrome Web Store</strong>
+        <strong>Install Extension</strong>
     </a>
     <br/>
     <br/>
@@ -18,350 +18,140 @@
 
 ## Installation
 
-1. **Install the Chrome Extension**
+1. [**Install Extension**](https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe) from Chrome Web Store
 
-   [**Install Extension**](https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe) from the Chrome Web Store. Pin the extension to your Chrome toolbar for easy access.
+2. Click extension icon on a tab → turns green when connected
 
-2. **Connect to a Tab**
-
-   Click the Playwriter extension icon on any tab you want to control. The icon will turn green when successfully connected.
-
-   **Icon states:**
-   - **Gray:** Not connected
-   - **Green:** Connected and ready
-   - **Orange badge (...):** Connecting
-   - **Red badge (!):** Error
-
-3. **Add the Skill to Your Agent**
-
+3. Add skill to your agent:
    ```bash
    npx -y skills add remorses/playwriter
    ```
 
-   This gives your AI agent the knowledge to use Playwriter via CLI commands.
-
 ## Quick Start
 
-Once installed, your agent can control the browser:
-
 ```bash
-playwriter session new # starts a new session with id 1. each session runs in separate stateful sandbox
+playwriter session new                                              # get session id
 playwriter -s 1 -e "await page.goto('https://example.com')"
 playwriter -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
 playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"
 ```
 
-## MCP Setup (Alternative)
+## CLI Usage
 
-If you prefer using Playwriter as an MCP server instead of the CLI, add this to your MCP client settings:
-
-```json
-{
-  "mcpServers": {
-    "playwriter": {
-      "command": "npx",
-      "args": ["-y", "playwriter@latest"]
-    }
-  }
-}
-```
-
-Or auto-configure with:
-
-```sh
-npx -y @playwriter/install-mcp playwriter@latest
-```
-
-## Usage
-
-### Using the CLI
-
-The CLI is the recommended way to use Playwriter. Sessions persist state across commands.
+Each session has **isolated state**. Browser tabs are **shared** across sessions.
 
 ```bash
 # Session management
-playwriter session new              # Create new session, outputs ID (e.g., 1)
-playwriter session list             # List active sessions with their state keys
-playwriter session reset <id>       # Reset if connection has issues
+playwriter session new              # outputs: 1
+playwriter session list             # show sessions + state keys
+playwriter session reset <id>       # fix connection issues
 
-# Execute code
+# Execute (always use -s)
 playwriter -s 1 -e "await page.goto('https://example.com')"
 playwriter -s 1 -e "await page.click('button')"
 playwriter -s 1 -e "console.log(await page.title())"
-playwriter -s 1 -e "await page.screenshot({ path: 'screenshot.png', scale: 'css' })"
-playwriter -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
 ```
 
-Multiline code:
+Create your own page to avoid interference from other agents:
+
+```bash
+playwriter -s 1 -e "state.myPage = await context.newPage(); await state.myPage.goto('https://example.com')"
+```
+
+Multiline:
 
 ```bash
 playwriter -s 1 -e $'
 const title = await page.title();
-const url = page.url();
-console.log({ title, url });
+console.log({ title, url: page.url() });
 '
 ```
 
-### Using the MCP
+## MCP Setup
 
-If using the MCP instead of CLI, make sure the extension is enabled on at least one tab:
+See [MCP.md](./MCP.md) for MCP server configuration and remote agent setup.
 
-1. Pin the Playwriter extension to your Chrome toolbar (click the puzzle icon)
-2. Navigate to a tab you want to control
-3. Click the extension icon - it will turn green when connected
+## Playwright API
 
-Once enabled, your AI assistant can:
-
-- Control all enabled tabs through the `execute` tool
-- Switch between tabs using playwright's context and page APIs
-- Create new tabs programmatically
-- Run any Playwright code against your browser tabs
-
-The MCP will automatically start a relay server and connect to your enabled browser tabs.
-
-### Using with Playwright
-
-You can use playwriter programmatically with playwright-core:
+Connect programmatically:
 
 ```typescript
 import { chromium } from 'playwright-core'
 import { startPlayWriterCDPRelayServer, getCdpUrl } from 'playwriter'
 
 const server = await startPlayWriterCDPRelayServer()
-
 const browser = await chromium.connectOverCDP(getCdpUrl())
-
-const context = browser.contexts()[0]
-const page = context.pages()[0]
+const page = browser.contexts()[0].pages()[0]
 
 await page.goto('https://example.com')
 await page.screenshot({ path: 'screenshot.png' })
-
-// Don't call browser.close() - it would close the user's Chrome
+// Don't call browser.close() - it closes the user's Chrome
 server.close()
 ```
 
-### Standard CDP Connection
-
-Start the relay server, then connect with just the HTTP URL:
+Or via CDP URL:
 
 ```bash
 npx -y playwriter serve --host 127.0.0.1
 ```
 
-Or programmatically:
-
 ```typescript
-import { startPlayWriterCDPRelayServer } from 'playwriter'
-
-await startPlayWriterCDPRelayServer()
 const browser = await chromium.connectOverCDP('http://127.0.0.1:19988')
 ```
 
-This works with any CDP-compatible tool - no special configuration needed.
+## Visual Labels
 
-### Visual Aria Ref Labels
-
-Playwriter includes Vimium-style visual labels that overlay interactive elements, making it easy for AI agents to identify and click elements from screenshots. The `screenshotWithAccessibilityLabels` function is available in the MCP context.
+Vimium-style labels for AI agents to identify elements:
 
 ```javascript
-// Take a screenshot with labels overlaid on interactive elements
-// Labels are shown, screenshot is captured, then labels are removed
 await screenshotWithAccessibilityLabels({ page })
-// Image and accessibility snapshot are automatically included in MCP response
-
-// Use the snapshot from the response to find elements, then interact using aria-ref selector
+// Returns screenshot + accessibility snapshot with aria-ref selectors
 await page.locator('aria-ref=e5').click()
-
-// Can take multiple screenshots in one execution
-await screenshotWithAccessibilityLabels({ page })
-await page.click('button')
-await screenshotWithAccessibilityLabels({ page })
-// Both images are included in the response
 ```
 
-The function automatically shows labels, takes a screenshot, hides labels, and includes both the image and accessibility snapshot in the MCP response. Screenshots are saved to `./tmp/` with unique filenames.
-
-**Features:**
-
-- **Role filtering** - Only shows labels for interactive elements (buttons, links, inputs, etc.)
-- **Visibility detection** - Skips elements covered by modals or overlays
-- **Overlap prevention** - Skips labels that would overlap with already-placed ones
-- **Color-coded by type** - Warm color scheme helps distinguish element types
-- **Auto-hide** - Labels disappear after 30 seconds to prevent stale overlays
-
-**Color legend:**
-
-| Color  | Element Types                              |
-| ------ | ------------------------------------------ |
-| Yellow | Links                                      |
-| Orange | Buttons                                    |
-| Coral  | Text inputs (textbox, combobox, searchbox) |
-| Pink   | Checkboxes, radios, switches               |
-| Peach  | Sliders                                    |
-| Salmon | Menu items                                 |
-| Amber  | Tabs, options                              |
-
-### Environment Variables
-
-#### `PLAYWRITER_AUTO_ENABLE`
-
-When set, the MCP will automatically create an initial tab when a Playwright client connects and no tabs are currently enabled. This is useful for fully automated workflows where you don't want to manually click the extension icon.
-
-```json
-{
-  "mcpServers": {
-    "playwriter": {
-      "command": "npx",
-      "args": ["-y", "playwriter@latest"],
-      "env": {
-        "PLAYWRITER_AUTO_ENABLE": "1"
-      }
-    }
-  }
-}
-```
-
-With this setting, when your AI agent starts, it will immediately have a page to work with without requiring manual extension activation.
-
-**Note:** The auto-created tab starts at `about:blank`. Your agent can then navigate it to any URL.
+Color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=sliders, salmon=menus, amber=tabs.
 
 ## Comparison
 
 ### vs Playwright MCP
 
-Playwriter uses a Chrome extension instead of launching a full new Chrome window. This approach has several benefits:
-
-- **Collaborate with your agent** - Work alongside the AI in the same browser, helping it when stuck on captchas or complex interactions
-- **Start on existing pages** - Launch the MCP on a page in your existing browser to replicate bugs exactly as they occur
-- **Reuse your extensions** - Keep using ad blockers, password managers, and other extensions you already have installed
-- **Bypass automation detection** - Disable CDP/automation temporarily by disconnecting the extension to bypass detection systems like Google login, then reconnect to continue automation. With Playwright's headless Chrome, automation is always detected and blocks your workflow
-- **Less resource usage** - No need to spawn a separate Chrome instance, saving memory and CPU
-- **Single browser workflow** - Everything happens in your main Chrome browser, no switching between windows
+| | Playwright MCP | Playwriter |
+|---|---|---|
+| Browser | Spawns new Chrome | Uses your Chrome |
+| Extensions | None | Your existing ones |
+| Login state | Fresh | Already logged in |
+| Bot detection | Always detected | Can bypass (disconnect extension) |
+| Collaboration | Separate window | Same browser as user |
 
 ### vs BrowserMCP
 
-Playwriter has access to the full playwright API available, it can send any CDP command via the playwright methods. It only uses 1 tool `execute` to send playwright code snippets. This means that the LLM can reuse its knowledge about playwright and less context window is used to expose browser automations tools.
-
-Playwriter is also more capable because it exposes the full playwright API instead of only a few tools.
-
-For comparison here are the tools supported by BrowserMCP:
-
-Navigation:
-
-- `browsermcp_browser_navigate` - Navigate to a URL
-- `browsermcp_browser_go_back` - Go back to the previous page
-- `browsermcp_browser_go_forward` - Go forward to the next page
-  Page Inspection:
-- `browsermcp_browser_snapshot` - Capture accessibility snapshot of the current page (use this to get references to elements)
-- `browsermcp_browser_screenshot` - Take a screenshot of the current page
-- `browsermcp_browser_get_console_logs` - Get console logs from the browser
-  Interactions:
-- `browsermcp_browser_click` - Click on an element (requires element reference from snapshot)
-- `browsermcp_browser_hover` - Hover over an element
-- `browsermcp_browser_type` - Type text into an editable element (with optional submit)
-- `browsermcp_browser_select_option` - Select an option in a dropdown
-- `browsermcp_browser_press_key` - Press a key on the keyboard
-  Utilities:
-- `browsermcp_browser_wait` - Wait for a specified time in seconds
+| | BrowserMCP | Playwriter |
+|---|---|---|
+| Tools | 12+ dedicated tools | 1 `execute` tool |
+| API | Limited actions | Full Playwright |
+| Context usage | High (tool schemas) | Low |
+| LLM knowledge | Must learn tools | Already knows Playwright |
 
 ### vs Antigravity (Jetski)
 
-Antigravity's browser integration suffers from the same fundamental problem as BrowserMCP: it creates a separate tool for every browser action instead of using the Playwright API that LLMs already understand.
+| | Jetski | Playwriter |
+|---|---|---|
+| Tools | 17+ tools | 1 tool |
+| Subagent | Spawns for each browser task | Direct execution |
+| Latency | High (agent overhead) | Low |
 
-**The Context Window Problem:**
+### vs Claude Browser Extension
 
-Jetski exposes 17+ browser tools (`capture_browser_screenshot`, `browser_click_element`, `browser_input`, `browser_scroll`, `wait_5_seconds`, etc.). Each tool definition consumes context window space with parameter schemas, descriptions, and examples. This bloated schema forces Antigravity to spawn a **subagent every time you want to use the browser**, adding significant latency and indirection to every browser interaction.
-
-**Playwriter's Approach:**
-
-- **1 tool instead of 17+** - Only the `execute` tool is needed
-- **No subagent spawning** - Browser operations happen directly without extra layers
-- **Lower latency** - No need to spawn/teardown agents for each browser task
-- **Leverages existing knowledge** - LLMs already know Playwright's API from their training data
-- **More capable** - Full Playwright API access vs a limited set of predefined actions
-
-The irony is that by trying to make browser control "simpler" with dedicated tools, these integrations make it slower, less capable, and waste context window that could be used for actual work.
-
-### vs Claude Code Browser Extension
-
-Claude Code has a built-in Chrome extension ("Claude in Chrome") that uses Native Messaging API with a hybrid approach: screenshots for visual understanding and DOM/JavaScript for interactions.
-
-**Works Everywhere Claude's Extension Doesn't:**
-
-- **Windows WSL support** - Claude's extension doesn't work in WSL because Native Messaging requires Windows-native Chrome. Playwriter uses WebSocket on localhost:19988, so agents running in WSL can control Chrome on your Windows host
-- **Any MCP-compatible agent** - Not locked to Claude. Works with GPT, Gemini, local models, or any CLI tool that supports MCP
-- **Devcontainers & VMs** - Run your agent in an isolated environment while controlling Chrome on your host machine
-
-**Context Efficiency:**
-
-Claude's extension sends screenshots to the LLM for visual understanding, then uses DOM inspection for interactions. Playwriter uses accessibility snapshots instead - structured text describing interactive elements with their roles, names, and states:
-
-| Approach           | What's sent to LLM      | Typical size         |
-| ------------------ | ----------------------- | -------------------- |
-| Claude's extension | Screenshots             | 100KB-1MB+ per image |
-| Playwriter         | Accessibility snapshots | 5-20KB text          |
-
-**Full Playwright API vs Step-by-Step Navigation:**
-
-Claude's extension navigates pages step-by-step with screenshots. Playwriter exposes the complete Playwright API through a single `execute` tool - LLMs already know Playwright from training data:
-
-```js
-// Complex interactions in one call
-await page.locator('tr').filter({ hasText: 'John' }).locator('button').click()
-const [download] = await Promise.all([page.waitForEvent('download'), page.click('button.export')])
-await download.saveAs('/tmp/report.pdf')
-```
-
-**Advanced DevTools Features:**
-
-Playwriter provides capabilities Claude's extension doesn't have:
-
-```js
-// Set breakpoints and inspect variables at runtime
-const dbg = createDebugger({ cdp })
-await dbg.setBreakpoint({ file: 'app.js', line: 42 })
-// when paused: await dbg.inspectLocalVariables()
-
-// Live-edit page scripts without reload
-const editor = createEditor({ cdp })
-await editor.edit({ url: 'app.js', oldString: 'DEBUG=false', newString: 'DEBUG=true' })
-
-// Inspect CSS like DevTools Styles panel
-const styles = await getStylesForLocator({ locator: page.locator('.btn'), cdp })
-
-// Intercept network requests for API reverse-engineering
-page.on('response', async (res) => {
-  if (res.url().includes('/api/')) state.responses.push(await res.json())
-})
-
-// Find React component source locations
-const source = await getReactSource({ locator: page.locator('aria-ref=e5') })
-// => { fileName: 'Button.tsx', lineNumber: 42 }
-```
-
-**User Collaboration Features:**
-
-- **Right-click → "Copy Playwriter Element Reference"** - Pin any element and reference it as `globalThis.playwriterPinnedElem1` in your automation code
-- **Vimium-style visual labels** - `screenshotWithAccessibilityLabels()` captures screenshots with clickable labels on all interactive elements
-- **Tab group organization** - Connected tabs are grouped together with a green "playwriter" label
-- **Bypass automation detection** - Disconnect the extension temporarily to pass bot detection (e.g., Google login), then reconnect
-
-**Summary:**
-
-| Feature                 | Claude's Extension | Playwriter                   |
-| ----------------------- | ------------------ | ---------------------------- |
-| Windows WSL             | No                 | Yes                          |
-| Works with any agent    | No (Claude only)   | Yes (any MCP client)         |
-| Context method          | Screenshots        | A11y snapshots (90% smaller) |
-| Full Playwright API     | No                 | Yes                          |
-| Debugger (breakpoints)  | No                 | Yes                          |
-| Live code editing       | No                 | Yes                          |
-| CSS inspection          | No                 | Yes                          |
-| Network interception    | Limited            | Full                         |
-| React source finding    | No                 | Yes                          |
-| Right-click pin element | No                 | Yes                          |
-| Raw CDP access          | No                 | Yes                          |
+| | Claude Extension | Playwriter |
+|---|---|---|
+| Agent support | Claude only | Any MCP client |
+| Windows WSL | No | Yes |
+| Context method | Screenshots (100KB+) | A11y snapshots (5-20KB) |
+| Playwright API | No | Full |
+| Debugger/breakpoints | No | Yes |
+| Live code editing | No | Yes |
+| Network interception | Limited | Full |
+| Raw CDP access | No | Yes |
 
 ## Architecture
 
@@ -371,98 +161,48 @@ const source = await getReactSource({ locator: page.locator('aria-ref=e5') })
 |                     |     |                   |     |                 |
 |  +---------------+  |     | WebSocket Server  |     |  +-----------+  |
 |  |   Extension   |<--------->  :19988         |     |  | AI Agent  |  |
-|  |  (bg script)  |  | WS  |                   |     |  | (Claude)  |  |
-|  +-------+-------+  |     |  /extension       |     |  +-----------+  |
-|          |          |     |       ^           |     |        |        |
-|          | chrome   |     |       |           |     |        v        |
-|          | .debug   |     |       v           |     |  +-----------+  |
-|          v          |     |  /cdp/:id <--------------> |  execute  |  |
-|  +---------------+  |     |                   |  WS |  |   tool    |  |
-|  | Tab 1 (green) |  |     | Routes:           |     |  +-----------+  |
-|  +---------------+  |     |  - CDP commands   |     |        |        |
-|  +---------------+  |     |  - CDP events     |     |        v        |
-|  | Tab 2 (green) |  |     |  - attach/detach  |     |  +-----------+  |
-|  +---------------+  |     |    Target events  |     |  | Playwright|  |
-|  +---------------+  |     +-------------------+     |  |    API    |  |
-|  | Tab 3 (gray)  |  |                               |  +-----------+  |
-|  +---------------+  |     Tab 3 not controlled      +-----------------+
-|                     |     (user didn't click icon)
-+---------------------+
+|  +-------+-------+  | WS  |                   |     |  +-----------+  |
+|          |          |     |  /extension       |     |        |        |
+|    chrome.debugger  |     |       |           |     |        v        |
+|          v          |     |       v           |     |  +-----------+  |
+|  +---------------+  |     |  /cdp/:id <--------------> |  execute  |  |
+|  | Tab 1 (green) |  |     +-------------------+  WS |  +-----------+  |
+|  | Tab 2 (green) |  |                               |        |        |
+|  | Tab 3 (gray)  |  |     Tab 3 not controlled      |  Playwright API |
++---------------------+     (no extension click)      +-----------------+
 ```
 
-## Remote Agents (Devcontainers, VMs, SSH)
+## Remote CLI
 
-Run agents in isolated environments (devcontainers, VMs, SSH) while controlling Chrome on your host.
+Run CLI from a different machine (devcontainer, VM, SSH) while Chrome runs on your host.
 
-**On host (where Chrome runs):**
-
+**On host:**
 ```bash
-npx -y playwriter serve --token <secret>
-# or use environment variable:
-PLAYWRITER_TOKEN=<secret> npx -y playwriter serve
+playwriter serve --token <secret>
 ```
 
-**In container/VM (where agent runs):**
-
-Configure your MCP client with the host and token. You can pass them as CLI arguments:
-
-```json
-{
-  "mcpServers": {
-    "playwriter": {
-      "command": "npx",
-      "args": ["-y", "playwriter@latest", "--host", "host.docker.internal", "--token", "<secret>"]
-    }
-  }
-}
+**From remote:**
+```bash
+playwriter --host 192.168.1.10 --token <secret> session new
+playwriter --host 192.168.1.10 --token <secret> -s 1 -e "await page.goto('https://example.com')"
 ```
 
-Or use environment variables (useful if you want to set them globally in your process or MCP client):
-
-```json
-{
-  "mcpServers": {
-    "playwriter": {
-      "command": "npx",
-      "args": ["-y", "playwriter@latest"],
-      "env": {
-        "PLAYWRITER_HOST": "host.docker.internal",
-        "PLAYWRITER_TOKEN": "<secret>"
-      }
-    }
-  }
-}
+Or with env vars:
+```bash
+export PLAYWRITER_HOST=192.168.1.10
+export PLAYWRITER_TOKEN=<secret>
+playwriter -s 1 -e "await page.goto('https://example.com')"
 ```
-
-Use `host.docker.internal` for devcontainers, or your host's IP for VMs/SSH.
-
-## Known Issues
-
-- If all pages urls return `about:blank` in every MCP session restart your Chrome browser. This seems to be a Chrome bug that sometimes happen. It is some hidden state in `chrome.debugger` Extensions API. Restarting the extension worker does not fix it.
-- When connecting the MCP to a page, the browser may switch to light mode. This happens because Playwright, via CDP, automatically sends an "emulate media" command on start. If you'd like to see this behavior changed, you can upvote the related issue [here](https://github.com/microsoft/playwright/issues/37627).
 
 ## Security
 
-Playwriter is designed with security in mind, ensuring that only you can control your browser.
+- **Local only**: WebSocket server on `localhost:19988`
+- **Origin validation**: Only our extension IDs allowed (browsers can't spoof Origin)
+- **Explicit consent**: Only tabs where you clicked the extension icon
+- **Visible automation**: Chrome shows automation banner on controlled tabs
+- **No remote access**: Malicious websites cannot connect
 
-### How It Works
+## Known Issues
 
-1. **Local WebSocket Server**: When the MCP starts, it launches a singleton WebSocket server on `localhost:19988`
-2. **Dual Connection**: Both the Chrome extension and MCP client connect to this local server
-3. **User-Controlled Access**: The extension can only control tabs where you explicitly clicked the extension icon (green icon indicates connected tabs)
-4. **Origin Validation**: The WebSocket server validates the `Origin` header on all connections. Browsers cannot spoof this header, so malicious websites cannot connect to the local server. Only our specific Chrome extension IDs and local processes (which don't send an Origin header) are allowed
-5. **Explicit Consent**: Chrome displays an "automation banner" on controlled tabs, making it obvious when a tab is being automated
-
-### What Can Be Controlled
-
-- **Only enabled tabs**: Tabs you explicitly connected by clicking the extension icon
-- **New tabs created by automation**: Tabs created programmatically through Playwright commands
-- **Nothing else**: Other browser tabs, your browsing history, or any tabs you haven't explicitly connected remain inaccessible
-
-### What Cannot Happen
-
-- **No remote access**: Malicious websites cannot connect to the WebSocket server - browser-based connections require a valid extension Origin header that browsers cannot spoof
-- **No passive monitoring**: The extension cannot read or monitor tabs you haven't connected
-- **No automatic spreading**: The debugger won't automatically attach to new tabs you open manually
-
-This architecture ensures that browser automation only happens with your explicit permission on tabs you choose.
+- If all pages return `about:blank`, restart Chrome (Chrome bug in `chrome.debugger` API)
+- Browser may switch to light mode on connect ([Playwright issue](https://github.com/microsoft/playwright/issues/37627))
