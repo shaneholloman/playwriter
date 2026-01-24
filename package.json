@@ -4,6 +4,7 @@
     "scripts": {
         "test": "pnpm --filter playwriter test",
         "watch": "pnpm -r watch",
+        "playwriter": "pnpm --filter playwriter cli",
 
         "reload": "pnpm --filter playwriter build && pnpm --filter mcp-extension reload",
         "agents.md": "agentsdotmd ./PLAYWRITER_AGENTS.md core.md typescript.md pnpm.md vitest.md changelog.md docs-writing.md github.md playwright.md zod.md gitchamber.md",
