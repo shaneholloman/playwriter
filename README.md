@@ -105,7 +105,7 @@ playwriter -e "await screenshotWithAccessibilityLabels({ page })"
 
 ## MCP Setup
 
-See [MCP.md](./MCP.md) for MCP server configuration and remote agent setup.
+Using the CLI with the skill (step 4 above) is the recommended approach. For direct MCP server configuration and remote agent setup, see [MCP.md](./MCP.md).
 
 ## Visual Labels
 
