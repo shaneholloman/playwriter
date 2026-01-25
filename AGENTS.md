@@ -49,13 +49,21 @@ make sure you have tsx installed globally: `pnpm i -g tsx`
 
 ### running CLI locally
 
-to test CLI changes without publishing:
+
+
+to test CLI changes without publishing you will also have to kill the relay server first, to have the latest relay server running. any commands using the cli then will restart this relay server.
 
 ```bash
-tsx playwriter/src/cli.ts -e "await page.goto('https://example.com')"
-tsx playwriter/src/cli.ts -e "console.log(await accessibilitySnapshot({ page }))"
-tsx playwriter/src/cli.ts session new
-tsx playwriter/src/cli.ts -s 1 -e "await page.click('button')"
+ # mac/linux: kill any existing relay on 19988
+ lsof -ti :19988 | xargs kill
+ 
+ # windows (powershell): kill any existing relay on 19988
+ Get-NetTCPConnection -LocalPort 19988 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+ 
+ tsx playwriter/src/cli.ts -s 1 -e "await page.goto('https://example.com')"
+ tsx playwriter/src/cli.ts -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
+ tsx playwriter/src/cli.ts session new
+ tsx playwriter/src/cli.ts -s 1 -e "await page.click('button')"
 ```
 
 ### reloading extension during development
@@ -586,26 +594,3 @@ const jsonSchema = toJSONSchema(mySchema, {
 ```
 
 github.md
-
-<!-- opensrc:start -->
-
-## Source Code Reference
-
-Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
-
-See `opensrc/sources.json` for the list of available packages and their versions.
-
-Use this source code when you need to understand how a package works internally, not just its types/interface.
-
-### Fetching Additional Source Code
-
-To fetch source code for a package or repository you need to understand, run:
-
-```bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
-```
-
-<!-- opensrc:end -->
