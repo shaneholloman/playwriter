@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 // Playwriter extension IDs - used for validation and Chrome flag commands
 export const EXTENSION_IDS = [
   'jfeammnjpkecdekppnclgkkffahnhfhe', // Production (Chrome Web Store)
-  'elnnakgjclnapgflmidlpobefkdmapdm', // Dev (loaded unpacked)
+  'pebbngnfojnignonigcnkdilknapkgid', // Dev extension (stable ID from manifest key)
 ]
 
 export function getCdpUrl({ port = 19988, host = '127.0.0.1', token }: { port?: number; host?: string; token?: string } = {}) {
