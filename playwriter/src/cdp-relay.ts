@@ -6,13 +6,12 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import type { WSContext } from 'hono/ws'
 import type { Protocol } from './cdp-types.js'
 import type { CDPCommand, CDPResponseBase, CDPEventBase, CDPEventFor, RelayServerEvents } from './cdp-types.js'
-import type { ExtensionMessage, ExtensionEventMessage, StartRecordingParams, StopRecordingParams, IsRecordingParams, CancelRecordingParams, StartRecordingResult, StopRecordingResult, IsRecordingResult, CancelRecordingResult } from './protocol.js'
-import fs from 'node:fs'
-import path from 'node:path'
+import type { ExtensionMessage, ExtensionEventMessage, RecordingDataMessage, RecordingCancelledMessage } from './protocol.js'
 import pc from 'picocolors'
 import { EventEmitter } from 'node:events'
 import { VERSION, EXTENSION_IDS } from './utils.js'
 import { createCdpLogger, type CdpLogEntry, type CdpLogger } from './cdp-log.js'
+import { RecordingRelay } from './recording-relay.js'
 
 type ConnectedTarget = {
   sessionId: string
@@ -20,8 +19,6 @@ type ConnectedTarget = {
   targetInfo: Protocol.Target.TargetInfo
 }
 
-// Our extension IDs - allow attaching to our own extension pages for debugging
-const OUR_EXTENSION_IDS = EXTENSION_IDS
 /**
  * Checks if a target should be filtered out (not exposed to Playwright).
  * Filters extension pages, service workers, and other restricted targets,
@@ -86,21 +83,6 @@ export async function startPlayWriterCDPRelayServer({
   const logCdpJson = (entry: CdpLogEntry) => {
     resolvedCdpLogger.log(entry)
   }
-
-  // Recording state - tracks active recordings and their accumulated chunks
-  // Keyed by tabId for routing chunks, but also stores sessionId for lookup when stopping
-  type ActiveRecording = {
-    tabId: number
-    sessionId?: string  // The sessionId used to start this recording, for lookup when stopping
-    outputPath: string
-    chunks: Buffer[]
-    startedAt: number
-    resolveStop?: (result: StopRecordingResult) => void
-  }
-  const activeRecordings = new Map<number, ActiveRecording>()
-  // Track which tabId just sent recordingData metadata - used to route the next binary chunk
-  let lastRecordingMetadataTabId: number | null = null
-
   const playwrightClients = new Map<string, PlaywrightClient>()
   let extensionWs: WSContext | null = null
 
@@ -240,7 +222,7 @@ export async function startPlayWriterCDPRelayServer({
     }
   }
 
-  async function sendToExtension({ method, params, timeout = 30000 }: { method: string; params?: any; timeout?: number }) {
+  async function sendToExtension({ method, params, timeout = 30000 }: { method: string; params?: unknown; timeout?: number }): Promise<unknown> {
     if (!extensionWs) {
       throw new Error('Extension not connected')
     }
@@ -280,6 +262,13 @@ export async function startPlayWriterCDPRelayServer({
       })
     })
   }
+
+  // Recording relay for screen recording functionality
+  const recordingRelay = new RecordingRelay({
+    sendToExtension,
+    isExtensionConnected: () => extensionWs !== null,
+    logger,
+  })
 
   // Auto-create initial tab when PLAYWRITER_AUTO_ENABLE is set and no targets exist.
   // This allows Playwright to connect and immediately have a page to work with.
@@ -839,21 +828,7 @@ export async function startPlayWriterCDPRelayServer({
         // Handle binary data (recording chunks)
         if (event.data instanceof ArrayBuffer || Buffer.isBuffer(event.data)) {
           const buffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data)
-          // Route to the recording that just sent metadata
-          const tabId = lastRecordingMetadataTabId
-          lastRecordingMetadataTabId = null
-          
-          if (tabId !== null) {
-            const recording = activeRecordings.get(tabId)
-            if (recording) {
-              recording.chunks.push(buffer)
-              logger?.log(pc.blue(`Received recording chunk for tab ${tabId}: ${buffer.length} bytes (total chunks: ${recording.chunks.length})`))
-            } else {
-              logger?.log(pc.yellow(`Received recording chunk for unknown tab ${tabId}, ignoring`))
-            }
-          } else {
-            logger?.log(pc.yellow('Received recording chunk without preceding metadata, ignoring'))
-          }
+          recordingRelay.handleBinaryData(buffer)
           return
         }
 
@@ -884,58 +859,14 @@ export async function startPlayWriterCDPRelayServer({
           // Keep-alive response, nothing to do
         } else if (message.method === 'log') {
           const { level, args } = message.params
-          const logFn = (logger as any)?.[level] || logger?.log
+          const logFn = (logger as Record<string, unknown>)?.[level] as ((...args: unknown[]) => void) | undefined
+          const logFunc = logFn || logger?.log
           const prefix = pc.yellow(`[Extension] [${level.toUpperCase()}]`)
-          logFn?.(prefix, ...args)
+          logFunc?.(prefix, ...args)
         } else if (message.method === 'recordingData') {
-          const { tabId, final } = (message as any).params
-          const recording = activeRecordings.get(tabId)
-          
-          // Track which tab sent this metadata for routing the next binary chunk
-          if (!final) {
-            lastRecordingMetadataTabId = tabId
-          }
-          
-          if (recording && final) {
-            // This is the final marker - write all chunks to file
-            try {
-              const totalSize = recording.chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-              const combined = Buffer.concat(recording.chunks)
-              fs.writeFileSync(recording.outputPath, combined)
-              
-              const duration = Date.now() - recording.startedAt
-              logger?.log(pc.green(`Recording saved: ${recording.outputPath} (${totalSize} bytes, ${duration}ms)`))
-              
-              // Resolve the stop promise
-              if (recording.resolveStop) {
-                recording.resolveStop({
-                  success: true,
-                  tabId,
-                  duration,
-                  path: recording.outputPath,
-                  size: totalSize,
-                } as any)
-              }
-            } catch (error: any) {
-              logger?.error('Failed to write recording:', error)
-              if (recording.resolveStop) {
-                recording.resolveStop({ success: false, error: error.message })
-              }
-            }
-            
-            activeRecordings.delete(tabId)
-          }
-          // Non-final recordingData is just a marker that binary follows - handled above
+          recordingRelay.handleRecordingData(message as RecordingDataMessage)
         } else if (message.method === 'recordingCancelled') {
-          const { tabId } = (message as any).params
-          const recording = activeRecordings.get(tabId)
-          if (recording) {
-            logger?.log(pc.yellow(`Recording cancelled for tab ${tabId}`))
-            if (recording.resolveStop) {
-              recording.resolveStop({ success: false, error: 'Recording was cancelled' })
-            }
-            activeRecordings.delete(tabId)
-          }
+          recordingRelay.handleRecordingCancelled(message as RecordingCancelledMessage)
         } else {
           const extensionEvent = message as ExtensionEventMessage
 
@@ -1223,173 +1154,29 @@ export async function startPlayWriterCDPRelayServer({
   // ============================================================================
 
   app.post('/recording/start', async (c) => {
-    try {
-      const body = await c.req.json() as StartRecordingParams & { outputPath: string }
-      const { outputPath, ...params } = body
-
-      if (!outputPath) {
-        return c.json({ success: false, error: 'outputPath is required' } as StartRecordingResult, 400)
-      }
-
-      if (!extensionWs) {
-        return c.json({ success: false, error: 'Extension not connected' } as StartRecordingResult, 503)
-      }
-
-      // Ensure output directory exists
-      const dir = path.dirname(outputPath)
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-      }
-
-      const result = await sendToExtension({
-        method: 'startRecording',
-        params,
-        timeout: 10000,
-      }) as StartRecordingResult
-
-      if (!result) {
-        return c.json({ success: false, error: 'Extension returned empty result' } as StartRecordingResult, 500)
-      }
-
-      if (result.success) {
-        // Track this recording - store sessionId for lookup when stopping
-        activeRecordings.set(result.tabId, {
-          tabId: result.tabId,
-          sessionId: params.sessionId,
-          outputPath,
-          chunks: [],
-          startedAt: result.startedAt,
-        })
-        logger?.log(pc.green(`Recording started for tab ${result.tabId} (sessionId: ${params.sessionId || 'none'}), output: ${outputPath}`))
-      }
-
-      return c.json(result)
-    } catch (error: any) {
-      logger?.error('Start recording error:', error)
-      return c.json({ success: false, error: error.message } as StartRecordingResult, 500)
-    }
+    const body = await c.req.json() as { outputPath?: string; sessionId?: string; frameRate?: number; audio?: boolean; videoBitsPerSecond?: number; audioBitsPerSecond?: number }
+    const result = await recordingRelay.startRecording(body as { outputPath: string } & typeof body)
+    const status = result.success ? 200 : (result.error?.includes('required') ? 400 : 500)
+    return c.json(result, status)
   })
 
   app.post('/recording/stop', async (c) => {
-    try {
-      const body = await c.req.json() as StopRecordingParams
-      const params = body
-
-      if (!extensionWs) {
-        return c.json({ success: false, error: 'Extension not connected' } as StopRecordingResult, 503)
-      }
-
-      // Find the active recording by sessionId for concurrent recording support
-      // If no sessionId provided, fall back to the first recording (backward compatibility)
-      const findRecording = (): ActiveRecording | undefined => {
-        if (params.sessionId) {
-          for (const recording of activeRecordings.values()) {
-            if (recording.sessionId === params.sessionId) {
-              return recording
-            }
-          }
-          // SessionId provided but no matching recording found
-          return undefined
-        }
-        // No sessionId - return first recording (backward compat for single-recording case)
-        return activeRecordings.values().next().value
-      }
-      
-      const recording = findRecording()
-
-      if (!recording) {
-        const errorMsg = params.sessionId 
-          ? `No active recording found for sessionId: ${params.sessionId}` 
-          : 'No active recording found'
-        return c.json({ success: false, error: errorMsg } as StopRecordingResult, 404)
-      }
-
-      // Set up promise to wait for final chunk
-      let timeoutId: ReturnType<typeof setTimeout>
-      const finalPromise = new Promise<StopRecordingResult>((resolve) => {
-        const wrappedResolve = (result: StopRecordingResult) => {
-          clearTimeout(timeoutId)
-          resolve(result)
-        }
-        recording.resolveStop = wrappedResolve
-        // Timeout after 30 seconds
-        timeoutId = setTimeout(() => {
-          if (recording.resolveStop) {
-            recording.resolveStop = undefined
-            resolve({ success: false, error: 'Timeout waiting for recording data' })
-          }
-        }, 30000)
-      })
-
-      // Tell extension to stop recording
-      const result = await sendToExtension({
-        method: 'stopRecording',
-        params,
-        timeout: 10000,
-      }) as StopRecordingResult
-
-      if (!result.success) {
-        recording.resolveStop = undefined
-        activeRecordings.delete(recording.tabId)
-        return c.json(result)
-      }
-
-      // Wait for final chunk to arrive
-      const finalResult = await finalPromise
-
-      return c.json(finalResult)
-    } catch (error: any) {
-      logger?.error('Stop recording error:', error)
-      return c.json({ success: false, error: error.message } as StopRecordingResult, 500)
-    }
+    const body = await c.req.json() as { sessionId?: string }
+    const result = await recordingRelay.stopRecording(body)
+    const status = result.success ? 200 : (result.error?.includes('not found') ? 404 : 500)
+    return c.json(result, status)
   })
 
   app.get('/recording/status', async (c) => {
-    try {
-      const sessionId = c.req.query('sessionId')
-      const params: IsRecordingParams = { sessionId }
-
-      if (!extensionWs) {
-        return c.json({ isRecording: false } as IsRecordingResult)
-      }
-
-      const result = await sendToExtension({
-        method: 'isRecording',
-        params,
-        timeout: 5000,
-      }) as IsRecordingResult
-
-      return c.json(result)
-    } catch (error: any) {
-      logger?.error('Recording status error:', error)
-      return c.json({ isRecording: false } as IsRecordingResult, 500)
-    }
+    const sessionId = c.req.query('sessionId')
+    const result = await recordingRelay.isRecording({ sessionId })
+    return c.json(result)
   })
 
   app.post('/recording/cancel', async (c) => {
-    try {
-      const body = await c.req.json() as CancelRecordingParams
-      const params = body
-
-      if (!extensionWs) {
-        return c.json({ success: false, error: 'Extension not connected' } as CancelRecordingResult, 503)
-      }
-
-      const result = await sendToExtension({
-        method: 'cancelRecording',
-        params,
-        timeout: 5000,
-      }) as CancelRecordingResult
-
-      // Note: Recording cleanup is handled by the 'recordingCancelled' event handler
-      // which is triggered by the extension after cancellation. This ensures we only
-      // delete the specific recording that was cancelled, not all active recordings.
-
-      return c.json(result)
-    } catch (error: any) {
-      logger?.error('Cancel recording error:', error)
-      return c.json({ success: false, error: error.message } as CancelRecordingResult, 500)
-    }
+    const body = await c.req.json() as { sessionId?: string }
+    const result = await recordingRelay.cancelRecording(body)
+    return c.json(result)
   })
 
   const server = serve({ fetch: app.fetch, port, hostname: host })

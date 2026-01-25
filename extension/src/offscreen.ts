@@ -37,6 +37,20 @@
  * - MediaRecorder                         - Web API, encodes video to webm
  */
 
+import type {
+  OffscreenMessage,
+  OffscreenStartRecordingMessage,
+  OffscreenStopRecordingMessage,
+  OffscreenIsRecordingMessage,
+  OffscreenCancelRecordingMessage,
+  OffscreenStartRecordingResult,
+  OffscreenStopRecordingResult,
+  OffscreenIsRecordingResult,
+  OffscreenCancelRecordingResult,
+  ChromeTabCaptureAudioConstraints,
+  ChromeTabCaptureVideoConstraints,
+} from './offscreen-types'
+
 interface OffscreenRecordingState {
   recorder: MediaRecorder
   stream: MediaStream
@@ -47,40 +61,14 @@ interface OffscreenRecordingState {
 // Map of tabId -> recording state for concurrent recording support
 const recordings = new Map<number, OffscreenRecordingState>()
 
-// Message types
-type StartRecordingMessage = {
-  action: 'startRecording'
-  tabId: number
-  streamId: string
-  frameRate?: number
-  videoBitsPerSecond?: number
-  audioBitsPerSecond?: number
-  audio?: boolean
-}
-
-type StopRecordingMessage = {
-  action: 'stopRecording'
-  tabId: number
-}
-
-type IsRecordingMessage = {
-  action: 'isRecording'
-  tabId: number
-}
-
-type CancelRecordingMessage = {
-  action: 'cancelRecording'
-  tabId: number
-}
-
-type OffscreenMessage = StartRecordingMessage | StopRecordingMessage | IsRecordingMessage | CancelRecordingMessage
+type OffscreenResult = OffscreenStartRecordingResult | OffscreenStopRecordingResult | OffscreenIsRecordingResult | OffscreenCancelRecordingResult
 
 chrome.runtime.onMessage.addListener((message: OffscreenMessage, _sender, sendResponse) => {
   handleMessage(message).then(sendResponse)
   return true // Keep channel open for async response
 })
 
-async function handleMessage(message: OffscreenMessage): Promise<any> {
+async function handleMessage(message: OffscreenMessage): Promise<OffscreenResult> {
   switch (message.action) {
     case 'startRecording':
       return handleStartRecording(message)
@@ -95,7 +83,7 @@ async function handleMessage(message: OffscreenMessage): Promise<any> {
   }
 }
 
-async function handleStartRecording(params: StartRecordingMessage): Promise<any> {
+async function handleStartRecording(params: OffscreenStartRecordingMessage): Promise<OffscreenStartRecordingResult> {
   const { tabId } = params
   
   if (recordings.has(tabId)) {
@@ -103,23 +91,30 @@ async function handleStartRecording(params: StartRecordingMessage): Promise<any>
   }
 
   try {
+    // Build Chrome-specific tabCapture constraints
+    // These use Chrome's proprietary API that TypeScript doesn't have built-in types for
+    const audioConstraints: ChromeTabCaptureAudioConstraints | false = params.audio ? {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: params.streamId,
+      }
+    } : false
+
+    const videoConstraints: ChromeTabCaptureVideoConstraints = {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: params.streamId,
+        minFrameRate: params.frameRate || 30,
+        maxFrameRate: params.frameRate || 30,
+      }
+    }
+
     // Get media stream from the streamId provided by tabCapture.getMediaStreamId
+    // Cast to MediaStreamConstraints since Chrome accepts the extended constraints
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: params.audio ? {
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: params.streamId,
-        }
-      } as any : false,
-      video: {
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: params.streamId,
-          minFrameRate: params.frameRate || 30,
-          maxFrameRate: params.frameRate || 30,
-        }
-      } as any,
-    })
+      audio: audioConstraints,
+      video: videoConstraints,
+    } as MediaStreamConstraints)
 
     const recorder = new MediaRecorder(stream, {
       mimeType: 'video/mp4',
@@ -169,7 +164,7 @@ async function handleStartRecording(params: StartRecordingMessage): Promise<any>
   }
 }
 
-async function handleStopRecording(params: StopRecordingMessage): Promise<any> {
+async function handleStopRecording(params: OffscreenStopRecordingMessage): Promise<OffscreenStopRecordingResult> {
   const { tabId } = params
   const recording = recordings.get(tabId)
   
@@ -217,7 +212,7 @@ async function handleStopRecording(params: StopRecordingMessage): Promise<any> {
   }
 }
 
-function handleIsRecording(params: IsRecordingMessage): any {
+function handleIsRecording(params: OffscreenIsRecordingMessage): OffscreenIsRecordingResult {
   const { tabId } = params
   const recording = recordings.get(tabId)
   
@@ -232,13 +227,13 @@ function handleIsRecording(params: IsRecordingMessage): any {
   }
 }
 
-function handleCancelRecording(params: CancelRecordingMessage): any {
+function handleCancelRecording(params: OffscreenCancelRecordingMessage): OffscreenCancelRecordingResult {
   const { tabId } = params
   return handleCancelRecordingForTab(tabId)
 }
 
 // Helper function to cancel recording for a specific tab - used by error handlers too
-function handleCancelRecordingForTab(tabId: number): any {
+function handleCancelRecordingForTab(tabId: number): OffscreenCancelRecordingResult {
   const recording = recordings.get(tabId)
   
   if (!recording) {
