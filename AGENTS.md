@@ -187,6 +187,10 @@ the playwright source code is cloned at `./tmp/playwright` (gitignored). use Tas
 
 ignore ./claude-extension. this is the source code of the Claude Chrome extension. used to reverse engineer new methods and tools to extract and control the page
 
+## reading playwriter logs
+
+you can find the logfile for playwriter with `playwriter logfile`
+
 # core guidelines
 
 when summarizing changes at the end of the message, be super short, a few words and in bullet points, use bold text to highlight important keywords. use markdown.
