@@ -61,6 +61,7 @@ const EXTENSION_NOT_CONNECTED_ERROR = `The Playwriter Chrome extension is not co
 const NO_TABS_ENABLED_ERROR = `No browser tabs have Playwriter enabled. Click the extension icon on at least one tab to enable it.`
 
 const MAX_LOGS_PER_PAGE = 5000
+const DEFAULT_PLAYWRIGHT_TIMEOUT = 10_000
 
 const ALLOWED_MODULES = new Set([
   'path', 'node:path',
@@ -113,22 +114,28 @@ function isRegExp(value: any): value is RegExp {
   )
 }
 
+function isPromise(value: any): value is Promise<unknown> {
+  return typeof value === 'object' && value !== null && typeof value.then === 'function'
+}
+
+
+
 export class PlaywrightExecutor {
   private isConnected = false
   private page: Page | null = null
   private browser: Browser | null = null
   private context: BrowserContext | null = null
-  
+
   private userState: Record<string, any> = {}
   private browserLogs: Map<string, string[]> = new Map()
   private lastSnapshots: WeakMap<Page, string> = new WeakMap()
   private cdpSessionCache: WeakMap<Page, CDPSession> = new WeakMap()
   private scopedFs: ScopedFS
   private sandboxedRequire: NodeRequire
-  
+
   private cdpConfig: CdpConfig
   private logger: ExecutorLogger
-  
+
   constructor(options: ExecutorOptions) {
     this.cdpConfig = options.cdpConfig
     this.logger = options.logger || { log: console.log, error: console.error }
@@ -136,7 +143,7 @@ export class PlaywrightExecutor {
     this.scopedFs = new ScopedFS(options.cwd ? [options.cwd, '/tmp', os.tmpdir()] : undefined)
     this.sandboxedRequire = this.createSandboxedRequire(require)
   }
-  
+
   private createSandboxedRequire(originalRequire: NodeRequire): NodeRequire {
     const scopedFs = this.scopedFs
     const sandboxedRequire = ((id: string) => {
@@ -153,15 +160,15 @@ export class PlaywrightExecutor {
       }
       return originalRequire(id)
     }) as NodeRequire
-    
+
     sandboxedRequire.resolve = originalRequire.resolve
     sandboxedRequire.cache = originalRequire.cache
     sandboxedRequire.extensions = originalRequire.extensions
     sandboxedRequire.main = originalRequire.main
-    
+
     return sandboxedRequire
   }
-  
+
   private async setDeviceScaleFactorForMacOS(context: BrowserContext): Promise<void> {
     if (os.platform() !== 'darwin') {
       return
@@ -172,7 +179,7 @@ export class PlaywrightExecutor {
     }
     options.deviceScaleFactor = 2
   }
-  
+
   private async preserveSystemColorScheme(context: BrowserContext): Promise<void> {
     const options = (context as any)._options
     if (!options) {
@@ -182,38 +189,38 @@ export class PlaywrightExecutor {
     options.reducedMotion = 'no-override'
     options.forcedColors = 'no-override'
   }
-  
+
   private clearUserState() {
     Object.keys(this.userState).forEach((key) => delete this.userState[key])
   }
-  
+
   private clearConnectionState() {
     this.isConnected = false
     this.browser = null
     this.page = null
     this.context = null
   }
-  
+
   private setupPageConsoleListener(page: Page) {
     const targetId = (page as any)._guid as string | undefined
     if (!targetId) {
       return
     }
-    
+
     if (!this.browserLogs.has(targetId)) {
       this.browserLogs.set(targetId, [])
     }
-    
+
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame()) {
         this.browserLogs.set(targetId, [])
       }
     })
-    
+
     page.on('close', () => {
       this.browserLogs.delete(targetId)
     })
-    
+
     page.on('console', (msg) => {
       try {
         const logEntry = `[${msg.type()}] ${msg.text()}`
@@ -230,7 +237,7 @@ export class PlaywrightExecutor {
       }
     })
   }
-  
+
   private async checkExtensionStatus(): Promise<{ connected: boolean; activeTargets: number }> {
     const { host = '127.0.0.1', port = 19988 } = this.cdpConfig
     try {
@@ -245,58 +252,60 @@ export class PlaywrightExecutor {
       return { connected: false, activeTargets: 0 }
     }
   }
-  
+
   private async ensureConnection(): Promise<{ browser: Browser; page: Page }> {
     if (this.isConnected && this.browser && this.page) {
       return { browser: this.browser, page: this.page }
     }
-    
+
     // Check extension status first to provide better error messages
     const extensionStatus = await this.checkExtensionStatus()
     if (!extensionStatus.connected) {
       throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
     }
-    
+
     // Generate a fresh unique URL for each Playwright connection
     const cdpUrl = getCdpUrl(this.cdpConfig)
     const browser = await chromium.connectOverCDP(cdpUrl)
-    
+
     browser.on('disconnected', () => {
       this.logger.log('Browser disconnected, clearing connection state')
       this.clearConnectionState()
     })
-    
+
     const contexts = browser.contexts()
     const context = contexts.length > 0 ? contexts[0] : await browser.newContext()
-    
+
     context.on('page', (page) => {
       this.setupPageConsoleListener(page)
     })
-    
+
     const pages = context.pages()
     if (pages.length === 0) {
       throw new Error(NO_TABS_ENABLED_ERROR)
     }
     const page = pages[0]
-    
+
+    context.setDefaultTimeout(DEFAULT_PLAYWRIGHT_TIMEOUT)
+
     context.pages().forEach((p) => this.setupPageConsoleListener(p))
-    
+
     await this.preserveSystemColorScheme(context)
     await this.setDeviceScaleFactorForMacOS(context)
-    
+
     this.browser = browser
     this.page = page
     this.context = context
     this.isConnected = true
-    
+
     return { browser, page }
   }
-  
+
   private async getCurrentPage(timeout = 10000): Promise<Page> {
     if (this.page && !this.page.isClosed()) {
       return this.page
     }
-    
+
     if (this.browser) {
       const contexts = this.browser.contexts()
       if (contexts.length > 0) {
@@ -309,10 +318,10 @@ export class PlaywrightExecutor {
         }
       }
     }
-    
+
     throw new Error(NO_TABS_ENABLED_ERROR)
   }
-  
+
   async reset(): Promise<{ page: Page; context: BrowserContext }> {
     if (this.browser) {
       try {
@@ -321,54 +330,56 @@ export class PlaywrightExecutor {
         this.logger.error('Error closing browser:', e)
       }
     }
-    
+
     this.clearConnectionState()
     this.clearUserState()
-    
+
     // Check extension status first to provide better error messages
     const extensionStatus = await this.checkExtensionStatus()
     if (!extensionStatus.connected) {
       throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
     }
-    
+
     // Generate a fresh unique URL for each Playwright connection
     const cdpUrl = getCdpUrl(this.cdpConfig)
     const browser = await chromium.connectOverCDP(cdpUrl)
-    
+
     browser.on('disconnected', () => {
       this.logger.log('Browser disconnected, clearing connection state')
       this.clearConnectionState()
     })
-    
+
     const contexts = browser.contexts()
     const context = contexts.length > 0 ? contexts[0] : await browser.newContext()
-    
+
     context.on('page', (page) => {
       this.setupPageConsoleListener(page)
     })
-    
+
     const pages = context.pages()
     if (pages.length === 0) {
       throw new Error(NO_TABS_ENABLED_ERROR)
     }
     const page = pages[0]
-    
+
+    context.setDefaultTimeout(DEFAULT_PLAYWRIGHT_TIMEOUT)
+
     context.pages().forEach((p) => this.setupPageConsoleListener(p))
-    
+
     await this.preserveSystemColorScheme(context)
     await this.setDeviceScaleFactorForMacOS(context)
-    
+
     this.browser = browser
     this.page = page
     this.context = context
     this.isConnected = true
-    
+
     return { page, context }
   }
-  
+
   async execute(code: string, timeout = 10000): Promise<ExecuteResult> {
     const consoleLogs: Array<{ method: string; args: any[] }> = []
-    
+
     const formatConsoleLogs = (logs: Array<{ method: string; args: any[] }>, prefix = 'Console output') => {
       if (logs.length === 0) {
         return ''
@@ -384,14 +395,14 @@ export class PlaywrightExecutor {
       })
       return text + '\n'
     }
-    
+
     try {
       await this.ensureConnection()
       const page = await this.getCurrentPage(timeout)
       const context = this.context || page.context()
-      
+
       this.logger.log('Executing code:', code)
-      
+
       const customConsole = {
         log: (...args: any[]) => { consoleLogs.push({ method: 'log', args }) },
         info: (...args: any[]) => { consoleLogs.push({ method: 'info', args }) },
@@ -399,7 +410,7 @@ export class PlaywrightExecutor {
         error: (...args: any[]) => { consoleLogs.push({ method: 'error', args }) },
         debug: (...args: any[]) => { consoleLogs.push({ method: 'debug', args }) },
       }
-      
+
       const accessibilitySnapshot = async (options: {
         page: Page
         search?: string | RegExp
@@ -414,7 +425,7 @@ export class PlaywrightExecutor {
           const sanitizedStr = rawStr.toWellFormed?.() ?? rawStr
           // Apply format transformation
           const snapshotStr = formatSnapshot(sanitizedStr, format, this.logger)
-          
+
           if (showDiffSinceLastCall) {
             const previousSnapshot = this.lastSnapshots.get(targetPage)
             if (!previousSnapshot) {
@@ -427,13 +438,13 @@ export class PlaywrightExecutor {
             }
             return patch
           }
-          
+
           this.lastSnapshots.set(targetPage, snapshotStr)
-          
+
           if (!search) {
             return snapshotStr
           }
-          
+
           const lines = snapshotStr.split('\n')
           const matchIndices: number[] = []
           for (let i = 0; i < lines.length; i++) {
@@ -444,11 +455,11 @@ export class PlaywrightExecutor {
               if (matchIndices.length >= 10) break
             }
           }
-          
+
           if (matchIndices.length === 0) {
             return 'No matches found'
           }
-          
+
           const CONTEXT_LINES = 5
           const includedLines = new Set<number>()
           for (const idx of matchIndices) {
@@ -458,7 +469,7 @@ export class PlaywrightExecutor {
               includedLines.add(i)
             }
           }
-          
+
           const sortedIndices = [...includedLines].sort((a, b) => a - b)
           const result: string[] = []
           for (let i = 0; i < sortedIndices.length; i++) {
@@ -472,7 +483,7 @@ export class PlaywrightExecutor {
         }
         throw new Error('accessibilitySnapshot is not available on this page')
       }
-      
+
       const getLocatorStringForElement = async (element: any) => {
         if (!element || typeof element.evaluate !== 'function') {
           throw new Error('getLocatorStringForElement: argument must be a Playwright Locator or ElementHandle')
@@ -492,17 +503,17 @@ export class PlaywrightExecutor {
           return toLocator(result.selector, 'javascript')
         })
       }
-      
+
       const getPageTargetId = async (p: Page): Promise<string> => {
         const guid = (p as any)._guid
         if (guid) return guid
         throw new Error('Could not get page identifier: _guid not available')
       }
-      
+
       const getLatestLogs = async (options?: { page?: Page; count?: number; search?: string | RegExp }) => {
         const { page: filterPage, count, search } = options || {}
         let allLogs: string[] = []
-        
+
         if (filterPage) {
           const targetId = await getPageTargetId(filterPage)
           const pageLogs = this.browserLogs.get(targetId) || []
@@ -512,7 +523,7 @@ export class PlaywrightExecutor {
             allLogs.push(...pageLogs)
           }
         }
-        
+
         if (search) {
           const matchIndices: number[] = []
           for (let i = 0; i < allLogs.length; i++) {
@@ -520,7 +531,7 @@ export class PlaywrightExecutor {
             const isMatch = typeof search === 'string' ? log.includes(search) : isRegExp(search) && search.test(log)
             if (isMatch) matchIndices.push(i)
           }
-          
+
           const CONTEXT_LINES = 5
           const includedIndices = new Set<number>()
           for (const idx of matchIndices) {
@@ -530,7 +541,7 @@ export class PlaywrightExecutor {
               includedIndices.add(i)
             }
           }
-          
+
           const sortedIndices = [...includedIndices].sort((a, b) => a - b)
           const result: string[] = []
           for (let i = 0; i < sortedIndices.length; i++) {
@@ -542,14 +553,14 @@ export class PlaywrightExecutor {
           }
           allLogs = result
         }
-        
+
         return count !== undefined ? allLogs.slice(-count) : allLogs
       }
-      
+
       const clearAllLogs = () => {
         this.browserLogs.clear()
       }
-      
+
       const getCDPSession = async (options: { page: Page }) => {
         const cached = this.cdpSessionCache.get(options.page)
         if (cached) return cached
@@ -559,22 +570,22 @@ export class PlaywrightExecutor {
         this.cdpSessionCache.set(options.page, session)
         return session
       }
-      
+
       const createDebugger = (options: { cdp: ICDPSession }) => new Debugger(options)
       const createEditor = (options: { cdp: ICDPSession }) => new Editor(options)
-      
+
       const getStylesForLocatorFn = async (options: { locator: any }) => {
         const cdp = await getCDPSession({ page: options.locator.page() })
         return getStylesForLocator({ locator: options.locator, cdp })
       }
-      
+
       const getReactSourceFn = async (options: { locator: any }) => {
         const cdp = await getCDPSession({ page: options.locator.page() })
         return getReactSource({ locator: options.locator, cdp })
       }
-      
+
       const screenshotCollector: ScreenshotResult[] = []
-      
+
       const screenshotWithAccessibilityLabelsFn = async (options: { page: Page; interactiveOnly?: boolean }) => {
         return screenshotWithAccessibilityLabels({
           ...options,
@@ -585,9 +596,9 @@ export class PlaywrightExecutor {
           },
         })
       }
-      
+
       const self = this
-      
+
       let vmContextObj: any = {
         page,
         context,
@@ -616,54 +627,59 @@ export class PlaywrightExecutor {
         import: (specifier: string) => import(specifier),
         ...usefulGlobals,
       }
-      
+
       const vmContext = vm.createContext(vmContextObj)
       const wrappedCode = `(async () => { ${code} })()`
-      
+      const hasExplicitReturn = /\breturn\b/.test(code)
+
       const result = await Promise.race([
         vm.runInContext(wrappedCode, vmContext, { timeout, displayErrors: true }),
         new Promise((_, reject) => setTimeout(() => reject(new CodeExecutionTimeoutError(timeout)), timeout)),
       ])
-      
+
       let responseText = formatConsoleLogs(consoleLogs)
-      
-      if (result !== undefined) {
-        responseText += 'Return value:\n'
-        if (typeof result === 'string') {
-          responseText += result
-        } else {
-          responseText += JSON.stringify(result, null, 2)
+
+      // Only show return value if user explicitly used return
+      if (hasExplicitReturn) {
+        const resolvedResult = isPromise(result) ? await result : result
+        if (resolvedResult !== undefined) {
+          const formatted = util.inspect(resolvedResult, { depth: 4, colors: false, maxArrayLength: 100, breakLength: 80 })
+          if (formatted.trim()) {
+            responseText += `[return value] ${formatted}\n`
+          }
         }
-      } else if (consoleLogs.length === 0) {
-        responseText += 'Code executed successfully (no output)'
       }
       
+      if (!responseText.trim()) {
+        responseText = 'Code executed successfully (no output)'
+      }
+
       for (const screenshot of screenshotCollector) {
         responseText += `\nScreenshot saved to: ${screenshot.path}\n`
         responseText += `Labels shown: ${screenshot.labelCount}\n\n`
         responseText += `Accessibility snapshot:\n${screenshot.snapshot}\n`
       }
-      
+
       const MAX_LENGTH = 6000
       let finalText = responseText.trim()
       if (finalText.length > MAX_LENGTH) {
         finalText = finalText.slice(0, MAX_LENGTH) +
           `\n\n[Truncated to ${MAX_LENGTH} characters. Better manage your logs or paginate them to read the full logs]`
       }
-      
+
       const images = screenshotCollector.map((s) => ({ data: s.base64, mimeType: s.mimeType }))
-      
+
       return { text: finalText, images, isError: false }
     } catch (error: any) {
       const errorStack = error.stack || error.message
       const isTimeoutError = error instanceof CodeExecutionTimeoutError || error.name === 'TimeoutError'
-      
+
       this.logger.error('Error in execute:', errorStack)
-      
+
       const logsText = formatConsoleLogs(consoleLogs, 'Console output (before error)')
       const resetHint = isTimeoutError ? '' :
         '\n\n[HINT: If this is an internal Playwright error, page/browser closed, or connection issue, call reset to reconnect.]'
-      
+
       return {
         text: `${logsText}\nError executing code: ${error.message}\n${errorStack}${resetHint}`,
         images: [],
@@ -671,7 +687,7 @@ export class PlaywrightExecutor {
       }
     }
   }
-  
+
   /** Get info about current connection state */
   getStatus(): { connected: boolean; pageUrl: string | null; pagesCount: number } {
     return {
@@ -680,7 +696,7 @@ export class PlaywrightExecutor {
       pagesCount: this.context?.pages().length || 0,
     }
   }
-  
+
   /** Get keys of user-defined state */
   getStateKeys(): string[] {
     return Object.keys(this.userState)
@@ -694,12 +710,12 @@ export class ExecutorManager {
   private executors = new Map<string, PlaywrightExecutor>()
   private cdpConfig: CdpConfig
   private logger: ExecutorLogger
-  
+
   constructor(options: { cdpConfig: CdpConfig; logger?: ExecutorLogger }) {
     this.cdpConfig = options.cdpConfig
     this.logger = options.logger || { log: console.log, error: console.error }
   }
-  
+
   getExecutor(sessionId: string, cwd?: string): PlaywrightExecutor {
     let executor = this.executors.get(sessionId)
     if (!executor) {
@@ -712,11 +728,11 @@ export class ExecutorManager {
     }
     return executor
   }
-  
+
   deleteExecutor(sessionId: string): boolean {
     return this.executors.delete(sessionId)
   }
-  
+
   listSessions(): Array<{ id: string; stateKeys: string[] }> {
     return [...this.executors.entries()].map(([id, executor]) => {
       return {
