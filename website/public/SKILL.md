@@ -120,17 +120,16 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 ## context variables
 
 - `state` - object persisted between calls **within your session**. Each session has its own isolated state. Use to store pages, data, listeners (e.g., `state.myPage = await context.newPage()`)
-- `page` - default page the user activated, use this unless working with multiple pages
+- `page` - a default page (may be shared with other agents). Prefer creating your own page and storing it in `state` (see "working with pages")
 - `context` - browser context, access all pages via `context.pages()`
 - `require` - load Node.js modules like fs
 - Node.js globals: `setTimeout`, `setInterval`, `fetch`, `URL`, `Buffer`, `crypto`, etc.
 
-**Important:** `state` is **session-isolated** but `context.pages()` is **shared** across all sessions. All agents see the same browser tabs. If another agent navigates or closes a page, you'll see it. To avoid interference, create your own page and store it in `state` (see "working with pages").
+**Important:** `state` is **session-isolated** but pages are **shared** across all sessions. See "working with pages" for how to avoid interference.
 
 ## rules
 
-- **Use your own session**: each session has isolated state. This prevents other agents from interfering with your variables.
-- **Store pages in state**: when working on a task, create a page with `context.newPage()` and store it in `state.myPage`. This prevents other agents from interfering with your page.
+- **Create your own page**: see "working with pages" — always create and store your own page in `state`, never use the default `page` for automation
 - **Multiple calls**: use multiple execute calls for complex logic - helps understand intermediate state and isolate which action failed
 - **Never close**: never call `browser.close()` or `context.close()`. Only close pages you created or if user asks
 - **No bringToFront**: never call unless user asks - it's disruptive and unnecessary, you can interact with background pages
@@ -238,34 +237,37 @@ await page.locator('li').nth(3).click()       // 4th item (0-indexed)
 
 ## working with pages
 
-**Understanding page sharing:** `context.pages()` returns all browser tabs with playwriter enabled. These are **shared across all sessions** - if multiple agents are running, they all see the same tabs. However, each session's `state` is isolated, so storing a page reference in `state.myPage` keeps it safe from other sessions overwriting your reference.
+**Pages are shared, state is not.** `context.pages()` returns all browser tabs with playwriter enabled — shared across all sessions. Multiple agents see the same tabs. If another agent navigates or closes a page you're using, you'll be affected. To avoid interference, **always create your own page**.
 
-**Create your own page (recommended for automation):**
+**Always create your own page (first call):**
 
-When automating tasks, create a dedicated page and store it in `state`. This prevents other agents from interfering with your work:
+On your very first execute call, create a dedicated page and store it in `state`. Use `state.myPage` for all subsequent operations — never the default `page` variable:
 
 ```js
 state.myPage = await context.newPage();
 await state.myPage.goto('https://example.com');
-// Use state.myPage for all subsequent operations in this session
+// Use state.myPage for ALL subsequent operations
 ```
 
-**Find a page the user opened:**
+**Handle page closures gracefully:**
 
-Sometimes the user enables playwriter extension on a specific tab they want you to control (e.g., they're logged into an app). Find it by URL pattern:
+The user may close your page by accident (e.g., closing a tab in Chrome). Always check before using it and recreate if needed:
+
+```js
+if (!state.myPage || state.myPage.isClosed()) {
+  state.myPage = await context.newPage();
+}
+await state.myPage.goto('https://example.com');
+```
+
+**Use an existing page only when the user asks:**
+
+Only use a page from `context.pages()` if the user explicitly asks you to control a specific tab they already opened (e.g., they're logged into an app). Find it by URL pattern and store it in state:
 
 ```js
 const pages = context.pages().filter(x => x.url().includes('myapp.com'));
 if (pages.length === 0) throw new Error('No myapp.com page found. Ask user to enable playwriter on it.');
 if (pages.length > 1) throw new Error(`Found ${pages.length} matching pages, expected 1`);
-state.targetPage = pages[0];
-```
-
-**Find a specific page by partial URL:**
-
-```js
-const pages = context.pages().filter(x => x.url().includes('localhost'));
-if (pages.length !== 1) throw new Error(`Expected 1 page, found ${pages.length}`);
 state.targetPage = pages[0];
 ```
 
