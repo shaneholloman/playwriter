@@ -1173,6 +1173,29 @@ export async function startPlayWriterCDPRelayServer({
   app.get('/cli/session/suggest', (c) => {
     return c.json({ next: nextSessionNumber })
   })
+  
+  app.post('/cli/session/delete', async (c) => {
+    try {
+      const body = await c.req.json() as { sessionId: string }
+      const { sessionId } = body
+      
+      if (!sessionId) {
+        return c.json({ error: 'sessionId is required' }, 400)
+      }
+      
+      const manager = await getExecutorManager()
+      const deleted = manager.deleteExecutor(sessionId)
+      
+      if (!deleted) {
+        return c.json({ error: `Session ${sessionId} not found` }, 404)
+      }
+      
+      return c.json({ success: true })
+    } catch (error: any) {
+      logger?.error('Delete session endpoint error:', error)
+      return c.json({ error: error.message }, 500)
+    }
+  })
 
   // ============================================================================
   // Recording Endpoints - For screen recording via chrome.tabCapture

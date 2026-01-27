@@ -141,7 +141,8 @@ cli
     try {
       const res = await fetch(`${serverUrl}/cli/session/suggest`)
       const { next } = await res.json() as { next: number }
-      console.log(next)
+      console.log(`Session ${next} created.`)
+      console.log(`Use it with: playwriter -s ${next} -e "await page.goto('https://example.com')"`)
     } catch (error: any) {
       console.error(`Error: ${error.message}`)
       process.exit(1)
@@ -185,6 +186,36 @@ cli
         const stateStr = session.stateKeys.length > 0 ? session.stateKeys.join(', ') : '-'
         console.log(String(session.id).padEnd(idWidth) + '  ' + stateStr)
       }
+    } catch (error: any) {
+      console.error(`Error: ${error.message}`)
+      process.exit(1)
+    }
+  })
+
+cli
+  .command('session delete <sessionId>', 'Delete a session and clear its state')
+  .option('--host <host>', 'Remote relay server host')
+  .action(async (sessionId: string, options: { host?: string }) => {
+    const serverUrl = await getServerUrl(options.host)
+
+    if (!options.host && !process.env.PLAYWRITER_HOST) {
+      await ensureRelayServer({ logger: console, env: cliRelayEnv })
+    }
+
+    try {
+      const response = await fetch(`${serverUrl}/cli/session/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+
+      if (!response.ok) {
+        const result = await response.json() as { error: string }
+        console.error(`Error: ${result.error}`)
+        process.exit(1)
+      }
+
+      console.log(`Session ${sessionId} deleted.`)
     } catch (error: any) {
       console.error(`Error: ${error.message}`)
       process.exit(1)
