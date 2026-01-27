@@ -128,7 +128,7 @@ each test should reset the extension connection. NEVER call `browser.close()` in
 
 remember: toggling extension on a tab adds it to available pages. if you toggle then call `context.newPage()`, you'll have 2 pages.
 
-IMPORTANT: set bash timeout to at least 90000ms when running `pnpm test`
+IMPORTANT: set bash timeout to at least 300000ms (5 minutes) when running `pnpm test`
 
 to debug test failures, inspect the relay server log file. during tests, logs are written to `./relay-server.log` in the playwriter folder (not the system temp directory). contains extension, MCP and WS server logs with all CDP events.
 

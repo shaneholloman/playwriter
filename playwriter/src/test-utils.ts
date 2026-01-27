@@ -11,7 +11,22 @@ import { createFileLogger } from './create-logger.js'
 import { killPortProcess } from 'kill-port-process'
 
 const execAsync = promisify(exec)
-let extensionBuildQueue: Promise<void> = Promise.resolve()
+const extensionBuildQueues: Map<string, Promise<void>> = new Map()
+
+async function buildExtension({ port, distDir }: { port: number; distDir: string }): Promise<void> {
+  const previous = extensionBuildQueues.get(distDir) || Promise.resolve()
+  const buildPromise = previous
+    .catch((error) => {
+      console.error('Previous extension build failed:', error)
+    })
+    .then(async () => {
+      // Build into a per-port dist to avoid parallel test runs overwriting each other.
+      await execAsync(`TESTING=1 PLAYWRITER_PORT=${port} PLAYWRITER_EXTENSION_DIST=${distDir} pnpm build`, { cwd: '../extension' })
+    })
+
+  extensionBuildQueues.set(distDir, buildPromise.finally(() => {}))
+  await buildPromise
+}
 
 export async function getExtensionServiceWorker(context: BrowserContext) {
   let serviceWorkers = context.serviceWorkers().filter((sw) => sw.url().startsWith('chrome-extension://'))
@@ -54,16 +69,11 @@ export async function setupTestContext({
 }): Promise<TestContext> {
   await killPortProcess(port).catch(() => {})
 
+  // Use a port-scoped dist folder so parallel tests don't replace each other's extension builds.
+  const distDir = `dist-${port}`
+
   console.log('Building extension...')
-  const buildPromise = extensionBuildQueue
-    .catch((error) => {
-      console.error('Previous extension build failed:', error)
-    })
-    .then(async () => {
-      await execAsync(`TESTING=1 PLAYWRITER_PORT=${port} pnpm build`, { cwd: '../extension' })
-    })
-  extensionBuildQueue = buildPromise.finally(() => {})
-  await buildPromise
+  await buildExtension({ port, distDir })
   console.log('Extension built')
 
   const localLogPath = path.join(process.cwd(), 'relay-server.log')
@@ -71,7 +81,7 @@ export async function setupTestContext({
   const relayServer = await startPlayWriterCDPRelayServer({ port, logger })
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), tempDirPrefix))
-  const extensionPath = path.resolve('../extension/dist')
+  const extensionPath = path.resolve('../extension', distDir)
 
   const browserContext = await chromium.launchPersistentContext(userDataDir, {
     channel: 'chromium',

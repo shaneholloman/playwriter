@@ -23,6 +23,9 @@ function sleep(ms: number): Promise<void> {
 let childSessions: Map<string, { tabId: number; targetId?: string }> = new Map()
 let nextSessionId = 1
 let tabGroupQueue: Promise<void> = Promise.resolve()
+// Cache Target.setAutoAttach params so existing and future tabs enable OOPIF target events.
+// This ensures Playwright can build the iframe frame tree when connecting over CDP.
+let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 
 class ConnectionManager {
   ws: WebSocket | null = null
@@ -673,6 +676,30 @@ async function handleCommand(msg: ExtensionCommandMessage): Promise<any> {
 
   const debuggee = targetTabId ? { tabId: targetTabId } : undefined
 
+  // Root-level Target.setAutoAttach must apply to all connected tabs since
+  // CDP auto-attach is per-debugger-session. Without this, OOPIF targets never attach.
+  if (msg.params.method === 'Target.setAutoAttach' && !msg.params.sessionId) {
+    const params = msg.params.params as Protocol.Target.SetAutoAttachRequest | undefined
+    if (!params) {
+      return {}
+    }
+
+    autoAttachParams = params
+    const connectedTabIds = Array.from(store.getState().tabs.entries())
+      .filter(([_, info]) => info.state === 'connected')
+      .map(([tabId]) => tabId)
+
+    await Promise.all(connectedTabIds.map(async (tabId) => {
+      try {
+        await chrome.debugger.sendCommand({ tabId }, 'Target.setAutoAttach', params)
+      } catch (error) {
+        logger.debug('Failed to set auto-attach for tab:', tabId, error)
+      }
+    }))
+
+    return {}
+  }
+
   // TODO disable network things?
   // if (msg.params.method === 'Network.enable' && msg.params.source !== 'playwriter') {
   //   logger.debug('Skipping Network.enable from non-playwriter CDP client:', msg.params.sessionId)
@@ -830,6 +857,15 @@ async function attachTab(tabId: number, { skipAttachedEvent = false }: { skipAtt
     logger.debug('Debugger attached successfully to tab:', tabId)
 
     await chrome.debugger.sendCommand(debuggee, 'Page.enable')
+
+    // Reapply cached auto-attach for new tabs so OOPIF targets are reported immediately.
+    if (autoAttachParams) {
+      try {
+        await chrome.debugger.sendCommand(debuggee, 'Target.setAutoAttach', autoAttachParams)
+      } catch (error) {
+        logger.debug('Failed to apply auto-attach for tab:', tabId, error)
+      }
+    }
 
     const contextMenuScript = `
       document.addEventListener('contextmenu', (e) => {

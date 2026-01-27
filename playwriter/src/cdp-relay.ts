@@ -347,6 +347,12 @@ export async function startPlayWriterCDPRelayServer({
           break
         }
         await maybeAutoCreateInitialTab()
+        // Forward auto-attach so Chrome emits iframe Target.attachedToTarget events.
+        // Playwright relies on these (with parentFrameId) when reconnecting over CDP.
+        await sendToExtension({
+          method: 'forwardCDPCommand',
+          params: { method, params, source }
+        })
         return {}
       }
 

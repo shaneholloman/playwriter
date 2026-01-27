@@ -4,6 +4,8 @@ import { chromium } from 'playwright-core'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
+import http from 'node:http'
+import net from 'node:net'
 import { getCdpUrl } from './utils.js'
 import type { ExtensionState } from 'mcp-extension/src/types.js'
 import type { Protocol } from 'devtools-protocol'
@@ -26,6 +28,72 @@ function js(strings: TemplateStringsArray, ...values: any[]): string {
         (result, str, i) => result + str + (values[i] || ''),
         '',
     )
+}
+
+type SimpleServer = {
+    baseUrl: string
+    close: () => Promise<void>
+}
+
+// Minimal local servers to create a cross-origin iframe without external dependencies.
+async function createSimpleServer({ routes }: { routes: Record<string, string> }): Promise<SimpleServer> {
+    const openSockets: Set<net.Socket> = new Set()
+    const server = http.createServer((req, res) => {
+        const url = req.url || '/'
+        const body = routes[url]
+        if (!body) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' })
+            res.end('not found')
+            return
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html' })
+        res.end(body)
+    })
+
+    server.on('connection', (socket) => {
+        openSockets.add(socket)
+        socket.on('close', () => {
+            openSockets.delete(socket)
+        })
+    })
+
+    await new Promise<void>((resolve) => {
+        server.listen(0, '127.0.0.1', () => {
+            resolve()
+        })
+    })
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+        await new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+                if (error) {
+                    reject(error)
+                    return
+                }
+                resolve()
+            })
+        })
+        throw new Error('Failed to start test server')
+    }
+
+    return {
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        close: async () => {
+            for (const socket of openSockets) {
+                socket.destroy()
+            }
+            await new Promise<void>((resolve, reject) => {
+                server.close((error) => {
+                    if (error) {
+                        reject(error)
+                        return
+                    }
+                    resolve()
+                })
+            })
+        },
+    }
 }
 
 
@@ -61,7 +129,11 @@ describe('MCP Server Tests', () => {
 
     it('should inject script via addScriptTag through CDP relay', async () => {
         const browserContext = getBrowserContext()
-        const serviceWorker = await getExtensionServiceWorker(browserContext)
+        const serviceWorker = await withTimeout({
+            promise: getExtensionServiceWorker(browserContext),
+            timeoutMs: 5000,
+            errorMessage: 'Timed out waiting for extension service worker for iframe test',
+        })
 
         const page = await browserContext.newPage()
         await page.setContent('<html><body><button id="btn">Click</button></body></html>')
@@ -1275,6 +1347,85 @@ describe('MCP Server Tests', () => {
 
         await browser.close()
         await page.close()
+    }, 60000)
+
+    // Reproduces the CDP reconnect issue: without auto-attach, Playwright only sees the main frame.
+    it('should expose iframe frames when connecting to an existing page over CDP', async () => {
+        const browserContext = getBrowserContext()
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        const childServer = await createSimpleServer({
+            routes: {
+                '/child.html': '<!doctype html><html><body>child</body></html>',
+            },
+        })
+        const childUrl = `${childServer.baseUrl}/child.html`
+
+        const parentServer = await createSimpleServer({
+            routes: {
+                '/': `<!doctype html><html><body><iframe src="${childUrl}"></iframe></body></html>`,
+            },
+        })
+
+        const page = await browserContext.newPage()
+        try {
+            await withTimeout({
+                promise: page.goto(parentServer.baseUrl, { waitUntil: 'domcontentloaded', timeout: 5000 }),
+                timeoutMs: 6000,
+                errorMessage: 'Timed out loading parent page for iframe test',
+            })
+            await withTimeout({
+                promise: page.frameLocator('iframe').locator('body').waitFor({ timeout: 5000 }),
+                timeoutMs: 6000,
+                errorMessage: 'Timed out waiting for iframe to attach in parent page',
+            })
+            expect(page.frames().map((frame) => frame.url())).toContain(childUrl)
+            await page.bringToFront()
+
+            await withTimeout({
+                promise: serviceWorker.evaluate(async () => {
+                    await globalThis.toggleExtensionForActiveTab()
+                }),
+                timeoutMs: 5000,
+                errorMessage: 'Timed out toggling extension for iframe test',
+            })
+            await new Promise((r) => { setTimeout(r, 400) })
+
+            const browser = await withTimeout({
+                promise: chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT })),
+                timeoutMs: 5000,
+                errorMessage: 'Timed out connecting over CDP for iframe test',
+            })
+            const context = browser.contexts()[0]
+            const cdpPage = context.pages().find((candidate) => {
+                return candidate.url().startsWith(parentServer.baseUrl)
+            })
+            expect(cdpPage).toBeDefined()
+
+            const frames = cdpPage!.frames()
+            const childFrame = frames.find((frame) => {
+                return frame.url() === childUrl
+            })
+
+            expect(frames.length).toBe(2)
+            expect(childFrame).toBeDefined()
+
+            await withTimeout({
+                promise: browser.close(),
+                timeoutMs: 5000,
+                errorMessage: 'Timed out closing CDP browser for iframe test',
+            })
+        } finally {
+            await withTimeout({
+                promise: page.close(),
+                timeoutMs: 5000,
+                errorMessage: 'Timed out closing page for iframe test',
+            })
+            await Promise.all([
+                parentServer.close(),
+                childServer.close(),
+            ])
+        }
     }, 60000)
 
     it('should have non-empty URLs when connecting to already-loaded pages', async () => {

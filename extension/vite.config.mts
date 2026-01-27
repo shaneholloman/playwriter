@@ -1,5 +1,5 @@
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
@@ -12,6 +12,9 @@ const defineEnv: Record<string, string> = {
 if (process.env.TESTING) {
   defineEnv['import.meta.env.TESTING'] = 'true';
 }
+
+// Allow tests to build per-port extension outputs to avoid parallel run conflicts.
+const outDir = process.env.PLAYWRITER_EXTENSION_DIST || 'dist';
 
 export default defineConfig({
   plugins: [
@@ -48,7 +51,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: 'dist',
+    outDir,
     emptyOutDir: false,
     minify: false,
     rollupOptions: {
