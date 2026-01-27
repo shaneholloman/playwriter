@@ -619,7 +619,6 @@ function getTabByTargetId(targetId: string): { tabId: number; tab: TabInfo } | u
   return undefined
 }
 
-<<<<<<< HEAD
 function emitChildDetachesForTab(tabId: number): void {
   const childEntries = Array.from(childSessions.entries())
     .filter(([_, parentTab]) => parentTab.tabId === tabId)

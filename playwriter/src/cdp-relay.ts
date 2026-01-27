@@ -222,6 +222,24 @@ export async function startPlayWriterCDPRelayServer({
     }
   }
 
+  type ForwardCdpParams = {
+    method: string
+    sessionId?: string
+    params?: unknown
+  }
+
+  function getForwardCdpParams(value: unknown): ForwardCdpParams | undefined {
+    if (!value || typeof value !== 'object') {
+      return undefined
+    }
+    const record = value as { method?: unknown; sessionId?: unknown; params?: unknown }
+    if (typeof record.method !== 'string') {
+      return undefined
+    }
+    const sessionId = typeof record.sessionId === 'string' ? record.sessionId : undefined
+    return { method: record.method, sessionId, params: record.params }
+  }
+
   async function sendToExtension({ method, params, timeout = 30000 }: { method: string; params?: unknown; timeout?: number }): Promise<unknown> {
     if (!extensionWs) {
       throw new Error('Extension not connected')
@@ -230,14 +248,15 @@ export async function startPlayWriterCDPRelayServer({
     const id = ++extensionMessageId
     const message = { id, method, params }
 
-    if (method === 'forwardCDPCommand' && params?.method) {
+    const forwardCdpParams = method === 'forwardCDPCommand' ? getForwardCdpParams(params) : undefined
+    if (forwardCdpParams) {
       logCdpJson({
         timestamp: new Date().toISOString(),
         direction: 'to-extension',
         message: {
-          method: params.method,
-          sessionId: params.sessionId,
-          params: params.params,
+          method: forwardCdpParams.method,
+          sessionId: forwardCdpParams.sessionId,
+          params: forwardCdpParams.params,
         },
       })
     }
