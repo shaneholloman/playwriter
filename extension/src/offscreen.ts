@@ -1,12 +1,12 @@
 /**
  * Offscreen document for Playwriter screen recording.
- * 
+ *
  * WHY OFFSCREEN DOCUMENT?
  * Manifest V3 service workers cannot use MediaRecorder or getUserMedia directly.
  * This hidden document provides access to Web APIs while the service worker orchestrates.
- * 
+ *
  * RECORDING FLOW:
- * 
+ *
  * ┌─────────────────┐     HTTP      ┌─────────────────┐    WebSocket    ┌─────────────────┐
  * │  User Code      │ ────────────► │  Relay Server   │ ───────────────►│  Extension      │
  * │  startRecording │               │  /recording/*   │                 │  background.ts  │
@@ -18,7 +18,7 @@
  *                                   │  Offscreen Doc  │  ◄── MediaRecorder
  *                                   │  (this file)    │
  *                                   └─────────────────┘
- * 
+ *
  * STEP BY STEP:
  * 1. User calls startRecording() → HTTP POST to relay server
  * 2. Relay server forwards to extension via WebSocket
@@ -27,14 +27,14 @@
  * 4. Extension creates this offscreen document via chrome.offscreen.createDocument()
  * 5. Extension sends streamId to offscreen document
  * 6. Offscreen calls navigator.mediaDevices.getUserMedia() with streamId
- * 7. Offscreen creates MediaRecorder and starts encoding to webm
+ * 7. Offscreen creates MediaRecorder and starts encoding to mp4
  * 8. Chunks are sent back to extension → relay server → written to output file
- * 
+ *
  * KEY APIS:
  * - chrome.tabCapture.getMediaStreamId() - Extension API, gets capture permission
  * - chrome.offscreen.createDocument()    - Extension API, creates this document
  * - navigator.mediaDevices.getUserMedia() - Web API, gets MediaStream from streamId
- * - MediaRecorder                         - Web API, encodes video to webm
+ * - MediaRecorder                         - Web API, encodes video to mp4
  */
 
 import type {
@@ -85,7 +85,7 @@ async function handleMessage(message: OffscreenMessage): Promise<OffscreenResult
 
 async function handleStartRecording(params: OffscreenStartRecordingMessage): Promise<OffscreenStartRecordingResult> {
   const { tabId } = params
-  
+
   if (recordings.has(tabId)) {
     return { success: false, error: `Recording already in progress for tab ${tabId}` }
   }
@@ -167,7 +167,7 @@ async function handleStartRecording(params: OffscreenStartRecordingMessage): Pro
 async function handleStopRecording(params: OffscreenStopRecordingMessage): Promise<OffscreenStopRecordingResult> {
   const { tabId } = params
   const recording = recordings.get(tabId)
-  
+
   if (!recording) {
     return { success: false, error: `No active recording for tab ${tabId}` }
   }
@@ -215,11 +215,11 @@ async function handleStopRecording(params: OffscreenStopRecordingMessage): Promi
 function handleIsRecording(params: OffscreenIsRecordingMessage): OffscreenIsRecordingResult {
   const { tabId } = params
   const recording = recordings.get(tabId)
-  
+
   if (!recording) {
     return { isRecording: false, tabId }
   }
-  
+
   return {
     isRecording: recording.recorder?.state === 'recording',
     tabId,
@@ -235,7 +235,7 @@ function handleCancelRecording(params: OffscreenCancelRecordingMessage): Offscre
 // Helper function to cancel recording for a specific tab - used by error handlers too
 function handleCancelRecordingForTab(tabId: number): OffscreenCancelRecordingResult {
   const recording = recordings.get(tabId)
-  
+
   if (!recording) {
     return { success: true, tabId }
   }
