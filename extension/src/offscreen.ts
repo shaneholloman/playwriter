@@ -154,8 +154,22 @@ async function handleStartRecording(params: OffscreenStartRecordingMessage): Pro
       console.log(`MediaRecorder stopped for tab ${tabId}`)
     }
 
-    // Start with 1 second chunks
-    recorder.start(1000)
+    // Wait for MediaRecorder to actually start before returning.
+    // This ensures the encoder is initialized and ready to capture frames.
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('MediaRecorder failed to start within 5 seconds'))
+      }, 5000)
+      
+      recorder.onstart = () => {
+        clearTimeout(timeout)
+        console.log(`MediaRecorder started for tab ${tabId}`)
+        resolve()
+      }
+      
+      // Start with 1 second chunks
+      recorder.start(1000)
+    })
 
     return { success: true, tabId, startedAt, mimeType: 'video/mp4' }
   } catch (error: any) {

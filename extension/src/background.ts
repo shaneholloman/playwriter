@@ -27,6 +27,44 @@ let tabGroupQueue: Promise<void> = Promise.resolve()
 // This ensures Playwright can build the iframe frame tree when connecting over CDP.
 let autoAttachParams: Protocol.Target.SetAutoAttachRequest | null = null
 
+// Buffer for recording chunks when WebSocket isn't ready.
+// Chunks are keyed by tabId and flushed when WebSocket opens.
+interface BufferedChunk {
+  tabId: number
+  data?: number[]
+  final?: boolean
+}
+const recordingChunkBuffer: BufferedChunk[] = []
+
+/**
+ * Flush buffered recording chunks to the WebSocket.
+ * Called when WebSocket becomes ready.
+ */
+function flushRecordingChunkBuffer(ws: WebSocket): void {
+  if (recordingChunkBuffer.length === 0) {
+    return
+  }
+  
+  logger.debug(`Flushing ${recordingChunkBuffer.length} buffered recording chunks`)
+  
+  while (recordingChunkBuffer.length > 0) {
+    const chunk = recordingChunkBuffer.shift()!
+    const { tabId, data, final } = chunk
+    
+    // Send metadata message first
+    ws.send(JSON.stringify({
+      method: 'recordingData',
+      params: { tabId, final },
+    }))
+    
+    // Then send binary data if not final
+    if (data && !final) {
+      const buffer = new Uint8Array(data)
+      ws.send(buffer)
+    }
+  }
+}
+
 class ConnectionManager {
   ws: WebSocket | null = null
   private connectionPromise: Promise<void> | null = null
@@ -106,6 +144,10 @@ class ConnectionManager {
         settled = true
         logger.debug('WebSocket connected')
         clearTimeout(timeout)
+        
+        // Flush any buffered recording chunks now that WebSocket is ready
+        flushRecordingChunkBuffer(socket)
+        
         resolve()
       }
 
@@ -1486,6 +1528,11 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
         const buffer = new Uint8Array(data)
         connectionManager.ws.send(buffer)
       }
+    } else {
+      // Buffer chunks when WebSocket isn't ready - they'll be flushed when it opens.
+      // This prevents data loss during brief disconnections or slow WebSocket startup.
+      logger.debug(`Buffering recording chunk for tab ${tabId} (WebSocket not ready)`)
+      recordingChunkBuffer.push({ tabId, data, final })
     }
     
     return false // Sync response, no need to keep channel open

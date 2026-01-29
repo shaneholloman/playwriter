@@ -7,6 +7,7 @@
  */
 
 import os from 'node:os'
+import path from 'node:path'
 import type { Page } from 'playwright-core'
 import type {
   StartRecordingResult,
@@ -96,10 +97,14 @@ export async function startRecording(options: StartRecordingOptions): Promise<Re
     relayPort = 19988,
   } = options
   
+  // Resolve relative paths to absolute using the caller's cwd.
+  // The relay server may have a different cwd, so we must resolve here.
+  const absoluteOutputPath = path.resolve(outputPath)
+  
   const response = await fetch(`http://127.0.0.1:${relayPort}/recording/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, frameRate, videoBitsPerSecond, audioBitsPerSecond, audio, outputPath }),
+    body: JSON.stringify({ sessionId, frameRate, videoBitsPerSecond, audioBitsPerSecond, audio, outputPath: absoluteOutputPath }),
   })
 
   const result = await response.json() as StartRecordingResult
