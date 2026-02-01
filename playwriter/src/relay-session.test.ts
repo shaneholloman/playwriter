@@ -650,7 +650,10 @@ describe('CDP Session Tests', () => {
             cdpSession.on('Debugger.paused', () => resolve())
         })
 
-        cdpPage!.evaluate('runTest()')
+        // Don't await - we want it to pause at breakpoint
+        const evalPromise = cdpPage!.evaluate('runTest()').catch(() => {
+            // Ignore errors from evaluate when browser closes
+        })
 
         await pausedPromise
         expect(dbg.isPaused()).toBe(true)
@@ -667,6 +670,8 @@ describe('CDP Session Tests', () => {
         `)
 
         await dbg.resume()
+        // Wait for evaluate to complete after resume
+        await evalPromise
 
         cdpSession.close()
         await browser.close()
@@ -987,6 +992,8 @@ describe('Service Worker Target Tests', () => {
         const title = await targetPage!.title()
         expect(title).toBeTruthy()
 
+        // Small delay to let pending CDP operations flush before closing
+        await new Promise(r => setTimeout(r, 100))
         await browser.close()
         await page.close()
     }, 60000)
