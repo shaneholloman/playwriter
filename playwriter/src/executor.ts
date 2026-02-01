@@ -24,6 +24,7 @@ import { ScopedFS } from './scoped-fs.js'
 import { screenshotWithAccessibilityLabels, formatSnapshot, DEFAULT_SNAPSHOT_FORMAT, getAriaSnapshot, type ScreenshotResult, type SnapshotFormat } from './aria-snapshot.js'
 export type { SnapshotFormat }
 import { getCleanHTML, type GetCleanHTMLOptions } from './clean-html.js'
+import { getPageMarkdown, type GetPageMarkdownOptions } from './page-markdown.js'
 import { startRecording, stopRecording, isRecording, cancelRecording } from './screen-recording.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -617,6 +618,7 @@ export class PlaywrightExecutor {
         console: customConsole,
         accessibilitySnapshot,
         getCleanHTML,
+        getPageMarkdown,
         getLocatorStringForElement,
         getLatestLogs,
         clearAllLogs,

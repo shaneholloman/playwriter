@@ -493,6 +493,37 @@ console.log((await getCleanHTML({ locator: page })).split('\n').slice(0, 50).joi
 console.log((await getCleanHTML({ locator: page })).split('\n').slice(50, 100).join('\n')); // next 50 lines
 ```
 
+**getPageMarkdown** - extract main page content as plain text using Mozilla Readability (same algorithm as Firefox Reader View). Strips navigation, ads, sidebars, and other clutter. Returns formatted text with title, author, and content:
+
+```js
+await getPageMarkdown({ page, search?, showDiffSinceLastCall? })
+// Examples:
+const content = await getPageMarkdown({ page })  // full article as plain text
+const matches = await getPageMarkdown({ page, search: /API/i })  // search within content
+const diff = await getPageMarkdown({ page, showDiffSinceLastCall: true })  // track content changes
+```
+
+**Output format:**
+```
+# Article Title
+
+Author: John Doe | Site: example.com | Published: 2024-01-15
+
+> Article excerpt or description
+
+The main article content as plain text, with paragraphs preserved...
+```
+
+**Parameters:**
+- `page` - Playwright Page to extract content from
+- `search` - string/regex to filter content (returns first 10 matching lines with 5 lines context)
+- `showDiffSinceLastCall` - returns unified diff since last call. Useful for tracking content changes.
+
+**Use cases:**
+- Extract article text for LLM processing without HTML noise
+- Get readable content from news sites, blogs, documentation
+- Compare content changes after interactions
+
 **waitForPageLoad** - smart load detection that ignores analytics/ads:
 
 ```js

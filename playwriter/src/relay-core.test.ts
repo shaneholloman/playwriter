@@ -721,6 +721,104 @@ describe('Relay Core Tests', () => {
         await page.close()
     }, 60000)
 
+    it('should extract page content as markdown with getPageMarkdown', async () => {
+        const browserContext = getBrowserContext()
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        const page = await browserContext.newPage()
+        // Create a realistic article-like page structure
+        await page.setContent(`
+            <html>
+                <head>
+                    <title>Test Article Title</title>
+                    <meta name="author" content="John Doe">
+                    <script>console.log('analytics')</script>
+                    <style>.nav { background: blue; }</style>
+                </head>
+                <body>
+                    <nav class="nav">
+                        <a href="/">Home</a>
+                        <a href="/about">About</a>
+                    </nav>
+                    <article>
+                        <h1>Test Article Title</h1>
+                        <p>This is the first paragraph of the article content.</p>
+                        <p>This is the second paragraph with more details about the topic.</p>
+                        <p>The article continues with important information here.</p>
+                    </article>
+                    <aside>
+                        <h3>Related Posts</h3>
+                        <ul><li>Post 1</li><li>Post 2</li></ul>
+                    </aside>
+                    <footer>Copyright 2024</footer>
+                </body>
+            </html>
+        `)
+        await page.bringToFront()
+
+        await serviceWorker.evaluate(async () => {
+            await globalThis.toggleExtensionForActiveTab()
+        })
+        await new Promise(r => setTimeout(r, 400))
+
+        // Test basic getPageMarkdown
+        const result = await client.callTool({
+            name: 'execute',
+            arguments: {
+                code: js`
+                    let testPage;
+                    for (const p of context.pages()) {
+                        const html = await p.content();
+                        if (html.includes('Test Article Title')) { testPage = p; break; }
+                    }
+                    if (!testPage) throw new Error('Test page not found');
+                    const content = await getPageMarkdown({ page: testPage });
+                    console.log(content);
+                `,
+                timeout: 15000,
+            },
+        })
+
+        expect(result.isError).toBeFalsy()
+        const text = (result.content as any)[0]?.text || ''
+        
+        // Snapshot the full output
+        await expect(text).toMatchFileSnapshot('./snapshots/page-markdown-output.txt')
+
+        // Should contain article content
+        expect(text).toContain('Test Article Title')
+        expect(text).toContain('first paragraph')
+        expect(text).toContain('second paragraph')
+
+        // Should NOT contain script/style content
+        expect(text).not.toContain('analytics')
+        expect(text).not.toContain('background: blue')
+
+        // Test search functionality
+        const searchResult = await client.callTool({
+            name: 'execute',
+            arguments: {
+                code: js`
+                    let testPage;
+                    for (const p of context.pages()) {
+                        const html = await p.content();
+                        if (html.includes('Test Article Title')) { testPage = p; break; }
+                    }
+                    if (!testPage) throw new Error('Test page not found');
+                    const content = await getPageMarkdown({ page: testPage, search: /important/i });
+                    return content;
+                `,
+                timeout: 15000,
+            },
+        })
+
+        expect(searchResult.isError).toBeFalsy()
+        const searchText = (searchResult.content as any)[0]?.text || ''
+        expect(searchText).toContain('important')
+
+        await page.close()
+    }, 60000)
+
     it('should handle default page being closed and switch to another available page', async () => {
         // This test verifies that when the default `page` in MCP scope is closed,
         // the MCP automatically switches to another available page instead of failing
