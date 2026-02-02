@@ -1,7 +1,10 @@
 import type { Page, Locator, ElementHandle } from 'playwright-core'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Protocol } from 'devtools-protocol'
+import { getCDPSessionForPage } from './cdp-session.js'
 
 // Import sharp at module level - resolves to null if not available
 const sharpPromise = import('sharp')
@@ -12,515 +15,31 @@ const sharpPromise = import('sharp')
 // Aria Snapshot Format Documentation
 // ============================================================================
 //
-// This module generates accessibility snapshots using dom-accessibility-api
-// running entirely in browser context. The output format is:
+// This module generates accessibility snapshots using the browser's
+// Accessibility.getFullAXTree (CDP) and maps nodes to stable DOM refs
+// via DOM.getFlattenedDocument (no per-node CDP calls).
+// The output format is:
 //
 // ```
-// - role "accessible name" [ref=testid-or-e1]
-// - button "Submit" [ref=submit-btn]
-// - link "Home" [ref=nav-home]
-// - textbox "Search" [ref=e3]
+// - role "accessible name" locator
+// - button "Submit" [id="submit-btn"]
+// - link "Home" [data-testid="nav-home"]
+// - textbox "Search" role=textbox[name="Search"]
 // ```
 //
-// Refs are generated from stable test IDs when available:
-// - data-testid, data-test-id, data-test, data-cy, data-pw
-// - Stable id attributes (excluding auto-generated ones)
-// - Fallback: e1, e2, e3...
-//
-// Duplicate refs get a suffix: submit-btn, submit-btn-2, submit-btn-3
+// The locator is a Playwright selector that points to a unique element.
+// - Stable attributes: [id="..."] or [data-testid="..."]
+// - Fallback: role=... with accessible name, e.g. role=button[name="Submit"]
+// - Duplicates add >> nth=N (0-based) to make the locator unique
 // ============================================================================
 
 // ============================================================================
-// Snapshot Format Types and Processing
+// Snapshot Format Types
 // ============================================================================
 
-export type SnapshotFormat = 'raw' | 'compact' | 'interactive' | 'interactive-dedup'
+export type SnapshotFormat = 'raw'
 
-export const DEFAULT_SNAPSHOT_FORMAT: SnapshotFormat = 'interactive-dedup'
-
-/**
- * Apply a snapshot format transformation with error handling.
- * If processing fails, logs the error and returns the raw snapshot.
- */
-export function formatSnapshot(
-  snapshot: string,
-  format: SnapshotFormat,
-  logger?: { error: (...args: unknown[]) => void }
-): string {
-  if (format === 'raw') {
-    return snapshot
-  }
-
-  try {
-    switch (format) {
-      case 'compact':
-        return compactSnapshot(snapshot)
-      case 'interactive':
-        return interactiveSnapshot(snapshot)
-      case 'interactive-dedup':
-        return deduplicateSnapshot(interactiveSnapshot(snapshot))
-      default:
-        return snapshot
-    }
-  } catch (error) {
-    logger?.error('[aria-snapshot] Failed to apply format', format, error)
-    return snapshot
-  }
-}
-
-// ============================================================================
-// Snapshot Compression Functions
-// ============================================================================
-
-export interface CompactSnapshotOptions {
-  /** Remove [cursor=pointer] hints (default: true) */
-  removeCursorPointer?: boolean
-  /** Remove [active] markers (default: true) */
-  removeActive?: boolean
-  /** Remove empty structural rows/cells (default: true) */
-  removeEmptyStructural?: boolean
-  /** Remove text separators like "|" (default: true) */
-  removeTextSeparators?: boolean
-  /** Remove /url: metadata lines (default: false) */
-  removeUrls?: boolean
-}
-
-export interface InteractiveSnapshotOptions {
-  /** Keep /url: metadata for links (default: false) */
-  keepUrls?: boolean
-  /** Keep image elements (default: true) */
-  keepImages?: boolean
-  /** Keep tree structure, removing only empty branches (default: true) */
-  keepStructure?: boolean
-  /** Keep headings for context (default: true) */
-  keepHeadings?: boolean
-  /** Remove unnamed generic/group wrappers (default: true) */
-  removeGenericWrappers?: boolean
-}
-
-/**
- * Post-process a snapshot to make it more compact.
- * Removes noise while preserving structure.
- * Typical reduction: 15-25%
- */
-export function compactSnapshot(snapshot: string, options: CompactSnapshotOptions = {}): string {
-  const {
-    removeCursorPointer = true,
-    removeActive = true,
-    removeEmptyStructural = true,
-    removeTextSeparators = true,
-    removeUrls = false,
-  } = options
-
-  let lines = snapshot.split('\n')
-
-  // Line-by-line transformations
-  lines = lines.map((line) => {
-    let result = line
-    if (removeCursorPointer) {
-      result = result.replace(/ \[cursor=pointer\]/g, '')
-    }
-    if (removeActive) {
-      result = result.replace(/ \[active\]/g, '')
-    }
-    return result
-  })
-
-  // Filter out unwanted lines
-  lines = lines.filter((line) => {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      return false
-    }
-    // Remove text separators
-    if (removeTextSeparators && /^- text: ["']?[|·•–—]/.test(trimmed)) {
-      return false
-    }
-    // Remove empty structural elements
-    if (removeEmptyStructural) {
-      if (/^- (row|cell|rowgroup|generic|listitem|group)\s*(\[ref=\w+\])?\s*$/.test(trimmed)) {
-        return false
-      }
-    }
-    // Remove /url: lines
-    if (removeUrls && /^- \/url:/.test(trimmed)) {
-      return false
-    }
-    return true
-  })
-
-  return lines.join('\n')
-}
-
-/**
- * Post-process a snapshot to show only interactive elements.
- * Like agent-browser's compact mode - keeps structure but only refs on interactive elements.
- * Typical reduction: 50-65% with structure, 80-90% flat
- */
-export function interactiveSnapshot(snapshot: string, options: InteractiveSnapshotOptions = {}): string {
-  const {
-    keepUrls = false,
-    keepImages = true,
-    keepStructure = true,
-    keepHeadings = true,
-    removeGenericWrappers = true,
-  } = options
-
-  const interactiveRoles = new Set([
-    'link', 'button', 'textbox', 'combobox', 'searchbox', 'checkbox', 'radio',
-    'slider', 'spinbutton', 'switch', 'menuitem', 'menuitemcheckbox',
-    'menuitemradio', 'option', 'tab', 'treeitem',
-  ])
-
-  if (keepImages) {
-    interactiveRoles.add('img')
-    interactiveRoles.add('video')
-    interactiveRoles.add('audio')
-  }
-
-  const contentRoles = new Set(keepHeadings ? ['heading'] : [])
-
-  const lines = snapshot.split('\n')
-
-  if (!keepStructure) {
-    return extractInteractiveFlat(lines, interactiveRoles, keepUrls)
-  }
-
-  let result = extractInteractiveWithStructure(lines, interactiveRoles, contentRoles, keepUrls)
-
-  if (removeGenericWrappers) {
-    result = collapseGenericWrappers(result)
-  }
-
-  return result
-}
-
-function extractInteractiveFlat(lines: string[], interactiveRoles: Set<string>, keepUrls: boolean): string {
-  const result: string[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim()
-    if (!trimmed) {
-      continue
-    }
-
-    // Match ref pattern - now supports any ref format (not just e123)
-    const match = trimmed.match(/^-\s+(\w+)(?:\s+"[^"]*")?(?:\s+\[[^\]]+\])*\s*\[ref=([^\]]+)\]/)
-    if (!match || !interactiveRoles.has(match[1])) {
-      continue
-    }
-
-    let cleanLine = trimmed
-      .replace(/ \[cursor=pointer\]/g, '')
-      .replace(/ \[active\]/g, '')
-      .replace(/:$/, '')
-
-    result.push(cleanLine)
-
-    if (keepUrls && match[1] === 'link' && i + 1 < lines.length) {
-      const nextLine = lines[i + 1].trim()
-      if (nextLine.startsWith('- /url:')) {
-        result.push('  ' + nextLine)
-      }
-    }
-  }
-
-  return result.join('\n')
-}
-
-function extractInteractiveWithStructure(
-  lines: string[],
-  interactiveRoles: Set<string>,
-  contentRoles: Set<string>,
-  keepUrls: boolean
-): string {
-  const lineHasInteractive = new Array(lines.length).fill(false)
-  const lineIsInteractive = new Array(lines.length).fill(false)
-  const lineIndents = lines.map((l) => l.length - l.trimStart().length)
-  const lineRoles = lines.map((l) => {
-    const m = l.trim().match(/^-\s+(\w+)/)
-    return m ? m[1] : null
-  })
-
-  // Mark interactive lines
-  for (let i = 0; i < lines.length; i++) {
-    const role = lineRoles[i]
-    if (role && interactiveRoles.has(role)) {
-      lineHasInteractive[i] = true
-      lineIsInteractive[i] = true
-    } else if (role && contentRoles.has(role)) {
-      lineHasInteractive[i] = true
-    }
-  }
-
-  // Propagate up to ancestors
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (!lineHasInteractive[i]) {
-      continue
-    }
-    const myIndent = lineIndents[i]
-    for (let j = i - 1; j >= 0; j--) {
-      if (lineIndents[j] < myIndent && lines[j].trim()) {
-        lineHasInteractive[j] = true
-        break
-      }
-    }
-  }
-
-  // Build result
-  const result: string[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim()
-    if (!trimmed || !lineHasInteractive[i]) {
-      continue
-    }
-
-    // Skip /url: unless wanted
-    if (trimmed.startsWith('- /url:')) {
-      if (keepUrls && i > 0 && lineRoles[i - 1] === 'link') {
-        result.push(cleanSnapshotLine(lines[i]))
-      }
-      continue
-    }
-
-    // Skip text nodes
-    if (trimmed.startsWith('- text:')) {
-      continue
-    }
-
-    // Clean line and strip refs from non-interactive
-    let cleanedLine = cleanSnapshotLine(lines[i])
-    if (!lineIsInteractive[i]) {
-      cleanedLine = cleanedLine.replace(/\s*\[ref=[^\]]+\]/g, '')
-    }
-
-    result.push(cleanedLine)
-  }
-
-  return result.join('\n')
-}
-
-function collapseGenericWrappers(snapshot: string): string {
-  const lines = snapshot.split('\n')
-  const result: string[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
-
-    if (!trimmed) {
-      continue
-    }
-
-    // Check for unnamed wrapper: - generic: or - group:
-    if (/^-\s+(generic|group|region):$/.test(trimmed)) {
-      const currentIndent = line.length - line.trimStart().length
-      // Dedent children
-      for (let j = i + 1; j < lines.length; j++) {
-        const nextLine = lines[j]
-        if (!nextLine.trim()) {
-          continue
-        }
-        const nextIndent = nextLine.length - nextLine.trimStart().length
-        if (nextIndent <= currentIndent) {
-          break
-        }
-        lines[j] = nextLine.slice(0, currentIndent) + nextLine.slice(currentIndent + 2)
-      }
-      continue
-    }
-
-    result.push(line)
-  }
-
-  return result.join('\n')
-}
-
-function cleanSnapshotLine(line: string): string {
-  return line.replace(/ \[cursor=pointer\]/g, '').replace(/ \[active\]/g, '')
-}
-
-interface SnapshotNode {
-  indent: number
-  role: string
-  name: string | null
-  ref: string | null
-  rawLine: string
-  children: SnapshotNode[]
-}
-
-/**
- * Remove duplicate text from parent elements when the same text appears in descendants.
- * For example, if a row's name is "upvote | story title" and it contains children with
- * those exact names, the parent's name is redundant and can be removed.
- */
-export function deduplicateSnapshot(snapshot: string): string {
-  const lines = snapshot.split('\n')
-  const nodes: SnapshotNode[] = []
-  const stack: SnapshotNode[] = []
-
-  // Parse lines into nodes with tree structure
-  for (const line of lines) {
-    if (!line.trim()) {
-      continue
-    }
-
-    const indent = line.length - line.trimStart().length
-    const parsed = parseSnapshotLine(line)
-
-    const node: SnapshotNode = {
-      indent,
-      role: parsed.role,
-      name: parsed.name,
-      ref: parsed.ref,
-      rawLine: line,
-      children: [],
-    }
-
-    // Pop stack until we find parent (lower indent)
-    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
-      stack.pop()
-    }
-
-    if (stack.length > 0) {
-      stack[stack.length - 1].children.push(node)
-    } else {
-      nodes.push(node)
-    }
-
-    stack.push(node)
-  }
-
-  // Process each root node
-  for (const node of nodes) {
-    deduplicateNode(node)
-  }
-
-  // Rebuild snapshot
-  const result: string[] = []
-  for (const node of nodes) {
-    rebuildLines(node, result)
-  }
-
-  return result.join('\n')
-}
-
-function parseSnapshotLine(line: string): { role: string; name: string | null; ref: string | null } {
-  let trimmed = line.trim()
-
-  // Handle single-quote wrapped lines: - 'row "name with: colon"':
-  // These occur when the name contains a colon
-  if (trimmed.startsWith("- '") && trimmed.includes("':")) {
-    // Extract content between - ' and ':
-    const innerMatch = trimmed.match(/^-\s+'(.+)'/)
-    if (innerMatch) {
-      trimmed = '- ' + innerMatch[1]
-    }
-  }
-
-  // Match: - role "name" [ref=xxx]: or - role [ref=xxx]: or - role "name": or - role:
-  // Updated to support any ref format (not just e123)
-  const match = trimmed.match(/^-\s+(\w+)(?:\s+"([^"]*)")?(?:\s+\[ref=([^\]]+)\])?/)
-
-  if (!match) {
-    return { role: '', name: null, ref: null }
-  }
-
-  return {
-    role: match[1],
-    name: match[2] || null,
-    ref: match[3] || null,
-  }
-}
-
-function collectDescendantNames(node: SnapshotNode): Set<string> {
-  const names = new Set<string>()
-
-  for (const child of node.children) {
-    if (child.name) {
-      names.add(child.name)
-    }
-    // Recursively collect from grandchildren
-    for (const name of collectDescendantNames(child)) {
-      names.add(name)
-    }
-  }
-
-  return names
-}
-
-function isNameRedundant(name: string, descendantNames: Set<string>): boolean {
-  if (descendantNames.size === 0) {
-    return false
-  }
-
-  // Normalize the name - remove common separators and check if all parts exist in descendants
-  // Split by common separators: |, (, ), commas, and whitespace runs
-  const parts = name
-    .split(/[\|\(\),]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-
-  if (parts.length === 0) {
-    return false
-  }
-
-  // Check if each meaningful part is found in a descendant name
-  let matchedParts = 0
-  for (const part of parts) {
-    // Check if this part matches or is contained in any descendant name
-    for (const descName of descendantNames) {
-      if (descName === part || descName.includes(part) || part.includes(descName)) {
-        matchedParts++
-        break
-      }
-    }
-  }
-
-  // If most parts (>= 50%) are found in descendants, the name is redundant
-  return matchedParts >= parts.length * 0.5
-}
-
-function deduplicateNode(node: SnapshotNode): void {
-  // First, recursively process children
-  for (const child of node.children) {
-    deduplicateNode(child)
-  }
-
-  // Then check if this node's name is redundant
-  if (node.name && node.children.length > 0) {
-    const descendantNames = collectDescendantNames(node)
-    if (isNameRedundant(node.name, descendantNames)) {
-      node.name = null
-    }
-  }
-}
-
-function rebuildLines(node: SnapshotNode, result: string[]): void {
-  // Rebuild the line with potentially stripped name
-  const indent = ' '.repeat(node.indent)
-  let line = `${indent}- ${node.role}`
-
-  if (node.name) {
-    // Use double quotes, escape if needed
-    const escaped = node.name.replace(/"/g, '\\"')
-    line += ` "${escaped}"`
-  }
-
-  if (node.ref) {
-    line += ` [ref=${node.ref}]`
-  }
-
-  if (node.children.length > 0) {
-    line += ':'
-  }
-
-  result.push(line)
-
-  for (const child of node.children) {
-    rebuildLines(child, result)
-  }
-}
+export const DEFAULT_SNAPSHOT_FORMAT: SnapshotFormat = 'raw'
 
 // ============================================================================
 // A11y Client Code Loading
@@ -567,10 +86,11 @@ export interface ScreenshotResult {
 export interface AriaSnapshotResult {
   snapshot: string
   refToElement: Map<string, { role: string; name: string }>
+  refToSelector: Map<string, string>
   /**
    * Get a CSS selector for a ref. Use with page.locator().
    * For stable test IDs, returns [data-testid="..."] or [id="..."]
-   * For fallback refs (e1, e2), returns a role-based selector.
+   * For fallback refs, returns a role-based selector.
    */
   getSelectorForRef: (ref: string) => string | null
   getRefsForLocators: (locators: Array<Locator | ElementHandle>) => Promise<Array<AriaRef | null>>
@@ -601,13 +121,261 @@ const INTERACTIVE_ROLES = new Set([
   'audio',
 ])
 
+const LABEL_ROLES = new Set([
+  'labeltext',
+])
+
+const CONTEXT_ROLES = new Set([
+  'navigation',
+  'main',
+  'contentinfo',
+  'banner',
+  'form',
+  'section',
+  'region',
+  'list',
+  'listitem',
+  'table',
+  'rowgroup',
+  'row',
+  'cell',
+])
+
+const SKIP_WRAPPER_ROLES = new Set([
+  'generic',
+  'group',
+  'none',
+  'presentation',
+])
+
+const TEST_ID_ATTRS = [
+  'data-testid',
+  'data-test-id',
+  'data-test',
+  'data-cy',
+  'data-pw',
+  'data-qa',
+  'data-e2e',
+  'data-automation-id',
+]
+
+type DomNodeInfo = {
+  nodeId: Protocol.DOM.NodeId
+  parentId?: Protocol.DOM.NodeId
+  backendNodeId: Protocol.DOM.BackendNodeId
+  nodeName: string
+  attributes: Map<string, string>
+}
+
+function toAttributeMap(attributes?: string[]): Map<string, string> {
+  const result = new Map<string, string>()
+  if (!attributes) {
+    return result
+  }
+  for (let i = 0; i < attributes.length; i += 2) {
+    const name = attributes[i]
+    const value = attributes[i + 1]
+    if (name) {
+      result.set(name, value ?? '')
+    }
+  }
+  return result
+}
+
+function getStableRefFromAttributes(attributes: Map<string, string>): { value: string; attr: string } | null {
+  const id = attributes.get('id')
+  if (id) {
+    return { value: id, attr: 'id' }
+  }
+  for (const attr of TEST_ID_ATTRS) {
+    const value = attributes.get(attr)
+    if (value) {
+      return { value, attr }
+    }
+  }
+  return null
+}
+
+function escapeLocatorValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function buildLocatorFromStable(stable: { value: string; attr: string }): string {
+  const escaped = escapeLocatorValue(stable.value)
+  return `[${stable.attr}="${escaped}"]`
+}
+
+function buildBaseLocator({ role, name, stable }: { role: string; name: string; stable: { value: string; attr: string } | null }): string {
+  if (stable) {
+    return buildLocatorFromStable(stable)
+  }
+  const trimmedName = name.trim()
+  if (trimmedName.length > 0) {
+    const escapedName = escapeLocatorValue(trimmedName)
+    return `role=${role}[name="${escapedName}"]`
+  }
+  return `role=${role}`
+}
+
+
+function getAxValueString(value?: Protocol.Accessibility.AXValue): string {
+  if (!value) {
+    return ''
+  }
+  const raw = value.value
+  if (typeof raw === 'string') {
+    return raw
+  }
+  if (raw === undefined || raw === null) {
+    return ''
+  }
+  return String(raw)
+}
+
+function getAxRole(node: Protocol.Accessibility.AXNode): string {
+  const role = getAxValueString(node.role)
+  return role.toLowerCase()
+}
+
+type SnapshotLine = {
+  text: string
+  baseLocator?: string
+  hasChildren?: boolean
+}
+
+function buildSnapshotLine({ role, name, baseLocator, indent, hasChildren }: {
+  role: string
+  name: string
+  baseLocator?: string
+  indent: number
+  hasChildren: boolean
+}): SnapshotLine {
+  const prefix = '  '.repeat(indent)
+  let text = `${prefix}- ${role}`
+  if (name) {
+    const escapedName = name.replace(/"/g, '\\"')
+    text += ` "${escapedName}"`
+  }
+  return { text, baseLocator, hasChildren }
+}
+
+function buildTextLine(text: string, indent: number): SnapshotLine {
+  const prefix = '  '.repeat(indent)
+  const escaped = text.replace(/"/g, '\\"')
+  return { text: `${prefix}- text: "${escaped}"` }
+}
+
+function unindentLines(lines: SnapshotLine[]): SnapshotLine[] {
+  return lines.map((line) => {
+    return line.text.startsWith('  ')
+      ? { ...line, text: line.text.slice(2) }
+      : line
+  })
+}
+
+function finalizeSnapshotLines(lines: SnapshotLine[]): string {
+  const locatorCounts = lines.reduce<Map<string, number>>((acc, line) => {
+    if (!line.baseLocator) {
+      return acc
+    }
+    acc.set(line.baseLocator, (acc.get(line.baseLocator) ?? 0) + 1)
+    return acc
+  }, new Map<string, number>())
+
+  const locatorIndices = new Map<string, number>()
+  return lines.map((line) => {
+    let text = line.text
+    if (line.baseLocator) {
+      const count = locatorCounts.get(line.baseLocator) ?? 0
+      const index = locatorIndices.get(line.baseLocator) ?? 0
+      locatorIndices.set(line.baseLocator, index + 1)
+      const locator = count > 1 ? `${line.baseLocator} >> nth=${index}` : line.baseLocator
+      text = `${text} ${locator}`
+    }
+    if (line.hasChildren) {
+      text += ':'
+    }
+    return text
+  }).join('\n')
+}
+
+function buildDomIndex(nodes: Protocol.DOM.Node[]): {
+  domById: Map<Protocol.DOM.NodeId, DomNodeInfo>
+  domByBackendId: Map<Protocol.DOM.BackendNodeId, DomNodeInfo>
+  childrenByParent: Map<Protocol.DOM.NodeId, Protocol.DOM.NodeId[]>
+} {
+  const domById = new Map<Protocol.DOM.NodeId, DomNodeInfo>()
+  const domByBackendId = new Map<Protocol.DOM.BackendNodeId, DomNodeInfo>()
+  const childrenByParent = new Map<Protocol.DOM.NodeId, Protocol.DOM.NodeId[]>()
+
+  for (const node of nodes) {
+    const info: DomNodeInfo = {
+      nodeId: node.nodeId,
+      parentId: node.parentId,
+      backendNodeId: node.backendNodeId,
+      nodeName: node.nodeName,
+      attributes: toAttributeMap(node.attributes),
+    }
+    domById.set(node.nodeId, info)
+    domByBackendId.set(node.backendNodeId, info)
+    if (node.parentId) {
+      if (!childrenByParent.has(node.parentId)) {
+        childrenByParent.set(node.parentId, [])
+      }
+      childrenByParent.get(node.parentId)!.push(node.nodeId)
+    }
+  }
+
+  return { domById, domByBackendId, childrenByParent }
+}
+
+function findScopeRootNodeId(nodes: Protocol.DOM.Node[], attrName: string, attrValue: string): Protocol.DOM.NodeId | null {
+  for (const node of nodes) {
+    if (!node.attributes) {
+      continue
+    }
+    for (let i = 0; i < node.attributes.length; i += 2) {
+      const name = node.attributes[i]
+      const value = node.attributes[i + 1]
+      if (name === attrName && value === attrValue) {
+        return node.nodeId
+      }
+    }
+  }
+  return null
+}
+
+function buildBackendIdSet(rootNodeId: Protocol.DOM.NodeId, childrenByParent: Map<Protocol.DOM.NodeId, Protocol.DOM.NodeId[]>, domById: Map<Protocol.DOM.NodeId, DomNodeInfo>): Set<Protocol.DOM.BackendNodeId> {
+  const result = new Set<Protocol.DOM.BackendNodeId>()
+  const stack: Protocol.DOM.NodeId[] = [rootNodeId]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (current === undefined) {
+      continue
+    }
+    const node = domById.get(current)
+    if (node) {
+      result.add(node.backendNodeId)
+    }
+    const children = childrenByParent.get(current)
+    if (children && children.length > 0) {
+      stack.push(...children)
+    }
+  }
+  return result
+}
+
+function isTextRole(role: string): boolean {
+  return role === 'statictext' || role === 'inlinetextbox'
+}
+
 // ============================================================================
 // Main Functions
 // ============================================================================
 
 /**
  * Get an accessibility snapshot with utilities to look up refs for elements.
- * Uses dom-accessibility-api running entirely in browser context.
+ * Uses the browser accessibility tree (CDP) and maps nodes to DOM attributes.
  * 
  * Refs are generated from stable test IDs when available (data-testid, data-test-id, etc.)
  * or fall back to e1, e2, e3...
@@ -619,158 +387,368 @@ const INTERACTIVE_ROLES = new Set([
  * @example
  * ```ts
  * const { snapshot, getSelectorForRef } = await getAriaSnapshot({ page })
- * // Snapshot shows refs like [ref=submit-btn] or [ref=e5]
+ * // Snapshot shows locators like [id="submit-btn"] or role=button[name="Submit"]
  * const selector = getSelectorForRef('submit-btn')
  * await page.locator(selector).click()
  * ```
  */
-export async function getAriaSnapshot({ page, locator, refFilter }: {
+export async function getAriaSnapshot({ page, locator, refFilter, wsUrl, interactiveOnly = false }: {
   page: Page
   locator?: Locator
   refFilter?: (info: { role: string; name: string }) => boolean
+  wsUrl?: string
+  interactiveOnly?: boolean
 }): Promise<AriaSnapshotResult> {
-  await ensureA11yClient(page)
+  const cdp = await getCDPSessionForPage({ page, wsUrl })
+  await cdp.send('DOM.enable')
+  await cdp.send('Accessibility.enable')
+  const scopeAttr = 'data-pw-scope'
+  const scopeValue = crypto.randomUUID()
+  let scopeApplied = false
 
-  // Determine root element
-  const rootHandle = locator ? await locator.elementHandle() : null
-
-  const result = await page.evaluate(
-    ({ root, interactiveOnly }) => {
-      const a11y = (globalThis as any).__a11y
-      if (!a11y) {
-        throw new Error('a11y client not loaded')
-      }
-      const rootElement = root || document.body
-      return a11y.computeA11ySnapshot({
-        root: rootElement,
-        interactiveOnly,
-        renderLabels: false,
-      })
-    },
-    {
-      root: rootHandle,
-      interactiveOnly: !!refFilter,
-    }
-  )
-
-  // Build refToElement map
-  const refToElement = new Map<string, { role: string; name: string }>()
-  for (const { ref, role, name } of result.refs) {
-    if (!refFilter || refFilter({ role, name })) {
-      refToElement.set(ref, { role, name })
-    }
-  }
-
-  // Filter snapshot if refFilter provided
-  let snapshot = result.snapshot
-  if (refFilter) {
-    const lines = snapshot.split('\n').filter((line) => {
-      const match = line.match(/\[ref=([^\]]+)\]/)
-      if (!match) {
-        return true
-      }
-      const ref = match[1]
-      return refToElement.has(ref)
-    })
-    snapshot = lines.join('\n')
-  }
-
-  /**
-   * Get a CSS selector for a ref.
-   * For stable test IDs: [data-testid="value"] or [id="value"]
-   * For fallback refs: uses role + name matching
-   */
-  const getSelectorForRef = (ref: string): string | null => {
-    const info = refToElement.get(ref)
-    if (!info) {
-      return null
+  try {
+    if (locator) {
+      await locator.evaluate((element, data) => {
+        element.setAttribute(data.attr, data.value)
+      }, { attr: scopeAttr, value: scopeValue })
+      scopeApplied = true
     }
 
-    // Check if ref looks like a stable test ID (not e1, e2, etc.)
-    if (!/^e\d+$/.test(ref)) {
-      // Try common test ID attributes
-      return `[data-testid="${ref}"], [data-test-id="${ref}"], [data-test="${ref}"], [data-cy="${ref}"], [data-pw="${ref}"], [id="${ref}"]`
-    }
+    const { nodes: domNodes } = await cdp.send('DOM.getFlattenedDocument', { depth: -1, pierce: true })
+    const { domById, domByBackendId, childrenByParent } = buildDomIndex(domNodes)
 
-    // For fallback refs, use role-based selector
-    // This is less reliable but works for simple cases
-    const escapedName = info.name.replace(/"/g, '\\"')
-    return `[role="${info.role}"][aria-label="${escapedName}"], ${info.role}:has-text("${escapedName}")`
-  }
-
-  /**
-   * Find refs for locators by matching in browser context.
-   */
-  const getRefsForLocators = async (locators: Array<Locator | ElementHandle>): Promise<Array<AriaRef | null>> => {
-    if (locators.length === 0) {
-      return []
-    }
-
-    // Get handles for target locators
-    const targetHandles = await Promise.all(
-      locators.map(async (loc) => {
-        try {
-          return 'elementHandle' in loc
-            ? await (loc as Locator).elementHandle({ timeout: 1000 })
-            : (loc as ElementHandle)
-        } catch {
-          return null
+    let scopeRootNodeId: Protocol.DOM.NodeId | null = null
+    let scopeRootBackendId: Protocol.DOM.BackendNodeId | null = null
+    if (locator) {
+      scopeRootNodeId = findScopeRootNodeId(domNodes, scopeAttr, scopeValue)
+      if (scopeRootNodeId) {
+        const scopeNode = domById.get(scopeRootNodeId)
+        if (scopeNode) {
+          scopeRootBackendId = scopeNode.backendNodeId
         }
-      })
-    )
-
-    // Match in browser context
-    const matchingRefs = await page.evaluate(
-      ({ targets, refData }) => {
-        return targets.map((target) => {
-          if (!target) {
-            return null
-          }
-
-          // Try to find this element's ref by checking test ID attributes
-          const testIdAttrs = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-pw']
-          for (const attr of testIdAttrs) {
-            const value = (target as any).getAttribute(attr)
-            if (value && refData.some((r: any) => r.ref === value || r.ref.startsWith(value))) {
-              const match = refData.find((r: any) => r.ref === value || r.ref.startsWith(value))
-              return match ? match.ref : null
-            }
-          }
-
-          // Check id attribute
-          const id = (target as any).getAttribute('id')
-          if (id) {
-            const match = refData.find((r: any) => r.ref === id || r.ref.startsWith(id))
-            if (match) {
-              return match.ref
-            }
-          }
-
-          return null
-        })
-      },
-      {
-        targets: targetHandles,
-        refData: result.refs,
       }
-    )
+    }
 
-    return matchingRefs.map((ref) => {
-      if (!ref) {
+    const allowedBackendIds = scopeRootNodeId
+      ? buildBackendIdSet(scopeRootNodeId, childrenByParent, domById)
+      : null
+
+    const { nodes: axNodes } = await cdp.send('Accessibility.getFullAXTree')
+
+    const axById = new Map<Protocol.Accessibility.AXNodeId, Protocol.Accessibility.AXNode>()
+    for (const node of axNodes) {
+      axById.set(node.nodeId, node)
+    }
+
+    const findRootAxNodeId = (): Protocol.Accessibility.AXNodeId | null => {
+      if (scopeRootBackendId) {
+        const scoped = axNodes.find((node) => {
+          return node.backendDOMNodeId === scopeRootBackendId
+        })
+        if (scoped) {
+          return scoped.nodeId
+        }
+      }
+      const rootWebArea = axNodes.find((node) => {
+        return getAxRole(node) === 'rootwebarea'
+      })
+      if (rootWebArea) {
+        return rootWebArea.nodeId
+      }
+      const webArea = axNodes.find((node) => {
+        return getAxRole(node) === 'webarea'
+      })
+      if (webArea) {
+        return webArea.nodeId
+      }
+      const topLevel = axNodes.find((node) => {
+        return !node.parentId
+      })
+      return topLevel ? topLevel.nodeId : null
+    }
+
+    const rootAxNodeId = findRootAxNodeId()
+
+    const refCounts = new Map<string, number>()
+    let fallbackCounter = 0
+    const refs: Array<{ ref: string; role: string; name: string; selector?: string }> = []
+
+    const createRefForNode = (node: Protocol.Accessibility.AXNode, role: string, name: string): string | null => {
+      if (!INTERACTIVE_ROLES.has(role)) {
         return null
       }
-      const info = refToElement.get(ref)
-      return info ? { ...info, ref } : null
-    })
-  }
 
-  return {
-    snapshot,
-    refToElement,
-    getSelectorForRef,
-    getRefsForLocators,
-    getRefForLocator: async (loc) => (await getRefsForLocators([loc]))[0],
-    getRefStringForLocator: async (loc) => (await getRefsForLocators([loc]))[0]?.ref ?? null,
+      const domInfo = node.backendDOMNodeId ? domByBackendId.get(node.backendDOMNodeId) : undefined
+      const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
+      let baseRef = stable?.value
+      if (!baseRef) {
+        fallbackCounter += 1
+        baseRef = `e${fallbackCounter}`
+      }
+
+      const count = refCounts.get(baseRef) ?? 0
+      refCounts.set(baseRef, count + 1)
+      const ref = count === 0 ? baseRef : `${baseRef}-${count + 1}`
+
+      let selector: string | undefined
+      if (stable && count === 0) {
+        selector = buildLocatorFromStable(stable)
+      }
+
+      refs.push({ ref, role, name, selector })
+      return ref
+    }
+
+    const isNodeInScope = (node: Protocol.Accessibility.AXNode): boolean => {
+      if (!allowedBackendIds) {
+        return true
+      }
+      if (!node.backendDOMNodeId) {
+        return false
+      }
+      return allowedBackendIds.has(node.backendDOMNodeId)
+    }
+
+    const buildLines = (
+      nodeId: Protocol.Accessibility.AXNodeId,
+      indent: number,
+      ancestorNames: string[],
+      labelContext: boolean
+    ): { lines: SnapshotLine[]; included: boolean; names: Set<string> } => {
+      const node = axById.get(nodeId)
+      if (!node) {
+        return { lines: [], included: false, names: new Set() }
+      }
+
+      const role = getAxRole(node)
+      const name = getAxValueString(node.name).trim()
+      const hasName = name.length > 0
+      const nextAncestors = hasName ? [...ancestorNames, name] : ancestorNames
+
+      const isLabel = LABEL_ROLES.has(role)
+      const nextLabelContext = labelContext || isLabel
+
+      const childResults = (node.childIds ?? []).map((childId) => {
+        return buildLines(childId, indent + 1, nextAncestors, nextLabelContext)
+      })
+      const childLines = childResults.flatMap((result) => {
+        return result.lines
+      })
+      const childIncluded = childResults.some((result) => {
+        return result.included
+      })
+      const childNames = childResults.reduce((acc, result) => {
+        for (const childName of result.names) {
+          acc.add(childName)
+        }
+        return acc
+      }, new Set<string>())
+
+      const inScope = isNodeInScope(node) || childIncluded
+      if (!inScope) {
+        return { lines: [], included: false, names: new Set() }
+      }
+
+      if (node.ignored) {
+        return { lines: childLines, included: true, names: childNames }
+      }
+
+      if (isTextRole(role)) {
+        if (!hasName) {
+          return { lines: childLines, included: true, names: childNames }
+        }
+        if (interactiveOnly && !labelContext) {
+          return { lines: childLines, included: true, names: childNames }
+        }
+        const isRedundantText = ancestorNames.some((ancestor) => {
+          return ancestor.includes(name) || name.includes(ancestor)
+        })
+        if (isRedundantText) {
+          return { lines: childLines, included: true, names: childNames }
+        }
+        const names = new Set(childNames)
+        names.add(name)
+        return { lines: [buildTextLine(name, indent)], included: true, names }
+      }
+
+      const hasChildren = childLines.length > 0
+      const nameToUse = hasName && childNames.has(name) ? '' : name
+      const hasNameToUse = nameToUse.length > 0
+      const isWrapper = SKIP_WRAPPER_ROLES.has(role)
+      const isInteractive = INTERACTIVE_ROLES.has(role)
+      const isContext = CONTEXT_ROLES.has(role)
+      const passesRefFilter = !refFilter || refFilter({ role, name })
+      const includeInteractive = isInteractive && passesRefFilter
+      const shouldInclude = interactiveOnly
+        ? includeInteractive || isLabel || isContext || hasChildren
+        : includeInteractive || hasNameToUse || hasChildren
+      if (!shouldInclude) {
+        return { lines: childLines, included: true, names: childNames }
+      }
+
+      if (interactiveOnly && !includeInteractive && !isLabel && !isContext) {
+        if (!hasChildren) {
+          return { lines: [], included: true, names: childNames }
+        }
+        return { lines: unindentLines(childLines), included: true, names: childNames }
+      }
+
+      if (isWrapper && !hasNameToUse) {
+        if (!hasChildren) {
+          return { lines: [], included: true, names: childNames }
+        }
+        return { lines: unindentLines(childLines), included: true, names: childNames }
+      }
+
+      let baseLocator: string | undefined
+      if (includeInteractive) {
+        const domInfo = node.backendDOMNodeId ? domByBackendId.get(node.backendDOMNodeId) : undefined
+        const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
+        baseLocator = buildBaseLocator({ role, name, stable })
+        createRefForNode(node, role, name)
+      }
+
+      const line = buildSnapshotLine({
+        role,
+        name: nameToUse,
+        baseLocator,
+        indent,
+        hasChildren,
+      })
+      const names = new Set(childNames)
+      if (hasNameToUse) {
+        names.add(nameToUse)
+      }
+      return { lines: [line, ...childLines], included: true, names }
+    }
+
+    let snapshotLines: SnapshotLine[] = []
+    if (rootAxNodeId) {
+      const rootNode = axById.get(rootAxNodeId)
+      const rootRole = rootNode ? getAxRole(rootNode) : ''
+      if (rootNode && (rootRole === 'rootwebarea' || rootRole === 'webarea') && rootNode.childIds) {
+        snapshotLines = rootNode.childIds.flatMap((childId) => {
+          return buildLines(childId, 0, [], false).lines
+        })
+      } else {
+        snapshotLines = buildLines(rootAxNodeId, 0, [], false).lines
+      }
+    }
+
+    const result = { snapshot: finalizeSnapshotLines(snapshotLines), refs }
+
+    // Build refToElement map
+    const refToElement = new Map<string, { role: string; name: string }>()
+    const refToSelector = new Map<string, string>()
+    for (const { ref, role, name } of result.refs) {
+      if (!refFilter || refFilter({ role, name })) {
+        refToElement.set(ref, { role, name })
+      }
+    }
+
+    for (const { ref, selector } of result.refs) {
+      if (!selector) {
+        continue
+      }
+      refToSelector.set(ref, selector)
+    }
+
+    const snapshot = result.snapshot
+
+    const getSelectorForRef = (ref: string): string | null => {
+      const mapped = refToSelector.get(ref)
+      if (mapped) {
+        return mapped
+      }
+      const info = refToElement.get(ref)
+      if (!info) {
+        return null
+      }
+      const escapedName = info.name.replace(/"/g, '\\"')
+      return `role=${info.role}[name="${escapedName}"]`
+    }
+
+    const getRefsForLocators = async (locators: Array<Locator | ElementHandle>): Promise<Array<AriaRef | null>> => {
+      if (locators.length === 0) {
+        return []
+      }
+
+      const targetHandles = await Promise.all(
+        locators.map(async (loc) => {
+          try {
+            return 'elementHandle' in loc
+              ? await (loc as Locator).elementHandle({ timeout: 1000 })
+              : (loc as ElementHandle)
+          } catch {
+            return null
+          }
+        })
+      )
+
+      const matchingRefs = await page.evaluate(
+        ({ targets, refData }) => {
+          return targets.map((target) => {
+            if (!target) {
+              return null
+            }
+
+            const testIdAttrs = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-pw', 'data-qa', 'data-e2e', 'data-automation-id']
+            for (const attr of testIdAttrs) {
+              const value = target.getAttribute(attr)
+              if (value) {
+                const match = refData.find((ref) => {
+                  return ref.ref === value || ref.ref.startsWith(value)
+                })
+                if (match) {
+                  return match.ref
+                }
+              }
+            }
+
+            const id = target.getAttribute('id')
+            if (id) {
+              const match = refData.find((ref) => {
+                return ref.ref === id || ref.ref.startsWith(id)
+              })
+              if (match) {
+                return match.ref
+              }
+            }
+
+            return null
+          })
+        },
+        {
+          targets: targetHandles,
+          refData: result.refs,
+        }
+      )
+
+      return matchingRefs.map((ref) => {
+        if (!ref) {
+          return null
+        }
+        const info = refToElement.get(ref)
+        return info ? { ...info, ref } : null
+      })
+    }
+
+    return {
+      snapshot,
+      refToElement,
+      refToSelector,
+      getSelectorForRef,
+      getRefsForLocators,
+      getRefForLocator: async (loc) => (await getRefsForLocators([loc]))[0],
+      getRefStringForLocator: async (loc) => (await getRefsForLocators([loc]))[0]?.ref ?? null,
+    }
+  } finally {
+    if (scopeApplied && locator) {
+      await locator.evaluate((element, attr) => {
+        element.removeAttribute(attr)
+      }, scopeAttr)
+    }
+    await cdp.detach()
   }
 }
 

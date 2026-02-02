@@ -1,22 +1,34 @@
-import { describe, it, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Page } from 'playwright-core'
 import fs from 'node:fs'
 import path from 'node:path'
-import { compactSnapshot, interactiveSnapshot, deduplicateSnapshot, getAriaSnapshot } from './aria-snapshot.js'
-import { setupTestContext, cleanupTestContext, type TestContext } from './test-utils.js'
+import { getAriaSnapshot } from './aria-snapshot.js'
+import { getCdpUrl } from './utils.js'
+import { getCDPSessionForPage } from './cdp-session.js'
+import { setupTestContext, cleanupTestContext, getExtensionServiceWorker, type TestContext } from './test-utils.js'
 
 const TEST_PORT = 19986
 const SNAPSHOTS_DIR = path.join(import.meta.dirname, 'aria-snapshots')
+const AX_DEBUG_DIR = path.join(import.meta.dirname, '__snapshots__', 'ax-debug')
+const SHOULD_DUMP_AX = process.env.PLAYWRITER_DUMP_AX === '1'
 
-describe('aria-snapshot compression', () => {
+describe('aria-snapshot', () => {
   let ctx: TestContext
   let page: Page
 
   beforeAll(async () => {
-    ctx = await setupTestContext({ port: TEST_PORT, tempDirPrefix: 'aria-snapshot-test-' })
+    ctx = await setupTestContext({ port: TEST_PORT, tempDirPrefix: 'aria-snapshot-test-', toggleExtension: true })
     page = await ctx.browserContext.newPage()
+    const serviceWorker = await getExtensionServiceWorker(ctx.browserContext)
+    await page.goto('about:blank')
+    await serviceWorker.evaluate(async () => {
+      await (globalThis as any).toggleExtensionForActiveTab()
+    })
     if (!fs.existsSync(SNAPSHOTS_DIR)) {
       fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true })
+    }
+    if (SHOULD_DUMP_AX && !fs.existsSync(AX_DEBUG_DIR)) {
+      fs.mkdirSync(AX_DEBUG_DIR, { recursive: true })
     }
   }, 60000)
 
@@ -29,34 +41,46 @@ describe('aria-snapshot compression', () => {
     { name: 'github', url: 'https://github.com' },
   ]
 
-  const formats = [
-    { name: 'raw', transform: (s: string) => s },
-    { name: 'compact', transform: (s: string) => compactSnapshot(s) },
-    { name: 'interactive', transform: (s: string) => interactiveSnapshot(s) },
-    { name: 'interactive-dedup', transform: (s: string) => deduplicateSnapshot(interactiveSnapshot(s)) },
-    { name: 'interactive-flat', transform: (s: string) => interactiveSnapshot(s, { keepStructure: false }) },
-  ]
-
   for (const site of sites) {
-    it(`${site.name} - compression stats`, async () => {
+    it(`${site.name} - snapshot`, async () => {
       await page.goto(site.url, { waitUntil: 'domcontentloaded' })
       await page.waitForTimeout(1000)
 
-      const { snapshot } = await getAriaSnapshot({ page })
-      const rawSize = snapshot.length
-
-      console.log(`\n📊 ${site.name.toUpperCase()} compression stats:`)
-
-      for (const format of formats) {
-        const processed = format.transform(snapshot)
-        const size = processed.length
-        const savings = format.name === 'raw' ? 0 : Math.round((1 - size / rawSize) * 100)
-
-        fs.writeFileSync(path.join(SNAPSHOTS_DIR, `${site.name}-${format.name}.txt`), processed)
-
-        const savingsStr = format.name === 'raw' ? '(baseline)' : `${savings}% smaller`
-        console.log(`  ${format.name}: ${size} bytes ${savingsStr}`)
+      if (SHOULD_DUMP_AX) {
+        const cdp = await getCDPSessionForPage({ page, wsUrl: getCdpUrl({ port: TEST_PORT }) })
+        try {
+          await cdp.send('DOM.enable')
+          await cdp.send('Accessibility.enable')
+          const axTree = await cdp.send('Accessibility.getFullAXTree')
+          const domTree = await cdp.send('DOM.getFlattenedDocument', { depth: -1, pierce: true })
+          fs.writeFileSync(path.join(AX_DEBUG_DIR, `${site.name}-ax-tree.json`), JSON.stringify(axTree, null, 2))
+          fs.writeFileSync(path.join(AX_DEBUG_DIR, `${site.name}-dom-flat.json`), JSON.stringify(domTree, null, 2))
+        } finally {
+          await cdp.detach()
+        }
       }
+
+      const { snapshot } = await getAriaSnapshot({ page, wsUrl: getCdpUrl({ port: TEST_PORT }) })
+      expect(snapshot.length).toBeGreaterThan(0)
+      // Check for locator format: attribute selector or role selector
+      expect(snapshot).toMatch(/(?:\[id="|\[data-[\w-]+="|role=)/)
+      const wrapperLines = snapshot.split('\n').filter((line) => {
+        const trimmed = line.trim()
+        return /^-\s+(generic|group|none|presentation)\s*:?$/.test(trimmed)
+      })
+      expect(wrapperLines).toEqual([])
+      fs.writeFileSync(path.join(SNAPSHOTS_DIR, `${site.name}-raw.txt`), snapshot)
+      console.log(`\n📊 ${site.name.toUpperCase()} snapshot size: ${snapshot.length} bytes`)
+
+      const { snapshot: interactiveSnapshot } = await getAriaSnapshot({
+        page,
+        wsUrl: getCdpUrl({ port: TEST_PORT }),
+        interactiveOnly: true,
+      })
+      expect(interactiveSnapshot).not.toMatch(/^-\s+heading\b/m)
+      // Check for locator format: attribute selector or role selector
+      expect(interactiveSnapshot).toMatch(/(?:\[id="|\[data-[\w-]+="|role=)/)
+      fs.writeFileSync(path.join(SNAPSHOTS_DIR, `${site.name}-interactive.txt`), interactiveSnapshot)
     }, 30000)
   }
 })

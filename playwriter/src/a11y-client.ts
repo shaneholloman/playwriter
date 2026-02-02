@@ -60,6 +60,7 @@ const INTERACTIVE_ROLES = new Set([
   'audio',
 ])
 
+
 // CSS selectors for interactive elements
 const INTERACTIVE_SELECTORS = [
   'button',
@@ -130,42 +131,41 @@ const TEST_ID_ATTRS = [
   'data-pw', // Playwright
 ]
 
-// Patterns that indicate auto-generated/unstable IDs
-const UNSTABLE_ID_PATTERNS = [
-  /^:r[a-z0-9]+:$/i,  // React useId() pattern like :r0:, :r1a:
-  /^radix-/i,         // Radix UI
-  /^headlessui-/i,    // Headless UI
-  /^react-select-/i,  // React Select
-  /^rc-/i,            // Ant Design
-  /^mui-/i,           // Material UI
-  /^\d+$/,            // Pure numbers
-  /^[a-f0-9-]{36}$/i, // UUIDs
-  /^[a-f0-9]{8,}$/i,  // Long hex strings
-]
-
-function isStableId(id: string): boolean {
-  if (!id || id.length < 2) {
-    return false
+function getStableRef(element: Element): { value: string; attr: string } | null {
+  const id = element.getAttribute('id')
+  if (id) {
+    return { value: id, attr: 'id' }
   }
-  return !UNSTABLE_ID_PATTERNS.some((pattern) => pattern.test(id))
-}
-
-function getStableRef(element: Element): string | null {
-  // Check test ID attributes first
+  // Check test ID attributes
   for (const attr of TEST_ID_ATTRS) {
     const value = element.getAttribute(attr)
     if (value && value.length > 0) {
-      return value
+      return { value, attr }
     }
   }
 
-  // Check regular id if it looks stable
-  const id = element.getAttribute('id')
-  if (id && isStableId(id)) {
-    return id
-  }
-
   return null
+}
+
+function escapeLocatorValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function buildLocatorFromStable(stable: { value: string; attr: string }): string {
+  const escaped = escapeLocatorValue(stable.value)
+  return `[${stable.attr}="${escaped}"]`
+}
+
+function buildBaseLocator({ role, name, stable }: { role: string; name: string; stable: { value: string; attr: string } | null }): string {
+  if (stable) {
+    return buildLocatorFromStable(stable)
+  }
+  const trimmedName = name.trim()
+  if (trimmedName.length > 0) {
+    const escapedName = escapeLocatorValue(trimmedName)
+    return `role=${role}[name="${escapedName}"]`
+  }
+  return `role=${role}`
 }
 
 // ============================================================================
@@ -465,15 +465,15 @@ function renderLabels(elements: A11yElement[]): number {
 // Snapshot Generation
 // ============================================================================
 
-function buildSnapshotLine(role: string, name: string, ref: string, indent: number): string {
-  const prefix = '  '.repeat(indent)
-  let line = `${prefix}- ${role}`
+function buildSnapshotLine(role: string, name: string, locator: string | null): string {
+  let line = `- ${role}`
   if (name) {
-    // Escape quotes in name
     const escapedName = name.replace(/"/g, '\\"')
     line += ` "${escapedName}"`
   }
-  line += ` [ref=${ref}]`
+  if (locator) {
+    line += ` ${locator}`
+  }
   return line
 }
 
@@ -484,71 +484,111 @@ function buildSnapshotLine(role: string, name: string, ref: string, indent: numb
 export function computeA11ySnapshot(options: ComputeSnapshotOptions): A11ySnapshotResult {
   const { root, interactiveOnly, renderLabels: shouldRenderLabels } = options
 
-  // Query all interactive elements within root
-  const elements = root.querySelectorAll(INTERACTIVE_SELECTORS)
-
   // Track refs for deduplication
   const refCounts = new Map<string, number>()
   const a11yElements: A11yElement[] = []
+  const refs: Array<{ ref: string; role: string; name: string }> = []
   let fallbackCounter = 0
 
-  for (const element of elements) {
-    // Skip invisible elements
-    if (!isElementVisible(element)) {
-      continue
-    }
-
-    // Compute role
-    const role = computeRole(element)
-
-    // Filter to interactive only if requested
-    if (interactiveOnly && !INTERACTIVE_ROLES.has(role)) {
-      continue
-    }
-
-    // Compute accessible name
-    let name = ''
+  const getAccessibleName = (element: Element): string => {
     try {
-      name = computeAccessibleName(element) || ''
+      return computeAccessibleName(element) || ''
     } catch {
-      // Fallback to basic name computation
-      name =
+      return (
         element.getAttribute('aria-label') ||
         element.getAttribute('alt') ||
         element.getAttribute('title') ||
         (element.textContent || '').trim().slice(0, 100) ||
         ''
+      )
     }
+  }
 
-    // Generate ref - prefer stable test IDs
-    let baseRef = getStableRef(element)
+  const createRefForElement = (element: Element): { ref: string; stable: { value: string; attr: string } | null } => {
+    const stable = getStableRef(element)
+    let baseRef = stable?.value
     if (!baseRef) {
       fallbackCounter++
       baseRef = `e${fallbackCounter}`
     }
 
-    // Handle duplicates by appending count
     const count = refCounts.get(baseRef) || 0
     refCounts.set(baseRef, count + 1)
     const ref = count === 0 ? baseRef : `${baseRef}-${count + 1}`
 
-    a11yElements.push({ ref, role, name, element })
+    return { ref, stable }
   }
 
-  // Build snapshot string
-  const snapshotLines = a11yElements.map(({ ref, role, name }) => {
-    return buildSnapshotLine(role, name, ref, 0)
+  const cssSelector = interactiveOnly ? INTERACTIVE_SELECTORS : '*'
+  const elements = root.matches(cssSelector)
+    ? [root, ...Array.from(root.querySelectorAll(cssSelector))]
+    : Array.from(root.querySelectorAll(cssSelector))
+
+  const baseLocatorByElement = new WeakMap<Element, string>()
+
+  const includedElements = elements.reduce<Array<{ element: Element; role: string; name: string; isInteractive: boolean }>>((acc, element) => {
+    if (!isElementVisible(element)) {
+      return acc
+    }
+
+    const role = computeRole(element)
+    const name = getAccessibleName(element)
+    const hasName = name.trim().length > 0
+    const isInteractive = INTERACTIVE_ROLES.has(role)
+    const shouldInclude = interactiveOnly
+      ? isInteractive
+      : isInteractive || hasName
+
+    if (!shouldInclude) {
+      return acc
+    }
+
+    if (isInteractive) {
+      const { ref, stable } = createRefForElement(element)
+      const baseLocator = buildBaseLocator({ role, name, stable })
+      baseLocatorByElement.set(element, baseLocator)
+      a11yElements.push({ ref, role, name, element })
+      refs.push({ ref, role, name })
+    }
+
+    acc.push({ element, role, name, isInteractive })
+    return acc
+  }, [])
+
+  const locatorCounts = includedElements.reduce<Map<string, number>>((acc, entry) => {
+    if (!entry.isInteractive) {
+      return acc
+    }
+    const baseLocator = baseLocatorByElement.get(entry.element)
+    if (!baseLocator) {
+      return acc
+    }
+    acc.set(baseLocator, (acc.get(baseLocator) ?? 0) + 1)
+    return acc
+  }, new Map<string, number>())
+
+  const locatorIndices = new Map<string, number>()
+  const snapshotLines = includedElements.map((entry) => {
+    let locator: string | null = null
+    if (entry.isInteractive) {
+      const baseLocator = baseLocatorByElement.get(entry.element)
+      if (baseLocator) {
+        const count = locatorCounts.get(baseLocator) ?? 0
+        const index = locatorIndices.get(baseLocator) ?? 0
+        locatorIndices.set(baseLocator, index + 1)
+        locator = count > 1 ? `${baseLocator} >> nth=${index}` : baseLocator
+      }
+    }
+
+    return buildSnapshotLine(entry.role, entry.name, locator)
   })
+
   const snapshot = snapshotLines.join('\n')
 
-  // Render labels if requested
   let labelCount = 0
   if (shouldRenderLabels) {
     labelCount = renderLabels(a11yElements)
   }
-
-  // Return refs without element references (can't serialize DOM elements)
-  const refs = a11yElements.map(({ ref, role, name }) => ({ ref, role, name }))
 
   return { snapshot, labelCount, refs }
 }
