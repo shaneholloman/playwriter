@@ -195,15 +195,27 @@ export async function getCDPSessionForPage({ page, wsUrl }: { page: Page; wsUrl?
   const { targetInfos } = await cdp.send('Target.getTargets')
   const pageTargets = targetInfos.filter((t) => t.type === 'page')
 
-  if (pageIndex >= pageTargets.length) {
+  const pageUrl = page.url()
+  let target = pageTargets[pageIndex]
+
+  if (!target || target.url !== pageUrl) {
+    const matchingTargets = pageTargets.filter((candidate) => {
+      return candidate.url === pageUrl
+    })
+    if (matchingTargets.length > 0) {
+      const fallbackIndex = pageIndex < matchingTargets.length ? pageIndex : 0
+      target = matchingTargets[fallbackIndex]
+    }
+  }
+
+  if (!target) {
     cdp.close()
     throw new Error(`Page index ${pageIndex} out of bounds (${pageTargets.length} targets)`)
   }
 
-  const target = pageTargets[pageIndex]
-  if (target.url !== page.url()) {
+  if (target.url !== pageUrl) {
     cdp.close()
-    throw new Error(`URL mismatch: page has "${page.url()}" but target has "${target.url}"`)
+    throw new Error(`URL mismatch: page has "${pageUrl}" but target has "${target.url}"`)
   }
 
   const { sessionId } = await cdp.send('Target.attachToTarget', {
