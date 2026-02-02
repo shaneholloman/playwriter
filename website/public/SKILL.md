@@ -161,10 +161,10 @@ await page.keyboard.press('Meta+v');  // always verify with screenshot!
 ```
 
 **3. Using stale refs from old snapshots**
-`[ref=e23]` refs change when page updates. Always get a fresh snapshot before clicking:
+Fallback refs like `ref=e23` change when page updates. Always get a fresh snapshot before clicking:
 ```js
 // BAD: using ref from minutes ago
-await page.locator('[ref=e23]').click();  // element may have changed
+await page.locator('[id="old-id"]').click();  // element may have changed
 
 // GOOD: get fresh snapshot, then immediately use refs from it
 console.log(await accessibilitySnapshot({ page, showDiffSinceLastCall: true }));
@@ -254,18 +254,29 @@ console.log((await accessibilitySnapshot({ page })).split('\n').slice(50, 100).j
 Example output:
 
 ```md
-- banner [ref=e3]:
-    - link "Home" [ref=e5] [cursor=pointer]:
-        - /url: /
-    - navigation [ref=e12]:
-        - link "Docs" [ref=e13] [cursor=pointer]:
-            - /url: /docs
+- banner:
+    - link "Home" id=nav-home
+    - navigation:
+        - link "Docs" data-testid=docs-link
+        - link "Blog" ref=e1
+
+# Locators (pass to page.locator()):
+#   nav-home → [id="nav-home"]
+#   docs-link → [data-testid="docs-link"]
+#   e1 → role=link[name="Blog"]
 ```
 
-Use `aria-ref` to interact - **no quotes around the ref value**:
+The attribute name reflects where the ref came from:
+- `id=value` - element has an id attribute
+- `data-testid=value` - element has a data-testid attribute (or similar test attrs)
+- `ref=e1` - fallback for elements without stable IDs
+
+The **Locators** section at the end shows the exact selector to pass to `page.locator()`:
 
 ```js
-await page.locator('aria-ref=e13').click()
+await page.locator('[id="nav-home"]').click()
+await page.locator('[data-testid="docs-link"]').click()
+await page.locator('role=link[name="Blog"]').click()  // for fallback refs
 ```
 
 Search for specific elements:
@@ -276,7 +287,7 @@ const snapshot = await accessibilitySnapshot({ page, search: /button|submit/i })
 
 ## choosing between snapshot methods
 
-Both `accessibilitySnapshot` and `screenshotWithAccessibilityLabels` use the same `aria-ref` system, so you can combine them effectively.
+Both `accessibilitySnapshot` and `screenshotWithAccessibilityLabels` use the same ref system, so you can combine them effectively.
 
 **Use `accessibilitySnapshot` when:**
 - Page has simple, semantic structure (articles, forms, lists)
@@ -294,7 +305,7 @@ Both `accessibilitySnapshot` and `screenshotWithAccessibilityLabels` use the sam
 
 ## selector best practices
 
-**For unknown websites**: use `accessibilitySnapshot()` with `aria-ref` - it shows what's actually interactive.
+**For unknown websites**: use `accessibilitySnapshot()` - it shows what's actually interactive with stable refs.
 
 **For development** (when you have source code access), prefer stable selectors in this order:
 
@@ -538,17 +549,17 @@ const cdp = await getCDPSession({ page });
 const metrics = await cdp.send('Page.getLayoutMetrics');
 ```
 
-**getLocatorStringForElement** - get stable selector from ephemeral aria-ref:
+**getLocatorStringForElement** - get stable Playwright selector from an element:
 
 ```js
-const selector = await getLocatorStringForElement(page.locator('aria-ref=e14'));
+const selector = await getLocatorStringForElement(page.locator('[id="submit-btn"]'));
 // => "getByRole('button', { name: 'Save' })"
 ```
 
 **getReactSource** - get React component source location (dev mode only):
 
 ```js
-const source = await getReactSource({ locator: page.locator('aria-ref=e5') });
+const source = await getReactSource({ locator: page.locator('[data-testid="submit-btn"]') });
 // => { fileName, lineNumber, columnNumber, componentName }
 ```
 
@@ -583,8 +594,8 @@ Prefer this for pages with grids, image galleries, maps, or complex visual layou
 ```js
 await screenshotWithAccessibilityLabels({ page });
 // Image and accessibility snapshot are automatically included in response
-// Use aria-ref from snapshot to interact with elements
-await page.locator('aria-ref=e5').click();
+// Use refs from snapshot to interact with elements
+await page.locator('[id="submit-btn"]').click();
 
 // Can take multiple screenshots in one execution
 await screenshotWithAccessibilityLabels({ page });
