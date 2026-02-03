@@ -5,6 +5,7 @@ import { getCdpUrl } from './utils.js'
 import { getCDPSessionForPage } from './cdp-session.js'
 import { Debugger } from './debugger.js'
 import { Editor } from './editor.js'
+import { PlaywrightExecutor } from './executor.js'
 import { setupTestContext, cleanupTestContext, getExtensionServiceWorker, createSseServer, safeCloseCDPBrowser, type TestContext, withTimeout, js } from './test-utils.js'
 import './test-declarations.js'
 
@@ -104,6 +105,53 @@ describe('CDP Session Tests', () => {
         cdpSession.close()
         await browser.close()
         await page.close()
+    }, 60000)
+
+    it('should reuse cached CDP session and close on page close', async () => {
+        const browserContext = getBrowserContext()
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        const page = await browserContext.newPage()
+        await page.goto('https://example.com/')
+        await page.bringToFront()
+
+        await serviceWorker.evaluate(async () => {
+            await globalThis.toggleExtensionForActiveTab()
+        })
+        await new Promise(r => setTimeout(r, 100))
+
+        const executor = new PlaywrightExecutor({
+            cdpConfig: { port: TEST_PORT },
+            logger: {
+                log: () => {},
+                error: () => {},
+            },
+        })
+
+        const result = await executor.execute(js`
+            const sessionA = await getCDPSession({ page })
+            const sessionB = await getCDPSession({ page })
+            await sessionA.send('Runtime.evaluate', { expression: '1 + 1', returnByValue: true })
+            const evalResult = await sessionB.send('Runtime.evaluate', { expression: '2 + 2', returnByValue: true })
+            return evalResult.result.value
+        `)
+
+        expect(result.isError).toBe(false)
+        expect(result.text).toContain('[return value] 4')
+
+        await page.close()
+
+        const closeResult = await executor.execute(js`
+            try {
+                const session = await getCDPSession({ page })
+                await session.send('Runtime.evaluate', { expression: '3 + 3', returnByValue: true })
+                return 'unexpected'
+            } catch (e) {
+                return 'closed'
+            }
+        `)
+        expect(closeResult.isError).toBe(false)
+        expect(closeResult.text).toContain('[return value] closed')
     }, 60000)
 
     it('should list scripts with Debugger class', async () => {

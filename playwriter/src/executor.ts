@@ -610,12 +610,29 @@ export class PlaywrightExecutor {
       }
 
       const getCDPSession = async (options: { page: Page }) => {
+        if (options.page.isClosed()) {
+          throw new Error('Cannot create CDP session for closed page')
+        }
+
         const cached = this.cdpSessionCache.get(options.page)
-        if (cached) return cached
+        if (cached) {
+          return cached
+        }
+
         // Generate a fresh unique URL for each CDP session to avoid client ID conflicts
         const wsUrl = getCdpUrl(this.cdpConfig)
         const session = await getCDPSessionForPage({ page: options.page, wsUrl })
         this.cdpSessionCache.set(options.page, session)
+
+        options.page.on('close', () => {
+          const cachedSession = this.cdpSessionCache.get(options.page)
+          if (!cachedSession) {
+            return
+          }
+          this.cdpSessionCache.delete(options.page)
+          cachedSession.close()
+        })
+
         return session
       }
 
