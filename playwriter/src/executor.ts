@@ -449,7 +449,7 @@ export class PlaywrightExecutor {
         /** Only include interactive elements (default: true) */
         interactiveOnly?: boolean
       }) => {
-        const { page: targetPage, locator, search, showDiffSinceLastCall = true, interactiveOnly = true } = options
+        const { page: targetPage, locator, search, showDiffSinceLastCall = true, interactiveOnly = false } = options
 
         // Use new in-page implementation via getAriaSnapshot
         const { snapshot: rawSnapshot, refs, getSelectorForRef } = await getAriaSnapshot({
