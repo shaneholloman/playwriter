@@ -42,24 +42,56 @@ describe('Relay Core Tests', () => {
         const page = await browserContext.newPage()
         await page.setContent('<html><body><button id="btn">Click</button></body></html>')
         await page.bringToFront()
+        const pageUrl = page.url()
 
-        await serviceWorker.evaluate(async () => {
-            await globalThis.toggleExtensionForActiveTab()
+        await withTimeout({
+            promise: serviceWorker.evaluate(async () => {
+                await globalThis.toggleExtensionForActiveTab()
+            }),
+            timeoutMs: 10000,
+            errorMessage: 'Timed out toggling extension for active tab',
         })
         await new Promise((r) => { setTimeout(r, 100) })
 
-        const browser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
-        const cdpPage = browser.contexts()[0].pages().find(p => {
-            return p.url().startsWith('about:')
+        const browser = await withTimeout({
+            promise: chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT })),
+            timeoutMs: 10000,
+            errorMessage: 'Timed out connecting to browser over CDP',
+        })
+        const cdpPage = await withTimeout({
+            promise: (async () => {
+                for (let i = 0; i < 20; i++) {
+                    const context = browser.contexts()[0]
+                    const pages = context?.pages() ?? []
+                    const match = pages.find((p) => {
+                        return p.url() === pageUrl
+                    })
+                    if (match) {
+                        return match
+                    }
+                    await new Promise((r) => { setTimeout(r, 200) })
+                }
+                return null
+            })(),
+            timeoutMs: 5000,
+            errorMessage: `Timed out waiting for CDP page for ${pageUrl}`,
         })
         expect(cdpPage).toBeDefined()
 
-        const hasGlobalBefore = await cdpPage!.evaluate(() => !!(globalThis as any).__testGlobal)
+        const hasGlobalBefore = await cdpPage!.evaluate(() => {
+            return Boolean((globalThis as { __testGlobal?: unknown }).__testGlobal)
+        })
         expect(hasGlobalBefore).toBe(false)
 
-        await cdpPage!.addScriptTag({ content: 'globalThis.__testGlobal = { foo: "bar" };' })
+        await withTimeout({
+            promise: cdpPage!.addScriptTag({ content: 'globalThis.__testGlobal = { foo: "bar" };' }),
+            timeoutMs: 10000,
+            errorMessage: 'Timed out adding script tag via CDP page',
+        })
 
-        const hasGlobalAfter = await cdpPage!.evaluate(() => (globalThis as any).__testGlobal)
+        const hasGlobalAfter = await cdpPage!.evaluate(() => {
+            return (globalThis as { __testGlobal?: unknown }).__testGlobal
+        })
         expect(hasGlobalAfter).toEqual({ foo: 'bar' })
 
         await browser.close()
