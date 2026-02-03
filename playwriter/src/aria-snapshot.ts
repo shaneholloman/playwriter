@@ -161,6 +161,7 @@ const LABEL_ROLES = new Set([
 ])
 
 const MAX_LABEL_POSITION_CONCURRENCY = 24
+const BOX_MODEL_TIMEOUT_MS = 5000
 
 const CONTEXT_ROLES = new Set([
   'navigation',
@@ -931,7 +932,16 @@ async function getLabelBoxesForRefs({
         }
         await sema.acquire()
         try {
-          const response = await session.send('DOM.getBoxModel', { backendNodeId: ref.backendNodeId }) as Protocol.DOM.GetBoxModelResponse
+          const response = await Promise.race([
+            session.send('DOM.getBoxModel', { backendNodeId: ref.backendNodeId }) as Promise<Protocol.DOM.GetBoxModelResponse>,
+            new Promise<null>((resolve) => {
+              setTimeout(() => { resolve(null) }, BOX_MODEL_TIMEOUT_MS)
+            }),
+          ])
+          if (!response) {
+            logger?.error?.('[playwriter] getBoxModel timed out for', ref.ref)
+            return null
+          }
           const box = buildBoxFromQuad(response.model.border)
           if (!box) {
             return null
