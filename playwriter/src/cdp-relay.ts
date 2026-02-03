@@ -1116,61 +1116,61 @@ export async function startPlayWriterCDPRelayServer({
   // ============================================================================
   // CLI Execute Endpoints - For stateful code execution via CLI
   // ============================================================================
-  
+
   // Session counter for suggesting next session number
   let nextSessionNumber = 1
-  
+
   // Lazy-load ExecutorManager to avoid circular imports and only when needed
   let executorManager: import('./executor.js').ExecutorManager | null = null
-  
+
   const getExecutorManager = async () => {
     if (!executorManager) {
       const { ExecutorManager } = await import('./executor.js')
       // Pass config instead of URL so executor can generate unique client IDs for each connection
       executorManager = new ExecutorManager({
         cdpConfig: { host: '127.0.0.1', port },
-        logger: logger || { log: console.log, error: console.error },
+        logger: logger || { log: console.error, error: console.error },
       })
     }
     return executorManager
   }
-  
+
   app.post('/cli/execute', async (c) => {
     try {
       const body = await c.req.json() as { sessionId: string; code: string; timeout?: number; cwd?: string }
       const { sessionId, code, timeout = 10000, cwd } = body
-      
+
       if (!sessionId || !code) {
         return c.json({ error: 'sessionId and code are required' }, 400)
       }
-      
+
       const manager = await getExecutorManager()
       const executor = manager.getExecutor(sessionId, cwd)
       const result = await executor.execute(code, timeout)
-      
+
       // Increment session counter after each execution to avoid conflicts
       nextSessionNumber++
-      
+
       return c.json(result)
     } catch (error: any) {
       logger?.error('Execute endpoint error:', error)
       return c.json({ text: `Server error: ${error.message}`, images: [], isError: true }, 500)
     }
   })
-  
+
   app.post('/cli/reset', async (c) => {
     try {
       const body = await c.req.json() as { sessionId: string; cwd?: string }
       const { sessionId, cwd } = body
-      
+
       if (!sessionId) {
         return c.json({ error: 'sessionId is required' }, 400)
       }
-      
+
       const manager = await getExecutorManager()
       const executor = manager.getExecutor(sessionId, cwd)
       const { page, context } = await executor.reset()
-      
+
       return c.json({
         success: true,
         pageUrl: page.url(),
@@ -1181,32 +1181,32 @@ export async function startPlayWriterCDPRelayServer({
       return c.json({ error: error.message }, 500)
     }
   })
-  
+
   app.get('/cli/sessions', async (c) => {
     const manager = await getExecutorManager()
     return c.json({ sessions: manager.listSessions() })
   })
-  
+
   app.get('/cli/session/suggest', (c) => {
     return c.json({ next: nextSessionNumber })
   })
-  
+
   app.post('/cli/session/delete', async (c) => {
     try {
       const body = await c.req.json() as { sessionId: string }
       const { sessionId } = body
-      
+
       if (!sessionId) {
         return c.json({ error: 'sessionId is required' }, 400)
       }
-      
+
       const manager = await getExecutorManager()
       const deleted = manager.deleteExecutor(sessionId)
-      
+
       if (!deleted) {
         return c.json({ error: `Session ${sessionId} not found` }, 404)
       }
-      
+
       return c.json({ success: true })
     } catch (error: any) {
       logger?.error('Delete session endpoint error:', error)

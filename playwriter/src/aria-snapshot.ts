@@ -1069,11 +1069,18 @@ async function getLabelBoxesForRefs({
   logger?: { info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }
   cdp?: ICDPSession
 }): Promise<AriaLabel[]> {
+  const log = logger?.info ?? logger?.error ?? console.error
   const session = cdp || await getCDPSessionForPage({ page, wsUrl })
   const sema = new Sema(maxConcurrency)
   const labelRefs = refs.filter((ref) => {
     return Boolean(ref.backendNodeId) && INTERACTIVE_ROLES.has(ref.role)
   })
+
+  log(`[getLabelBoxesForRefs] processing ${labelRefs.length} interactive refs (concurrency: ${maxConcurrency})`)
+  const startTime = Date.now()
+  let completed = 0
+  let timedOut = 0
+  let failed = 0
 
   try {
     const labels = await Promise.all(
@@ -1089,8 +1096,12 @@ async function getLabelBoxesForRefs({
               setTimeout(() => { resolve(null) }, BOX_MODEL_TIMEOUT_MS)
             }),
           ])
+          completed++
+          if (completed % 50 === 0 || completed === labelRefs.length) {
+            log(`[getLabelBoxesForRefs] progress: ${completed}/${labelRefs.length} (${timedOut} timeouts, ${failed} errors) - ${Date.now() - startTime}ms`)
+          }
           if (!response) {
-            logger?.error?.('[playwriter] getBoxModel timed out for', ref.ref)
+            timedOut++
             return null
           }
           const box = buildBoxFromQuad(response.model.border)
@@ -1099,13 +1110,15 @@ async function getLabelBoxesForRefs({
           }
           return { ref: ref.ref, role: ref.role, box }
         } catch (error) {
-          logger?.error?.('[playwriter] getBoxModel failed for', ref.ref, error)
+          completed++
+          failed++
           return null
         } finally {
           sema.release()
         }
       })
     )
+    log(`[getLabelBoxesForRefs] done: ${completed} completed, ${timedOut} timeouts, ${failed} errors - ${Date.now() - startTime}ms`)
     return labels.filter(isTruthy)
   } finally {
     if (!cdp) {
@@ -1145,24 +1158,24 @@ export async function showAriaRefLabels({ page, locator, interactiveOnly = true,
   labelCount: number
 }> {
   const startTime = Date.now()
+  const log = logger?.info ?? logger?.error ?? console.error
+
+  log(`[showAriaRefLabels] starting...`)
   await ensureA11yClient(page)
+  log(`[showAriaRefLabels] ensureA11yClient: ${Date.now() - startTime}ms`)
 
-  const log = logger?.info ?? logger?.error
-  if (log) {
-    log(`ensureA11yClient: ${Date.now() - startTime}ms`)
-  }
-
-  const snapshotStart = Date.now()
+  const cdpStart = Date.now()
   const cdp = await getCDPSessionForPage({ page, wsUrl })
+  log(`[showAriaRefLabels] getCDPSessionForPage: ${Date.now() - cdpStart}ms`)
 
   try {
+    const snapshotStart = Date.now()
     const { snapshot, refs } = await getAriaSnapshot({ page, locator, interactiveOnly, wsUrl, cdp })
     const shortRefMap = new Map(refs.map((entry) => {
       return [entry.ref, entry.shortRef]
     }))
-    if (log) {
-      log(`getAriaSnapshot: ${Date.now() - snapshotStart}ms`)
-    }
+    const interactiveRefs = refs.filter((ref) => Boolean(ref.backendNodeId) && INTERACTIVE_ROLES.has(ref.role))
+    log(`[showAriaRefLabels] getAriaSnapshot: ${Date.now() - snapshotStart}ms (${refs.length} refs, ${interactiveRefs.length} interactive)`)
 
     const rootHandle = locator ? await locator.elementHandle() : null
 
@@ -1174,9 +1187,7 @@ export async function showAriaRefLabels({ page, locator, interactiveOnly = true,
         ref: shortRefMap.get(label.ref) ?? label.ref,
       }
     })
-    if (log) {
-      log(`getLabelBoxesForRefs: ${Date.now() - labelsStart}ms (${labels.length} boxes)`)
-    }
+    log(`[showAriaRefLabels] getLabelBoxesForRefs: ${Date.now() - labelsStart}ms (${labels.length} boxes)`)
 
     const renderStart = Date.now()
     const labelCount = await page.evaluate(({ entries, root, interactiveOnly: intOnly }) => {
@@ -1196,9 +1207,8 @@ export async function showAriaRefLabels({ page, locator, interactiveOnly = true,
       throw new Error('a11y client not loaded')
     }, { entries: shortLabels, root: rootHandle, interactiveOnly })
 
-    if (log) {
-      log(`renderA11yLabels: ${Date.now() - renderStart}ms (${labelCount} labels)`)
-    }
+    log(`[showAriaRefLabels] renderA11yLabels: ${Date.now() - renderStart}ms (${labelCount} labels)`)
+    log(`[showAriaRefLabels] total: ${Date.now() - startTime}ms`)
 
     return { snapshot, labelCount }
   } finally {
