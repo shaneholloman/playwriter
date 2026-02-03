@@ -91,32 +91,41 @@ globalThis.__readability = { Readability, isProbablyReaderable }
 
 async function buildBundle(config: BundleConfig): Promise<void> {
   const startTime = Date.now()
-  let entryPath: string
-  let cleanupEntry = false
-
-  if (config.type === 'source') {
-    entryPath = path.join(srcDir, config.entry)
-  } else {
-    // Create temporary entry file for wrapper bundles
-    const entrySuffix = `${process.pid}-${Date.now()}`
-    entryPath = path.join(distDir, `_${config.name}-entry-${entrySuffix}.js`)
-    fs.writeFileSync(entryPath, config.code)
-    cleanupEntry = true
-  }
+  const entrypoint =
+    config.type === 'source' ? path.join(srcDir, config.entry) : `virtual:${config.name}`
+  const plugins =
+    config.type === 'source'
+      ? []
+      : [
+          {
+            name: `virtual-${config.name}`,
+            setup(build) {
+              const filter = new RegExp(`^virtual:${config.name}$`)
+              build.onResolve({ filter }, (args) => {
+                return {
+                  path: args.path,
+                  namespace: 'virtual',
+                }
+              })
+              build.onLoad({ filter, namespace: 'virtual' }, () => {
+                return {
+                  contents: config.code,
+                  loader: 'js',
+                }
+              })
+            },
+          },
+        ]
 
   const result = await Bun.build({
-    entrypoints: [entryPath],
+    entrypoints: [entrypoint],
+    plugins,
     target: 'browser',
     format: 'iife',
     define: {
       'process.env.NODE_ENV': '"development"',
     },
   })
-
-  // Cleanup temporary entry file
-  if (cleanupEntry && fs.existsSync(entryPath)) {
-    fs.unlinkSync(entryPath)
-  }
 
   if (!result.success) {
     console.error(`Bundle errors for ${config.name}:`, result.logs)
