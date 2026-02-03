@@ -1,3 +1,6 @@
+// Accessibility snapshot pipeline: build raw AX tree, filter to a
+// tree (interactive-only, labels/contexts, wrapper hoisting, ignored
+// indent preservation), then render lines and locators.
 import type { Page, Locator, ElementHandle } from 'playwright-core'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -8,32 +11,11 @@ import { Sema } from 'async-sema'
 import type { ICDPSession } from './cdp-session.js'
 import { getCDPSessionForPage } from './cdp-session.js'
 
+
 // Import sharp at module level - resolves to null if not available
 const sharpPromise = import('sharp')
   .then((m) => { return m.default })
   .catch(() => { return null })
-
-// ============================================================================
-// Aria Snapshot Format Documentation
-// ============================================================================
-//
-// This module generates accessibility snapshots using the browser's
-// Accessibility.getFullAXTree (CDP) and maps nodes to stable DOM refs
-// via DOM.getFlattenedDocument (no per-node CDP calls).
-// The output format is:
-//
-// ```
-// - role "accessible name" locator
-// - button "Submit" [id="submit-btn"]
-// - link "Home" [data-testid="nav-home"]
-// - textbox "Search" role=textbox[name="Search"]
-// ```
-//
-// The locator is a Playwright selector that points to a unique element.
-// - Stable attributes: [id="..."] or [data-testid="..."]
-// - Fallback: role=... with accessible name, e.g. role=button[name="Submit"]
-// - Duplicates add >> nth=N (0-based) to make the locator unique
-// ============================================================================
 
 // ============================================================================
 // Snapshot Format Types
@@ -279,7 +261,7 @@ function getAxRole(node: Protocol.Accessibility.AXNode): string {
   return role.toLowerCase()
 }
 
-type SnapshotLine = {
+export type SnapshotLine = {
   text: string
   baseLocator?: string
   hasChildren?: boolean
@@ -288,12 +270,14 @@ type SnapshotLine = {
   indent?: number
 }
 
-type SnapshotNode = {
+export type SnapshotNode = {
   role: string
   name: string
   baseLocator?: string
   ref?: string
   backendNodeId?: Protocol.DOM.BackendNodeId
+  indentOffset?: number
+  ignored?: boolean
   children: SnapshotNode[]
 }
 
@@ -319,12 +303,264 @@ function buildTextLine(text: string, indent: number): SnapshotLine {
   return { text: `${prefix}- text: "${escaped}"` }
 }
 
-function unindentLines(lines: SnapshotLine[]): SnapshotLine[] {
-  return lines.map((line) => {
-    return line.text.startsWith('  ')
-      ? { ...line, text: line.text.slice(2) }
-      : line
+export function buildSnapshotLines(nodes: SnapshotNode[], indent = 0): SnapshotLine[] {
+  return nodes.flatMap((node) => {
+    const nodeIndent = indent + (node.indentOffset ?? 0)
+    const line = node.role === 'text'
+      ? buildTextLine(node.name, nodeIndent)
+      : buildSnapshotLine({
+        role: node.role,
+        name: node.name,
+        baseLocator: node.baseLocator,
+        indent: nodeIndent,
+        hasChildren: node.children.length > 0,
+      })
+    return [line, ...buildSnapshotLines(node.children, nodeIndent + 1)]
   })
+}
+
+function shiftIndent(nodes: SnapshotNode[], offset: number): SnapshotNode[] {
+  return nodes.map((node) => {
+    return { ...node, indentOffset: (node.indentOffset ?? 0) + offset }
+  })
+}
+
+export function buildRawSnapshotTree(options: {
+  nodeId: Protocol.Accessibility.AXNodeId
+  axById: Map<Protocol.Accessibility.AXNodeId, Protocol.Accessibility.AXNode>
+  isNodeInScope: (node: Protocol.Accessibility.AXNode) => boolean
+}): SnapshotNode | null {
+  const node = options.axById.get(options.nodeId)
+  if (!node) {
+    return null
+  }
+
+  const role = getAxRole(node)
+  const name = getAxValueString(node.name).trim()
+  const children = (node.childIds ?? []).map((childId) => {
+    return buildRawSnapshotTree({
+      nodeId: childId,
+      axById: options.axById,
+      isNodeInScope: options.isNodeInScope,
+    })
+  }).filter(isTruthy)
+
+  const inScope = options.isNodeInScope(node) || children.length > 0
+  if (!inScope) {
+    return null
+  }
+
+  return {
+    role,
+    name,
+    backendNodeId: node.backendDOMNodeId,
+    ignored: node.ignored,
+    children,
+  }
+}
+
+export function filterInteractiveSnapshotTree(options: {
+  node: SnapshotNode
+  ancestorNames: string[]
+  labelContext: boolean
+  refFilter?: (entry: { role: string; name: string }) => boolean
+  domByBackendId: Map<Protocol.DOM.BackendNodeId, DomNodeInfo>
+  createRefForNode: (options: { backendNodeId?: Protocol.DOM.BackendNodeId; role: string; name: string }) => string | null
+}): { nodes: SnapshotNode[]; names: Set<string> } {
+  const role = options.node.role
+  const name = options.node.name
+  const hasName = name.length > 0
+  const nextAncestors = hasName ? [...options.ancestorNames, name] : options.ancestorNames
+
+  const isLabel = LABEL_ROLES.has(role)
+  const nextLabelContext = options.labelContext || isLabel
+
+  const childResults = options.node.children.map((child) => {
+    return filterInteractiveSnapshotTree({
+      node: child,
+      ancestorNames: nextAncestors,
+      labelContext: nextLabelContext,
+      refFilter: options.refFilter,
+      domByBackendId: options.domByBackendId,
+      createRefForNode: options.createRefForNode,
+    })
+  })
+  const childNodes = childResults.flatMap((result) => {
+    return result.nodes
+  })
+  const childNames = childResults.reduce((acc, result) => {
+    result.names.forEach((childName) => {
+      acc.add(childName)
+    })
+    return acc
+  }, new Set<string>())
+
+  if (options.node.ignored) {
+    return { nodes: shiftIndent(childNodes, 1), names: childNames }
+  }
+
+  if (isTextRole(role)) {
+    if (!hasName) {
+      return { nodes: childNodes, names: childNames }
+    }
+    if (!options.labelContext) {
+      return { nodes: childNodes, names: childNames }
+    }
+    const isRedundantText = options.ancestorNames.some((ancestor) => {
+      return ancestor.includes(name) || name.includes(ancestor)
+    })
+    if (isRedundantText) {
+      return { nodes: childNodes, names: childNames }
+    }
+    const names = new Set(childNames)
+    names.add(name)
+    const textNode: SnapshotNode = { role: 'text', name, children: [] }
+    return { nodes: [textNode], names }
+  }
+
+  const hasChildren = childNodes.length > 0
+  const nameToUse = hasName && (childNames.has(name) || isSubstringOfAny(name, childNames)) ? '' : name
+  const hasNameToUse = nameToUse.length > 0
+  const isWrapper = SKIP_WRAPPER_ROLES.has(role)
+  const isInteractive = INTERACTIVE_ROLES.has(role)
+  const isContext = CONTEXT_ROLES.has(role)
+  const passesRefFilter = !options.refFilter || options.refFilter({ role, name })
+  const includeInteractive = isInteractive && passesRefFilter
+  const shouldInclude = includeInteractive || isLabel || isContext || hasChildren
+  if (!shouldInclude) {
+    return { nodes: childNodes, names: childNames }
+  }
+
+  if (!includeInteractive && !isLabel && !isContext) {
+    if (!hasChildren) {
+      return { nodes: [], names: childNames }
+    }
+    return { nodes: childNodes, names: childNames }
+  }
+
+  if (isWrapper && !hasNameToUse) {
+    if (!hasChildren) {
+      return { nodes: [], names: childNames }
+    }
+    return { nodes: childNodes, names: childNames }
+  }
+
+  let baseLocator: string | undefined
+  let ref: string | null = null
+  if (includeInteractive) {
+    const domInfo = options.node.backendNodeId ? options.domByBackendId.get(options.node.backendNodeId) : undefined
+    const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
+    baseLocator = buildBaseLocator({ role, name, stable })
+    ref = options.createRefForNode({ backendNodeId: options.node.backendNodeId, role, name })
+  }
+
+  const nodeEntry: SnapshotNode = {
+    role,
+    name: nameToUse,
+    baseLocator,
+    ref: ref ?? undefined,
+    backendNodeId: options.node.backendNodeId,
+    children: childNodes,
+  }
+  const names = new Set(childNames)
+  if (hasNameToUse) {
+    names.add(nameToUse)
+  }
+  return { nodes: [nodeEntry], names }
+}
+
+export function filterFullSnapshotTree(options: {
+  node: SnapshotNode
+  ancestorNames: string[]
+  refFilter?: (entry: { role: string; name: string }) => boolean
+  domByBackendId: Map<Protocol.DOM.BackendNodeId, DomNodeInfo>
+  createRefForNode: (options: { backendNodeId?: Protocol.DOM.BackendNodeId; role: string; name: string }) => string | null
+}): { nodes: SnapshotNode[]; names: Set<string> } {
+  const role = options.node.role
+  const name = options.node.name
+  const hasName = name.length > 0
+  const nextAncestors = hasName ? [...options.ancestorNames, name] : options.ancestorNames
+
+  const childResults = options.node.children.map((child) => {
+    return filterFullSnapshotTree({
+      node: child,
+      ancestorNames: nextAncestors,
+      refFilter: options.refFilter,
+      domByBackendId: options.domByBackendId,
+      createRefForNode: options.createRefForNode,
+    })
+  })
+  const childNodes = childResults.flatMap((result) => {
+    return result.nodes
+  })
+  const childNames = childResults.reduce((acc, result) => {
+    result.names.forEach((childName) => {
+      acc.add(childName)
+    })
+    return acc
+  }, new Set<string>())
+
+  if (options.node.ignored) {
+    return { nodes: shiftIndent(childNodes, 1), names: childNames }
+  }
+
+  if (isTextRole(role)) {
+    if (!hasName) {
+      return { nodes: childNodes, names: childNames }
+    }
+    const isRedundantText = options.ancestorNames.some((ancestor) => {
+      return ancestor.includes(name) || name.includes(ancestor)
+    })
+    if (isRedundantText) {
+      return { nodes: childNodes, names: childNames }
+    }
+    const names = new Set(childNames)
+    names.add(name)
+    const textNode: SnapshotNode = { role: 'text', name, children: [] }
+    return { nodes: [textNode], names }
+  }
+
+  const hasChildren = childNodes.length > 0
+  const nameToUse = hasName && (childNames.has(name) || isSubstringOfAny(name, childNames)) ? '' : name
+  const hasNameToUse = nameToUse.length > 0
+  const isWrapper = SKIP_WRAPPER_ROLES.has(role)
+  const isInteractive = INTERACTIVE_ROLES.has(role)
+  const passesRefFilter = !options.refFilter || options.refFilter({ role, name })
+  const includeInteractive = isInteractive && passesRefFilter
+  const shouldInclude = includeInteractive || hasNameToUse || hasChildren
+  if (!shouldInclude) {
+    return { nodes: childNodes, names: childNames }
+  }
+
+  if (isWrapper && !hasNameToUse) {
+    if (!hasChildren) {
+      return { nodes: [], names: childNames }
+    }
+    return { nodes: childNodes, names: childNames }
+  }
+
+  let baseLocator: string | undefined
+  let ref: string | null = null
+  if (includeInteractive) {
+    const domInfo = options.node.backendNodeId ? options.domByBackendId.get(options.node.backendNodeId) : undefined
+    const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
+    baseLocator = buildBaseLocator({ role, name, stable })
+    ref = options.createRefForNode({ backendNodeId: options.node.backendNodeId, role, name })
+  }
+
+  const nodeEntry: SnapshotNode = {
+    role,
+    name: nameToUse,
+    baseLocator,
+    ref: ref ?? undefined,
+    backendNodeId: options.node.backendNodeId,
+    children: childNodes,
+  }
+  const names = new Set(childNames)
+  if (hasNameToUse) {
+    names.add(nameToUse)
+  }
+  return { nodes: [nodeEntry], names }
 }
 
 function buildLocatorLineText({ line, locator }: { line: SnapshotLine; locator: string }): string {
@@ -348,7 +584,7 @@ function buildLocatorLineText({ line, locator }: { line: SnapshotLine; locator: 
   return `${base} ${locator}`
 }
 
-function finalizeSnapshotOutput(
+export function finalizeSnapshotOutput(
   lines: SnapshotLine[],
   nodes: SnapshotNode[],
   shortRefMap: Map<string, string>,
@@ -592,12 +828,16 @@ export async function getAriaSnapshot({ page, locator, refFilter, wsUrl, interac
     let fallbackCounter = 0
     const refs: AriaRefDraft[] = []
 
-    const createRefForNode = (node: Protocol.Accessibility.AXNode, role: string, name: string): string | null => {
-      if (!INTERACTIVE_ROLES.has(role)) {
+    const createRefForNode = (options: {
+      backendNodeId?: Protocol.DOM.BackendNodeId
+      role: string
+      name: string
+    }): string | null => {
+      if (!INTERACTIVE_ROLES.has(options.role)) {
         return null
       }
 
-      const domInfo = node.backendDOMNodeId ? domByBackendId.get(node.backendDOMNodeId) : undefined
+      const domInfo = options.backendNodeId ? domByBackendId.get(options.backendNodeId) : undefined
       const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
       let baseRef = stable?.value
       if (!baseRef) {
@@ -614,7 +854,7 @@ export async function getAriaSnapshot({ page, locator, refFilter, wsUrl, interac
         selector = buildLocatorFromStable(stable)
       }
 
-      refs.push({ ref, role, name, selector, backendNodeId: node.backendDOMNodeId })
+      refs.push({ ref, role: options.role, name: options.name, selector, backendNodeId: options.backendNodeId })
       return ref
     }
 
@@ -628,154 +868,40 @@ export async function getAriaSnapshot({ page, locator, refFilter, wsUrl, interac
       return allowedBackendIds.has(node.backendDOMNodeId)
     }
 
-    const buildLines = (
-      nodeId: Protocol.Accessibility.AXNodeId,
-      indent: number,
-      ancestorNames: string[],
-      labelContext: boolean
-    ): { lines: SnapshotLine[]; nodes: SnapshotNode[]; included: boolean; names: Set<string> } => {
-      const node = axById.get(nodeId)
-      if (!node) {
-        return { lines: [], nodes: [], included: false, names: new Set() }
-      }
 
-      const role = getAxRole(node)
-      const name = getAxValueString(node.name).trim()
-      const hasName = name.length > 0
-      const nextAncestors = hasName ? [...ancestorNames, name] : ancestorNames
-
-      const isLabel = LABEL_ROLES.has(role)
-      const nextLabelContext = labelContext || isLabel
-
-      const childResults = (node.childIds ?? []).map((childId) => {
-        return buildLines(childId, indent + 1, nextAncestors, nextLabelContext)
-      })
-      const childLines = childResults.flatMap((result) => {
-        return result.lines
-      })
-      const childNodes = childResults.flatMap((result) => {
-        return result.nodes
-      })
-      const childIncluded = childResults.some((result) => {
-        return result.included
-      })
-      const childNames = childResults.reduce((acc, result) => {
-        for (const childName of result.names) {
-          acc.add(childName)
-        }
-        return acc
-      }, new Set<string>())
-
-      const inScope = isNodeInScope(node) || childIncluded
-      if (!inScope) {
-        return { lines: [], nodes: [], included: false, names: new Set() }
-      }
-
-      if (node.ignored) {
-        return { lines: childLines, nodes: childNodes, included: true, names: childNames }
-      }
-
-      if (isTextRole(role)) {
-        if (!hasName) {
-          return { lines: childLines, nodes: childNodes, included: true, names: childNames }
-        }
-        if (interactiveOnly && !labelContext) {
-          return { lines: childLines, nodes: childNodes, included: true, names: childNames }
-        }
-        const isRedundantText = ancestorNames.some((ancestor) => {
-          return ancestor.includes(name) || name.includes(ancestor)
-        })
-        if (isRedundantText) {
-          return { lines: childLines, nodes: childNodes, included: true, names: childNames }
-        }
-        const names = new Set(childNames)
-        names.add(name)
-        const textLine = buildTextLine(name, indent)
-        const textNode: SnapshotNode = { role: 'text', name, children: [] }
-        return { lines: [textLine], nodes: [textNode], included: true, names }
-      }
-
-      const hasChildren = childLines.length > 0
-      const nameToUse = hasName && (childNames.has(name) || isSubstringOfAny(name, childNames)) ? '' : name
-      const hasNameToUse = nameToUse.length > 0
-      const isWrapper = SKIP_WRAPPER_ROLES.has(role)
-      const isInteractive = INTERACTIVE_ROLES.has(role)
-      const isContext = CONTEXT_ROLES.has(role)
-      const passesRefFilter = !refFilter || refFilter({ role, name })
-      const includeInteractive = isInteractive && passesRefFilter
-      const shouldInclude = interactiveOnly
-        ? includeInteractive || isLabel || isContext || hasChildren
-        : includeInteractive || hasNameToUse || hasChildren
-      if (!shouldInclude) {
-        return { lines: childLines, nodes: childNodes, included: true, names: childNames }
-      }
-
-      if (interactiveOnly && !includeInteractive && !isLabel && !isContext) {
-        if (!hasChildren) {
-          return { lines: [], nodes: [], included: true, names: childNames }
-        }
-        return { lines: unindentLines(childLines), nodes: childNodes, included: true, names: childNames }
-      }
-
-      if (isWrapper && !hasNameToUse) {
-        if (!hasChildren) {
-          return { lines: [], nodes: [], included: true, names: childNames }
-        }
-        return { lines: unindentLines(childLines), nodes: childNodes, included: true, names: childNames }
-      }
-
-      let baseLocator: string | undefined
-      let ref: string | null = null
-      if (includeInteractive) {
-        const domInfo = node.backendDOMNodeId ? domByBackendId.get(node.backendDOMNodeId) : undefined
-        const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
-        baseLocator = buildBaseLocator({ role, name, stable })
-        ref = createRefForNode(node, role, name)
-      }
-
-      const line = buildSnapshotLine({
-        role,
-        name: nameToUse,
-        baseLocator,
-        indent,
-        hasChildren,
-      })
-      const nodeEntry: SnapshotNode = {
-        role,
-        name: nameToUse,
-        baseLocator,
-        ref: ref ?? undefined,
-        backendNodeId: node.backendDOMNodeId,
-        children: childNodes,
-      }
-      const names = new Set(childNames)
-      if (hasNameToUse) {
-        names.add(nameToUse)
-      }
-      return { lines: [line, ...childLines], nodes: [nodeEntry], included: true, names }
-    }
-
-    let snapshotLines: SnapshotLine[] = []
     let snapshotNodes: SnapshotNode[] = []
     if (rootAxNodeId) {
       const rootNode = axById.get(rootAxNodeId)
       const rootRole = rootNode ? getAxRole(rootNode) : ''
-      if (rootNode && (rootRole === 'rootwebarea' || rootRole === 'webarea') && rootNode.childIds) {
-        const childResults = rootNode.childIds.map((childId) => {
-          return buildLines(childId, 0, [], false)
-        })
-        snapshotLines = childResults.flatMap((result) => {
-          return result.lines
-        })
-        snapshotNodes = childResults.flatMap((result) => {
-          return result.nodes
-        })
-      } else {
-        const result = buildLines(rootAxNodeId, 0, [], false)
-        snapshotLines = result.lines
-        snapshotNodes = result.nodes
-      }
+      const rawRoots = rootNode && (rootRole === 'rootwebarea' || rootRole === 'webarea') && rootNode.childIds
+        ? rootNode.childIds.map((childId) => {
+          return buildRawSnapshotTree({ nodeId: childId, axById, isNodeInScope })
+        }).filter(isTruthy)
+        : [buildRawSnapshotTree({ nodeId: rootAxNodeId, axById, isNodeInScope })].filter(isTruthy)
+
+      const filtered = rawRoots.flatMap((rawNode) => {
+        if (interactiveOnly) {
+          return filterInteractiveSnapshotTree({
+            node: rawNode,
+            ancestorNames: [],
+            labelContext: false,
+            refFilter,
+            domByBackendId,
+            createRefForNode,
+          }).nodes
+        }
+        return filterFullSnapshotTree({
+          node: rawNode,
+          ancestorNames: [],
+          refFilter,
+          domByBackendId,
+          createRefForNode,
+        }).nodes
+      })
+      snapshotNodes = filtered
     }
+
+    const snapshotLines = buildSnapshotLines(snapshotNodes)
 
     const shortRefMap = buildShortRefMap({ refs })
     const finalized = finalizeSnapshotOutput(snapshotLines, snapshotNodes, shortRefMap)
@@ -1008,7 +1134,7 @@ async function getLabelBoxesForRefs({
  * await page.locator('[data-testid="submit-btn"]').click()
  * ```
  */
-export async function showAriaRefLabels({ page, locator, interactiveOnly = true, wsUrl, logger }: {
+export async function showAriaRefLabels({ page, locator, interactiveOnly = false, wsUrl, logger }: {
   page: Page
   locator?: Locator
   interactiveOnly?: boolean
@@ -1119,7 +1245,7 @@ export async function hideAriaRefLabels({ page }: { page: Page }): Promise<void>
  * await page.locator('[data-testid="submit-btn"]').click()
  * ```
  */
-export async function screenshotWithAccessibilityLabels({ page, locator, interactiveOnly = true, wsUrl, collector, logger }: {
+export async function screenshotWithAccessibilityLabels({ page, locator, interactiveOnly = false, wsUrl, collector, logger }: {
   page: Page
   locator?: Locator
   interactiveOnly?: boolean
