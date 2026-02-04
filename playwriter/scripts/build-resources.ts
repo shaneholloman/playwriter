@@ -7,10 +7,13 @@
  * 
  * Source of truth:
  * - playwriter/src/skill.md - manually edited, contains full docs including CLI usage
+ * - skills/playwriter/SKILL.md - stub with frontmatter for agent discovery
  * 
  * Generated files:
  * - playwriter/dist/prompt.md - MCP prompt (skill.md minus CLI sections)
  * - website/public/SKILL.md - full copy for playwriter.dev/SKILL.md
+ * - website/public/.well-known/skills/index.json - Agent Skills Discovery endpoint
+ * - website/public/.well-known/skills/playwriter/SKILL.md - skill file with frontmatter
  */
 
 import fs from 'node:fs'
@@ -181,10 +184,85 @@ function buildPromptFromSkill() {
   console.log('Generated website/public/SKILL.md')
 }
 
+/**
+ * Parses YAML frontmatter from a markdown file.
+ * Returns { frontmatter, body } where frontmatter is the parsed YAML object.
+ */
+function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  if (!match) {
+    return { frontmatter: {}, body: content }
+  }
+  
+  const yamlContent = match[1]
+  const body = match[2]
+  
+  // Simple YAML parsing for key: value pairs
+  const frontmatter: Record<string, string> = {}
+  for (const line of yamlContent.split('\n')) {
+    const colonIndex = line.indexOf(':')
+    if (colonIndex > 0) {
+      const key = line.slice(0, colonIndex).trim()
+      const value = line.slice(colonIndex + 1).trim()
+      frontmatter[key] = value
+    }
+  }
+  
+  return { frontmatter, body }
+}
+
+/**
+ * Builds the Well-Known Skills Discovery structure.
+ * 
+ * Creates:
+ * - /.well-known/skills/index.json - discovery endpoint
+ * - /.well-known/skills/playwriter/SKILL.md - skill file
+ * 
+ * See: https://agentskills.io/specification
+ */
+function buildWellKnownSkills() {
+  const repoRoot = path.join(playwriterDir, '..')
+  const skillSourcePath = path.join(repoRoot, 'skills', 'playwriter', 'SKILL.md')
+  const websitePublicRoot = path.join(repoRoot, 'website', 'public')
+  const wellKnownDir = path.join(websitePublicRoot, '.well-known', 'skills')
+  const playwriterSkillDir = path.join(wellKnownDir, 'playwriter')
+  
+  // Read and parse the skill file
+  const skillContent = fs.readFileSync(skillSourcePath, 'utf-8')
+  const { frontmatter } = parseFrontmatter(skillContent)
+  
+  // Ensure directories exist
+  ensureDir(wellKnownDir)
+  ensureDir(playwriterSkillDir)
+  
+  // Copy SKILL.md to well-known location
+  fs.writeFileSync(path.join(playwriterSkillDir, 'SKILL.md'), skillContent, 'utf-8')
+  console.log('Generated website/public/.well-known/skills/playwriter/SKILL.md')
+  
+  // Generate index.json
+  const indexJson = {
+    skills: [
+      {
+        name: frontmatter.name || 'playwriter',
+        description: frontmatter.description || '',
+        files: ['SKILL.md']
+      }
+    ]
+  }
+  
+  fs.writeFileSync(
+    path.join(wellKnownDir, 'index.json'),
+    JSON.stringify(indexJson, null, 2) + '\n',
+    'utf-8'
+  )
+  console.log('Generated website/public/.well-known/skills/index.json')
+}
+
 // Run all builds
 buildDebuggerApi()
 buildEditorApi()
 buildStylesApi()
 buildPromptFromSkill()
+buildWellKnownSkills()
 
 console.log('Resource files generated successfully')
