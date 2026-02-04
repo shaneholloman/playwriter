@@ -360,12 +360,20 @@ class ConnectionManager {
       // This allows calling chrome.ghostPublicAPI, chrome.ghostProxies, chrome.projects
       // from the playwriter executor sandbox when running in Ghost Browser
       if (message.method === 'ghost-browser') {
-        const result = await handleGhostBrowserCommand(
-          message.params as GhostBrowserCommandParams,
-          chrome
-        )
+        const params = message.params as GhostBrowserCommandParams
+        const result = await handleGhostBrowserCommand(params, chrome)
         if (!result.success) {
           logger.error('Ghost Browser API error:', result.error)
+        }
+        // Auto-connect tabs created via ghostPublicAPI.openTab so they appear in context.pages()
+        if (result.success && params.namespace === 'ghostPublicAPI' && params.method === 'openTab') {
+          const tabId = result.result as number
+          if (tabId) {
+            logger.debug('Auto-connecting Ghost Browser tab:', tabId)
+            setTabConnecting(tabId)
+            await sleep(100)
+            await attachTab(tabId)
+          }
         }
         sendMessage({ id: message.id, result })
         return
