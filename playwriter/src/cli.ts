@@ -13,6 +13,14 @@ const cliRelayEnv = { PLAYWRITER_AUTO_ENABLE: '1' }
 
 const cli = cac('playwriter')
 
+type ExtensionStatus = {
+  extensionId: string
+  stableKey?: string
+  browser: string | null
+  profile: { email: string; id: string } | null
+  activeTargets: number
+}
+
 cli
   .command('', 'Start the MCP server or controls the browser with -e')
   .option('--host <host>', 'Remote relay server host to connect to (or use PLAYWRITER_HOST env var)')
@@ -46,12 +54,7 @@ async function getServerUrl(host?: string): Promise<string> {
   return `http://${serverHost}:${RELAY_PORT}`
 }
 
-async function fetchExtensionsStatus(host?: string): Promise<Array<{
-  extensionId: string
-  browser: string | null
-  profile: { email: string; id: string } | null
-  activeTargets: number
-}>> {
+async function fetchExtensionsStatus(host?: string): Promise<ExtensionStatus[]> {
   try {
     const serverUrl = await getServerUrl(host)
     const response = await fetch(`${serverUrl}/extensions/status`, {
@@ -75,18 +78,14 @@ async function fetchExtensionsStatus(host?: string): Promise<Array<{
       }
       return [{
         extensionId: 'default',
+        stableKey: undefined,
         browser: fallbackData.browser,
         profile: fallbackData.profile,
         activeTargets: fallbackData.activeTargets,
       }]
     }
     const data = await response.json() as {
-      extensions: Array<{
-        extensionId: string
-        browser: string | null
-        profile: { email: string; id: string } | null
-        activeTargets: number
-      }>
+      extensions: ExtensionStatus[]
     }
     return data.extensions
   } catch {
@@ -179,7 +178,7 @@ async function executeCode(options: {
 cli
   .command('session new', 'Create a new session and print the session ID')
   .option('--host <host>', 'Remote relay server host')
-  .option('--browser <id>', 'Browser ID to use when multiple browsers are connected')
+  .option('--browser <stableKey>', 'Stable browser key when multiple browsers are connected')
   .action(async (options: { host?: string; browser?: string }) => {
     if (!options.host && !process.env.PLAYWRITER_HOST) {
       await ensureRelayServer({ logger: console, env: cliRelayEnv })
@@ -191,25 +190,26 @@ cli
       process.exit(1)
     }
 
-    let selectedExtension: { extensionId: string; browser: string | null; profile: { email: string; id: string } | null } | null = null
+    let selectedExtension: ExtensionStatus | null = null
 
     if (extensions.length === 1) {
       selectedExtension = extensions[0]
     } else if (!options.browser) {
       console.log('Multiple browsers detected:\n')
-      console.log('ID       BROWSER  PROFILE')
-      console.log('-------  -------  -------')
+      console.log('KEY                      BROWSER  PROFILE')
+      console.log('-----------------------  -------  -------')
       for (const extension of extensions) {
         const label = extension.profile?.email || '(not signed in)'
-        const shortId = extension.extensionId === 'default' ? 'default' : extension.extensionId.slice(0, 7)
-        console.log(`${shortId.padEnd(7)}  ${(extension.browser || 'Chrome').padEnd(7)}  ${label}`)
+        const stableKey = extension.stableKey || '-'
+        console.log(`${stableKey.padEnd(23)}  ${(extension.browser || 'Chrome').padEnd(7)}  ${label}`)
       }
-      console.log('\nRun again with --browser <id>.')
+      console.log('\nRun again with --browser <stableKey>.')
       process.exit(1)
     } else {
-      selectedExtension = extensions.find((extension) => extension.extensionId === options.browser) || null
+      const browserArg = options.browser
+      selectedExtension = extensions.find((extension) => extension.stableKey === browserArg) || null
       if (!selectedExtension) {
-        console.error(`Browser not found: ${options.browser}`)
+        console.error(`Browser not found: ${browserArg}`)
         process.exit(1)
       }
     }
@@ -221,7 +221,9 @@ cli
 
     try {
       const serverUrl = await getServerUrl(options.host)
-      const extensionId = selectedExtension.extensionId === 'default' ? null : selectedExtension.extensionId
+      const extensionId = selectedExtension.extensionId === 'default'
+        ? null
+        : (selectedExtension.stableKey || selectedExtension.extensionId)
       const cwd = process.cwd()
       const response = await fetch(`${serverUrl}/cli/session/new`, {
         method: 'POST',
