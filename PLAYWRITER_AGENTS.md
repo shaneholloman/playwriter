@@ -175,14 +175,80 @@ if the problem was in the ws server you can restart that yourself killing proces
 
 to run the cli locally with your current changes call `tsx playwriter/src/cli.ts -e ...`. also make sure you kill process on 19988 first to make sure to use the latest relay executor code.
 
-## playwright source code
+## playwright fork (@xmorse/playwright-core)
 
-the playwright source code is cloned at `./tmp/playwright` (gitignored). use Task agents to explore it when you need to understand how playwright implements CDP commands, page discovery, browser connection, etc. key files:
+we maintain a fork of playwright-core at `./playwright` as a git submodule. this allows us to expose frame-level CDP access (targetId/sessionId) that upstream playwright doesn't provide.
 
-- `packages/playwright-core/src/server/chromium/` - chromium-specific CDP implementation
-- `packages/playwright-core/src/server/chromium/crConnection.ts` - CDP websocket connection
-- `packages/playwright-core/src/server/chromium/crBrowser.ts` - browser and page discovery
-- `packages/playwright-core/src/server/chromium/chromium.ts` - connectOverCDP implementation
+### submodule setup
+
+the playwright submodule should always stay on branch `playwriter`. never switch to main or other branches.
+
+```bash
+# check current branch
+cd playwright && git branch
+
+# if not on playwriter branch
+git checkout playwriter
+```
+
+### bootstrapping the repo
+
+after cloning this repo, run bootstrap to set up the playwright submodule:
+
+```bash
+pnpm bootstrap
+```
+
+this does:
+1. `git submodule update --init` - init the playwright submodule
+2. `pnpm install` - install deps and link workspace packages
+3. `node playwright/utils/generate_injected.js` - generate browser scripts to `src/generated/`
+4. `node playwright/packages/playwright-core/build.mjs` - transpile (0.1s)
+
+### rebuilding after changes
+
+after modifying playwright-core source:
+
+```bash
+pnpm playwright:build  # 0.1s
+```
+
+### how the simplified build works
+
+upstream playwright bundles all dependencies into single files (zero runtime deps). we skip this by using direct dependencies instead:
+
+**1. dependencies in package.json** - ws, debug, pngjs, commander, etc. are regular deps
+
+**2. rewritten bundle files** - `playwright/packages/playwright-core/src/utilsBundle.ts`, `zipBundle.ts`, `mcpBundle.ts` import directly:
+```ts
+// before (bundled)
+export const ws = require('./utilsBundleImpl').ws;
+
+// after (direct)  
+import wsLibrary from 'ws';
+export const ws = wsLibrary;
+```
+
+**3. simple build script** (`playwright/packages/playwright-core/build.mjs`) - just esbuild transpile + copy vendored files:
+```bash
+# transpile src/**/*.ts → lib/**/*.js (0.1s)
+# copy third_party/lockfile.js, third_party/extract-zip.js
+```
+
+**4. generated files** - `playwright/packages/playwright-core/src/generated/*.ts` are browser scripts created by `playwright/utils/generate_injected.js`. these only need regenerating if upstream changes injected scripts.
+
+| | upstream | ours |
+|---|---|---|
+| build time | ~30s | 0.1s |
+| dependencies | 0 (bundled) | ~20 (external) |
+| trace-viewer | built | skipped |
+
+### key source files
+
+- `playwright/packages/playwright-core/src/server/chromium/` - chromium CDP implementation
+- `playwright/packages/playwright-core/src/server/chromium/crConnection.ts` - CDP websocket connection
+- `playwright/packages/playwright-core/src/server/chromium/crBrowser.ts` - browser and page discovery
+- `playwright/packages/playwright-core/src/server/chromium/chromium.ts` - connectOverCDP implementation
 
 ## ./claude-extension
 

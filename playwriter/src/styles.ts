@@ -1,5 +1,5 @@
 import type { ICDPSession, CDPSession } from './cdp-session.js'
-import type { Locator } from 'playwright-core'
+import type { Locator } from '@xmorse/playwright-core'
 
 export interface StyleSource {
   url: string

@@ -3,7 +3,7 @@
  * Used by both MCP and CLI to execute Playwright code with persistent state.
  */
 
-import { Page, Frame, Browser, BrowserContext, chromium, Locator } from 'playwright-core'
+import { Page, Frame, Browser, BrowserContext, chromium, Locator } from '@xmorse/playwright-core'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'

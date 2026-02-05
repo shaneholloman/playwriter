@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import net from 'node:net'
-import { Page } from 'playwright-core'
+import { Page } from '@xmorse/playwright-core'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getAriaSnapshot } from './aria-snapshot.js'

@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import type { Page } from 'playwright-core'
+import type { Page } from '@xmorse/playwright-core'
 import type { ProtocolMapping } from 'devtools-protocol/types/protocol-mapping.js'
 import type { CDPResponseBase, CDPEventBase } from './cdp-types.js'
 import { getCdpUrl } from './utils.js'

@@ -1,4 +1,4 @@
-import type { Page } from 'playwright-core'
+import type { Page } from '@xmorse/playwright-core'
 import { sleep } from './utils.js'
 
 const FILTERED_DOMAINS = [

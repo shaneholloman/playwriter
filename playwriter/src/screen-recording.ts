@@ -8,7 +8,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import type { Page } from 'playwright-core'
+import type { Page } from '@xmorse/playwright-core'
 import type {
   StartRecordingResult,
   StopRecordingResult,

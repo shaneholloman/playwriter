@@ -1,7 +1,7 @@
 // Accessibility snapshot pipeline: build raw AX tree, filter to a
 // tree (interactive-only, labels/contexts, wrapper hoisting, ignored
 // indent preservation), then render lines and locators.
-import type { Page, Locator, ElementHandle } from 'playwright-core'
+import type { Page, Locator, ElementHandle } from '@xmorse/playwright-core'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'

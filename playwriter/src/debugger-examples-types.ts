@@ -1,4 +1,4 @@
-import type { Page, Locator } from 'playwright-core'
+import type { Page, Locator } from '@xmorse/playwright-core'
 import type { CDPSession } from './cdp-session.js'
 import type { Debugger } from './debugger.js'
 import type { Editor } from './editor.js'

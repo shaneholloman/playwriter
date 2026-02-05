@@ -1,7 +1,7 @@
 import { createMCPClient } from './mcp-client.js'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { chromium } from 'playwright-core'
-import type { Page } from 'playwright-core'
+import { chromium } from '@xmorse/playwright-core'
+import type { Page } from '@xmorse/playwright-core'
 import type { AriaSnapshotNode } from './aria-snapshot.js'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -118,7 +118,7 @@ describe('Snapshot & Screenshot Tests', () => {
               "params": {
                 "captureBeyondViewport": false,
                 "clip": {
-                  "height": 528,
+                  "height": 581,
                   "scale": 1,
                   "width": 1280,
                   "x": 0,

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Page, Locator, ElementHandle } from 'playwright-core'
+import type { Page, Locator, ElementHandle } from '@xmorse/playwright-core'
 import type { ICDPSession, CDPSession } from './cdp-session.js'
 
 export interface ReactSourceLocation {

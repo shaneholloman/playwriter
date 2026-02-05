@@ -1,4 +1,4 @@
-import { Page, Locator } from 'playwright-core'
+import { Page, Locator } from '@xmorse/playwright-core'
 import { formatHtmlForPrompt } from './htmlrewrite.js'
 import { createSmartDiff } from './diff-utils.js'
 

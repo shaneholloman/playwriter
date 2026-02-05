@@ -2,7 +2,7 @@ import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
 import http from 'node:http'
 import net from 'node:net'
-import { chromium, BrowserContext } from 'playwright-core'
+import { chromium, BrowserContext } from '@xmorse/playwright-core'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -317,7 +317,7 @@ export function tryJsonParse(str: string) {
  * @param drainDelayMs - Time to wait for pending messages to be processed (default: 50ms)
  */
 export async function safeCloseCDPBrowser(
-    browser: Awaited<ReturnType<typeof import('playwright-core').chromium.connectOverCDP>>,
+    browser: Awaited<ReturnType<typeof import('@xmorse/playwright-core').chromium.connectOverCDP>>,
     drainDelayMs = 50
 ): Promise<void> {
     // Wait for any queued message handlers to run
