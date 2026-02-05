@@ -175,9 +175,15 @@ if the problem was in the ws server you can restart that yourself killing proces
 
 to run the cli locally with your current changes call `tsx playwriter/src/cli.ts -e ...`. also make sure you kill process on 19988 first to make sure to use the latest relay executor code.
 
-## playwright fork (@xmorse/playwright-core)
+# playwright fork submodule (@xmorse/playwright-core)
 
 we maintain a fork of playwright-core at `./playwright` as a git submodule. this allows us to expose frame-level CDP access (targetId/sessionId) that upstream playwright doesn't provide.
+
+relevant files are located in paths like playwright/packages/playwright-core/src/client/page.ts
+
+ignore everything that is outside of playwright/packages/playwright-core in the playwright submodule, it is unused
+
+for our playwright fork notice the types.d.ts are generated from markdown files, so adding new APIs require updating those and not the actual source files unfortunately
 
 ### submodule setup
 
