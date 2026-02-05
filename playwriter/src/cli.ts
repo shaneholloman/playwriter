@@ -182,7 +182,12 @@ cli
   .action(async (options: { host?: string; browser?: string }) => {
     if (!options.host && !process.env.PLAYWRITER_HOST) {
       await ensureRelayServer({ logger: console, env: cliRelayEnv })
+      await waitForExtension({
+        timeoutMs: 3000,
+        logger: console,
+      })
     }
+
 
     const extensions = await fetchExtensionsStatus(options.host)
     if (extensions.length === 0) {
