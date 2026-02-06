@@ -55,7 +55,7 @@ describe('Relay Core Tests', () => {
         await new Promise((r) => { setTimeout(r, 100) })
 
         const cdpSession = await withTimeout({
-            promise: getCDPSessionForPage({ page, wsUrl: getCdpUrl({ port: TEST_PORT }) }),
+            promise: getCDPSessionForPage({ page }),
             timeoutMs: 10000,
             errorMessage: 'Timed out creating CDP session for page',
         })
@@ -82,7 +82,7 @@ describe('Relay Core Tests', () => {
         })
         expect(hasGlobalAfter).toEqual({ foo: 'bar' })
 
-        cdpSession.close()
+        await cdpSession.detach()
         await page.close()
     }, 60000)
 

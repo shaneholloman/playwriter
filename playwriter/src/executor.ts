@@ -16,7 +16,7 @@ import * as acorn from 'acorn'
 import { createSmartDiff } from './diff-utils.js'
 import { getCdpUrl } from './utils.js'
 import { waitForPageLoad, WaitForPageLoadOptions, WaitForPageLoadResult } from './wait-for-page-load.js'
-import { getCDPSessionForPage, CDPSession, ICDPSession, getExistingCDPSessionForPage } from './cdp-session.js'
+import { ICDPSession, getCDPSessionForPage } from './cdp-session.js'
 import { Debugger } from './debugger.js'
 import { Editor } from './editor.js'
 import { getStylesForLocator, formatStylesAsText, type StylesResult } from './styles.js'
@@ -218,7 +218,7 @@ export class PlaywrightExecutor {
   private browserLogs: Map<string, string[]> = new Map()
   private lastSnapshots: WeakMap<Page, string> = new WeakMap()
   private lastRefToLocator: WeakMap<Page, Map<string, string>> = new WeakMap()
-  private cdpSessionCache: WeakMap<Page, ICDPSession> = new WeakMap()
+
   private scopedFs: ScopedFS
   private sandboxedRequire: NodeRequire
 
@@ -555,7 +555,6 @@ export class PlaywrightExecutor {
           page: resolvedPage,
           frame,
           locator,
-          wsUrl: getCdpUrl(this.cdpConfig),
           interactiveOnly,
         })
         const snapshotStr = rawSnapshot.toWellFormed?.() ?? rawSnapshot
@@ -717,30 +716,7 @@ export class PlaywrightExecutor {
         if (options.page.isClosed()) {
           throw new Error('Cannot create CDP session for closed page')
         }
-
-        const cached = this.cdpSessionCache.get(options.page)
-        if (cached) {
-          return cached
-        }
-
-        // Reuse Playwright's internal CDP session over the same WebSocket instead of
-        // creating a new WS connection. This is critical for the relay where
-        // Target.attachToTarget is intercepted and can't create real new sessions.
-        const session = await getExistingCDPSessionForPage({ page: options.page })
-        this.cdpSessionCache.set(options.page, session)
-
-        options.page.on('close', () => {
-          const cachedSession = this.cdpSessionCache.get(options.page)
-          if (!cachedSession) {
-            return
-          }
-          this.cdpSessionCache.delete(options.page)
-          // Borrowed sessions: detach is a no-op since Playwright owns the underlying session.
-          // We just clean up the cache reference.
-          cachedSession.detach().catch(() => {})
-        })
-
-        return session
+        return await getCDPSessionForPage({ page: options.page })
       }
 
       const createDebugger = (options: { cdp: ICDPSession }) => new Debugger(options)
@@ -761,7 +737,6 @@ export class PlaywrightExecutor {
       const screenshotWithAccessibilityLabelsFn = async (options: { page: Page; interactiveOnly?: boolean }) => {
         return screenshotWithAccessibilityLabels({
           ...options,
-          wsUrl: getCdpUrl(this.cdpConfig),
           collector: screenshotCollector,
           logger: {
             info: (...args) => {

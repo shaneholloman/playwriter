@@ -53,7 +53,7 @@ describe('CDP Session Tests', () => {
         await new Promise(r => setTimeout(r, 100))
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -102,7 +102,7 @@ describe('CDP Session Tests', () => {
         expect(dbg.isPaused()).toBe(false)
         await evalPromise
 
-        cdpSession.close()
+        await cdpSession.detach()
         await page.close()
     }, 60000)
 
@@ -161,7 +161,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -171,7 +171,7 @@ describe('CDP Session Tests', () => {
         expect(scripts[0]).toHaveProperty('scriptId')
         expect(scripts[0]).toHaveProperty('url')
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -197,7 +197,7 @@ describe('CDP Session Tests', () => {
         await new Promise(r => setTimeout(r, 100))
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -216,7 +216,7 @@ describe('CDP Session Tests', () => {
         await dbg.deleteBreakpoint({ breakpointId: bpId })
         expect(dbg.listBreakpoints()).toHaveLength(0)
 
-        cdpSession.close()
+        await cdpSession.detach()
         await page.close()
     }, 60000)
 
@@ -234,7 +234,7 @@ describe('CDP Session Tests', () => {
         await new Promise(r => setTimeout(r, 100))
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -285,7 +285,7 @@ describe('CDP Session Tests', () => {
         await dbg.resume()
         await evalPromise
 
-        cdpSession.close()
+        await cdpSession.detach()
         await page.close()
     }, 60000)
 
@@ -304,7 +304,7 @@ describe('CDP Session Tests', () => {
         await new Promise(r => setTimeout(r, 100))
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page })
         await cdpSession.send('Profiler.enable')
         await cdpSession.send('Profiler.start')
 
@@ -336,7 +336,7 @@ describe('CDP Session Tests', () => {
         expect(functionNames.every((name) => typeof name === 'string')).toBe(true)
 
         await cdpSession.send('Profiler.disable')
-        cdpSession.close()
+        await cdpSession.detach()
         await page.close()
     }, 60000)
 
@@ -362,7 +362,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const initialTargets = await cdpSession.send('Target.getTargets')
         const initialPageTarget = initialTargets.targetInfos.find(t => t.type === 'page' && t.url.includes('example.com'))
@@ -383,7 +383,7 @@ describe('CDP Session Tests', () => {
         const exampleOrgTargets = allPageTargets.filter(t => t.url.includes('example.org'))
         expect(exampleOrgTargets).toHaveLength(1)
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -417,7 +417,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const { targetInfos } = await cdpSession.send('Target.getTargets')
         const allPageTargets = targetInfos.filter(t => t.type === 'page')
@@ -442,7 +442,7 @@ describe('CDP Session Tests', () => {
           ]
         `)
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page1.close()
         await page2.close()
@@ -469,7 +469,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const evalResult = await cdpSession.send('Runtime.evaluate', {
             expression: 'document.title',
@@ -477,7 +477,7 @@ describe('CDP Session Tests', () => {
         })
         expect(evalResult.result.value).toContain('Example Domain')
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -501,7 +501,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const initialEvalResult = await cdpSession.send('Runtime.evaluate', {
             expression: 'document.title',
@@ -530,7 +530,7 @@ describe('CDP Session Tests', () => {
         })
         expect(locationResult.result.value).toBe(newUrl)
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -553,7 +553,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -588,7 +588,7 @@ describe('CDP Session Tests', () => {
 
         await dbg.setPauseOnExceptions({ state: 'none' })
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -637,7 +637,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
         const dbg = new Debugger({ cdp: cdpSession })
 
         await dbg.enable()
@@ -676,7 +676,7 @@ describe('CDP Session Tests', () => {
         // Wait for evaluate to complete after resume
         await evalPromise
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -740,7 +740,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
         const editor = new Editor({ cdp: cdpSession })
 
         await editor.enable()
@@ -784,7 +784,7 @@ describe('CDP Session Tests', () => {
         expect(consoleLogs).toContain('Hello, World')
         expect(consoleLogs).toContain('EDITOR_TEST_MARKER')
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -807,7 +807,7 @@ describe('CDP Session Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
         const editor = new Editor({ cdp: cdpSession })
 
         await editor.enable()
@@ -859,7 +859,7 @@ describe('CDP Session Tests', () => {
         })
         expect(colorAfter).toBe('rgb(0, 255, 0)')
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -908,7 +908,7 @@ describe('CDP Session Tests', () => {
         expect(hasBippyBefore).toBe(false)
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const { getReactSource } = await import('./react-source.js')
         const source = await getReactSource({ locator: btn, cdp: cdpSession })
@@ -1017,7 +1017,7 @@ describe('Service Worker Target Tests', () => {
         expect(cdpPage).toBeDefined()
 
         const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         await cdpSession.send('Network.disable')
         await cdpSession.send('Network.enable', {
@@ -1036,7 +1036,7 @@ describe('Service Worker Target Tests', () => {
         expect(body).toContain('Example Domain')
         expect(body).toContain('</html>')
 
-        cdpSession.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)

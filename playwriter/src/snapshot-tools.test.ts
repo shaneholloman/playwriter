@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { imageSize } from 'image-size'
 import { getCdpUrl } from './utils.js'
-import { getCDPSessionForPage, getExistingCDPSessionForPage } from './cdp-session.js'
+import { getCDPSessionForPage } from './cdp-session.js'
 import type { CDPCommand } from './cdp-types.js'
 import { screenshotWithAccessibilityLabels } from './aria-snapshot.js'
 import { setupTestContext, cleanupTestContext, getExtensionServiceWorker, type TestContext, js } from './test-utils.js'
@@ -483,8 +483,7 @@ describe('Snapshot & Screenshot Tests', () => {
         const cdpPage = browser.contexts()[0].pages().find(p => p.url().includes('example.com'))
         expect(cdpPage).toBeDefined()
 
-        const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpSession = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
+        const cdpSession = await getCDPSessionForPage({ page: cdpPage! })
 
         const layoutMetrics = await cdpSession.send('Page.getLayoutMetrics')
 
@@ -540,37 +539,7 @@ describe('Snapshot & Screenshot Tests', () => {
         console.log('window.devicePixelRatio:', windowDpr)
         expect(windowDpr).toBe(1)
 
-        cdpSession.close()
-        await browser.close()
-        await page.close()
-    }, 60000)
-
-    it('should support getCDPSession through the relay', async () => {
-        const browserContext = getBrowserContext()
-        const serviceWorker = await getExtensionServiceWorker(browserContext)
-
-        const page = await browserContext.newPage()
-        await page.goto('https://example.com/')
-        await page.bringToFront()
-
-        await serviceWorker.evaluate(async () => {
-            await globalThis.toggleExtensionForActiveTab()
-        })
-
-        await new Promise(r => setTimeout(r, 100))
-
-        const browser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
-        const cdpPage = browser.contexts()[0].pages().find(p => p.url().includes('example.com'))
-        expect(cdpPage).toBeDefined()
-
-        const wsUrl = getCdpUrl({ port: TEST_PORT })
-        const cdpClient = await getCDPSessionForPage({ page: cdpPage!, wsUrl })
-
-        const layoutMetrics = await cdpClient.send('Page.getLayoutMetrics')
-        expect(layoutMetrics.cssVisualViewport).toBeDefined()
-        expect(layoutMetrics.cssVisualViewport.clientWidth).toBeGreaterThan(0)
-
-        cdpClient.close()
+        await cdpSession.detach()
         await browser.close()
         await page.close()
     }, 60000)
@@ -593,8 +562,8 @@ describe('Snapshot & Screenshot Tests', () => {
         const cdpPage = browser.contexts()[0].pages().find(p => p.url().includes('example.com'))
         expect(cdpPage).toBeDefined()
 
-        // Use the new getExistingCDPSessionForPage which reuses Playwright's internal WS
-        const cdpClient = await getExistingCDPSessionForPage({ page: cdpPage! })
+        // Use the new getCDPSessionForPage which reuses Playwright's internal WS
+        const cdpClient = await getCDPSessionForPage({ page: cdpPage! })
 
         // Should be able to send CDP commands just like the regular getCDPSessionForPage
         const layoutMetrics = await cdpClient.send('Page.getLayoutMetrics')
@@ -649,7 +618,6 @@ describe('Snapshot & Screenshot Tests', () => {
 
         const ariaResult = await getAriaSnapshot({
           page: cdpPage!,
-          wsUrl: getCdpUrl({ port: TEST_PORT }),
         })
 
         expect(ariaResult.snapshot).toBeDefined()
@@ -812,7 +780,7 @@ describe('Snapshot & Screenshot Tests', () => {
             const { labelCount } = await withTimeout(
                 `showAriaRefLabels(${name})`,
                 async () => {
-                    return await showAriaRefLabels({ page: cdpPage, wsUrl })
+                    return await showAriaRefLabels({ page: cdpPage })
                 },
                 60000
             )

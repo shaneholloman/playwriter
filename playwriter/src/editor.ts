@@ -1,4 +1,4 @@
-import type { ICDPSession, CDPSession } from './cdp-session.js'
+import type { ICDPSession } from './cdp-session.js'
 
 export interface ReadResult {
   content: string
@@ -46,15 +46,14 @@ export interface EditResult {
  * ```
  */
 export class Editor {
-  private cdp: CDPSession
+  private cdp: ICDPSession
   private enabled = false
   private scripts = new Map<string, string>()
   private stylesheets = new Map<string, string>()
   private sourceCache = new Map<string, string>()
 
   constructor({ cdp }: { cdp: ICDPSession }) {
-    // Cast to CDPSession for internal type safety - at runtime both are compatible
-    this.cdp = cdp as CDPSession
+    this.cdp = cdp
     this.setupEventListeners()
   }
 

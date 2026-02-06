@@ -103,7 +103,7 @@ describe('aria-snapshot', () => {
       await page.waitForTimeout(1000)
 
       if (SHOULD_DUMP_AX) {
-        const cdp = await getCDPSessionForPage({ page, wsUrl: getCdpUrl({ port: TEST_PORT }) })
+        const cdp = await getCDPSessionForPage({ page })
         try {
           await cdp.send('DOM.enable')
           await cdp.send('Accessibility.enable')
@@ -116,7 +116,7 @@ describe('aria-snapshot', () => {
         }
       }
 
-      const { snapshot } = await getAriaSnapshot({ page, wsUrl: getCdpUrl({ port: TEST_PORT }) })
+      const { snapshot } = await getAriaSnapshot({ page })
       expect(snapshot.length).toBeGreaterThan(0)
       // Check for locator format: attribute selector or role selector
       expect(snapshot).toMatch(/(?:\[id="|\[data-[\w-]+="|role=)/)
@@ -130,7 +130,6 @@ describe('aria-snapshot', () => {
 
       const { snapshot: interactiveSnapshot } = await getAriaSnapshot({
         page,
-        wsUrl: getCdpUrl({ port: TEST_PORT }),
         interactiveOnly: true,
       })
       expect(interactiveSnapshot).not.toMatch(/^-\s+heading\b/m)
@@ -185,7 +184,6 @@ describe('aria-snapshot', () => {
       const { snapshot } = await getAriaSnapshot({
         page,
         frame: iframeFrame!,
-        wsUrl: getCdpUrl({ port: TEST_PORT }),
       })
 
       expect(snapshot).toContain('Iframe Heading')

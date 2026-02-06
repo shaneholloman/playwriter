@@ -784,16 +784,15 @@ async function resolveFrame({ frame, page }: { frame?: Frame | FrameLocator; pag
  * await page.locator(selector).click()
  * ```
  */
-export async function getAriaSnapshot({ page, frame, locator, refFilter, wsUrl, interactiveOnly = false, cdp }: {
+export async function getAriaSnapshot({ page, frame, locator, refFilter, interactiveOnly = false, cdp }: {
   page: Page
   frame?: Frame | FrameLocator
   locator?: Locator
   refFilter?: (info: { role: string; name: string }) => boolean
-  wsUrl?: string
   interactiveOnly?: boolean
   cdp?: ICDPSession
 }): Promise<AriaSnapshotResult> {
-  const session = cdp || await getCDPSessionForPage({ page, wsUrl })
+  const session = cdp || await getCDPSessionForPage({ page })
 
   // Resolve FrameLocator to an actual Frame. FrameLocator (from locator.contentFrame())
   // is a scoping helper without CDP access. We need the real Frame from page.frames()
@@ -1128,20 +1127,18 @@ function isTruthy<T>(value: T): value is NonNullable<T> {
 async function getLabelBoxesForRefs({
   page,
   refs,
-  wsUrl,
   maxConcurrency = MAX_LABEL_POSITION_CONCURRENCY,
   logger,
   cdp,
 }: {
   page: Page
   refs: AriaRef[]
-  wsUrl?: string
   maxConcurrency?: number
   logger?: { info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }
   cdp?: ICDPSession
 }): Promise<AriaLabel[]> {
   const log = logger?.info ?? logger?.error ?? console.error
-  const session = cdp || await getCDPSessionForPage({ page, wsUrl })
+  const session = cdp || await getCDPSessionForPage({ page })
   const sema = new Sema(maxConcurrency)
   const labelRefs = refs.filter((ref) => {
     return Boolean(ref.backendNodeId) && INTERACTIVE_ROLES.has(ref.role)
@@ -1218,11 +1215,10 @@ async function getLabelBoxesForRefs({
  * await page.locator('[data-testid="submit-btn"]').click()
  * ```
  */
-export async function showAriaRefLabels({ page, locator, interactiveOnly = true, wsUrl, logger }: {
+export async function showAriaRefLabels({ page, locator, interactiveOnly = true, logger }: {
   page: Page
   locator?: Locator
   interactiveOnly?: boolean
-  wsUrl?: string
   logger?: { info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }
 }): Promise<{
   snapshot: string
@@ -1236,12 +1232,12 @@ export async function showAriaRefLabels({ page, locator, interactiveOnly = true,
   log(`[showAriaRefLabels] ensureA11yClient: ${Date.now() - startTime}ms`)
 
   const cdpStart = Date.now()
-  const cdp = await getCDPSessionForPage({ page, wsUrl })
+  const cdp = await getCDPSessionForPage({ page })
   log(`[showAriaRefLabels] getCDPSessionForPage: ${Date.now() - cdpStart}ms`)
 
   try {
     const snapshotStart = Date.now()
-    const { snapshot, refs } = await getAriaSnapshot({ page, locator, interactiveOnly, wsUrl, cdp })
+    const { snapshot, refs } = await getAriaSnapshot({ page, locator, interactiveOnly, cdp })
     const shortRefMap = new Map(refs.map((entry) => {
       return [entry.ref, entry.shortRef]
     }))
@@ -1251,7 +1247,7 @@ export async function showAriaRefLabels({ page, locator, interactiveOnly = true,
     const rootHandle = locator ? await locator.elementHandle() : null
 
     const labelsStart = Date.now()
-    const labels = await getLabelBoxesForRefs({ page, refs, wsUrl, logger, cdp })
+    const labels = await getLabelBoxesForRefs({ page, refs, logger, cdp })
     const shortLabels = labels.map((label) => {
       return {
         ...label,
@@ -1326,17 +1322,16 @@ export async function hideAriaRefLabels({ page }: { page: Page }): Promise<void>
  * await page.locator('[data-testid="submit-btn"]').click()
  * ```
  */
-export async function screenshotWithAccessibilityLabels({ page, locator, interactiveOnly = true, wsUrl, collector, logger }: {
+export async function screenshotWithAccessibilityLabels({ page, locator, interactiveOnly = true, collector, logger }: {
   page: Page
   locator?: Locator
   interactiveOnly?: boolean
-  wsUrl?: string
   collector: ScreenshotResult[]
   logger?: { info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }
 }): Promise<void> {
   const log = logger?.info ?? logger?.error
   const showLabelsStart = Date.now()
-  const { snapshot, labelCount } = await showAriaRefLabels({ page, locator, interactiveOnly, wsUrl, logger })
+  const { snapshot, labelCount } = await showAriaRefLabels({ page, locator, interactiveOnly, logger })
   if (log) {
     log(`showAriaRefLabels: ${Date.now() - showLabelsStart}ms`)
   }

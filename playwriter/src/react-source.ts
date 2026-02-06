@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page, Locator, ElementHandle } from '@xmorse/playwright-core'
-import type { ICDPSession, CDPSession } from './cdp-session.js'
+import type { ICDPSession } from './cdp-session.js'
 
 export interface ReactSourceLocation {
   fileName: string | null
@@ -30,8 +30,7 @@ export async function getReactSource({
   locator: Locator | ElementHandle
   cdp: ICDPSession
 }): Promise<ReactSourceLocation | null> {
-  // Cast to CDPSession for internal type safety - at runtime both are compatible
-  const cdp = cdpSession as CDPSession
+  const cdp = cdpSession
   const page: Page = 'page' in locator && typeof locator.page === 'function' ? locator.page() : (locator as any)._page
 
   if (!page) {

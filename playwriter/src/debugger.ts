@@ -1,4 +1,4 @@
-import type { ICDPSession, CDPSession } from './cdp-session.js'
+import type { ICDPSession } from './cdp-session.js'
 import type { Protocol } from 'devtools-protocol'
 
 export interface BreakpointInfo {
@@ -48,7 +48,7 @@ export interface ScriptInfo {
  * ```
  */
 export class Debugger {
-  private cdp: CDPSession
+  private cdp: ICDPSession
   private debuggerEnabled = false
   private paused = false
   private currentCallFrames: Protocol.Debugger.CallFrame[] = []
@@ -71,8 +71,7 @@ export class Debugger {
    * ```
    */
   constructor({ cdp }: { cdp: ICDPSession }) {
-    // Cast to CDPSession for internal type safety - at runtime both are compatible
-    this.cdp = cdp as CDPSession
+    this.cdp = cdp
     this.setupEventListeners()
   }
 

@@ -1,4 +1,4 @@
-import type { ICDPSession, CDPSession } from './cdp-session.js'
+import type { ICDPSession } from './cdp-session.js'
 import type { Locator } from '@xmorse/playwright-core'
 
 export interface StyleSource {
@@ -73,8 +73,7 @@ export async function getStylesForLocator({
   cdp: ICDPSession
   includeUserAgentStyles?: boolean
 }): Promise<StylesResult> {
-  // Cast to CDPSession for internal type safety - at runtime both are compatible
-  const cdp = cdpSession as CDPSession
+  const cdp = cdpSession
   await cdp.send('DOM.enable')
   await cdp.send('CSS.enable')
 
@@ -272,7 +271,7 @@ function formatElementDescription(node: any): string {
   return desc
 }
 
-async function getStylesheetUrl(cdp: CDPSession, styleSheetId: string): Promise<string> {
+async function getStylesheetUrl(cdp: ICDPSession, styleSheetId: string): Promise<string> {
   try {
     await cdp.send('CSS.getStyleSheetText', { styleSheetId })
     return `stylesheet:${styleSheetId}`
