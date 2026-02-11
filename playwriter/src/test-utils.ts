@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { startPlayWriterCDPRelayServer, type RelayServer } from './cdp-relay.js'
 import { createFileLogger } from './create-logger.js'
-import { killPortProcess } from 'kill-port-process'
+import { killPortProcess } from './kill-port.js'
 
 const execAsync = promisify(exec)
 const extensionBuildQueues: Map<string, Promise<void>> = new Map()
@@ -67,7 +67,7 @@ export async function setupTestContext({
   /** Create initial page and toggle extension on it */
   toggleExtension?: boolean
 }): Promise<TestContext> {
-  await killPortProcess(port).catch(() => {})
+  await killPortProcess({ port }).catch(() => {})
 
   // Use a port-scoped dist folder so parallel tests don't replace each other's extension builds.
   const distDir = `dist-${port}`

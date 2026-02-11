@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cac } from '@xmorse/cac'
+import { killPortProcess } from './kill-port.js'
 import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH } from './utils.js'
 import { ensureRelayServer, RELAY_PORT, waitForExtension } from './relay-client.js'
 
@@ -433,8 +434,7 @@ cli
 
       // Kill existing process on the port
       console.log(`Killing existing server on port ${RELAY_PORT}...`)
-      const { killPortProcess } = await import('kill-port-process')
-      await killPortProcess(RELAY_PORT)
+      await killPortProcess({ port: RELAY_PORT })
     }
 
     // Lazy-load heavy dependencies only when serve command is used

@@ -6,8 +6,8 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { killPortProcess } from 'kill-port-process'
 import pc from 'picocolors'
+import { killPortProcess } from './kill-port.js'
 import { VERSION, sleep, LOG_FILE_PATH } from './utils.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -73,7 +73,7 @@ export async function waitForExtension(options: {
 
 async function killRelayServer(port: number): Promise<void> {
   try {
-    await killPortProcess(port)
+    await killPortProcess({ port })
     await sleep(500)
   } catch {}
 }

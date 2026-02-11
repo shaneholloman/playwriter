@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.58
+
+### Bug Fixes
+
+- **Fix `bunx playwriter@latest` relay restarts**: Replaced `kill-port-process` with a vendored cross-platform port killer to avoid runtime crashes during version-mismatch restart flows.
+- **Harden relay port cleanup behavior**: Unified relay/test/serve port termination through local `killPortProcess({ port })` helper with Windows/macOS/Linux support.
+
+### Internal
+
+- **Removed `kill-port-process` dependency**: Dropped external dependency and updated lockfile to reduce transitive process-management packages.
+
 ## 0.0.57
 
 ### Features

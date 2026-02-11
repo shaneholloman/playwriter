@@ -2,14 +2,14 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { startPlayWriterCDPRelayServer } from '../src/cdp-relay.js'
 import { WebSocket } from 'ws'
-import { killPortProcess } from 'kill-port-process'
 import { createFileLogger } from '../src/create-logger.js'
+import { killPortProcess } from '../src/kill-port.js'
 
 const TEST_PORT = 19999
 
 async function killProcessOnPort(port: number): Promise<void> {
     try {
-        await killPortProcess(port)
+        await killPortProcess({ port })
     } catch (err) {
         // Ignore if no process is running
     }
