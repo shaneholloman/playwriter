@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.59
+
+### Bug Fixes
+
+- **Fix "Cannot find module 'graceful-fs'" error**: Updated `@xmorse/playwright-core` to 1.59.3 which adds missing runtime dependencies (`graceful-fs`, `retry`, `signal-exit`) for clean `npx playwriter` installs (GitHub #45)
+
 ## 0.0.58
 
 ### Bug Fixes
