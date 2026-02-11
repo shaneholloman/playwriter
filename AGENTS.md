@@ -167,9 +167,13 @@ you can list other files in that folder on github to read more if you need to co
 
 ## changelogs
 
-when you do an important change, update relevant CHANGELOG.md files for each package.
+when you do an any change, update relevant CHANGELOG.md files for each package.
 
-also bump package.json versions and IMPORTANT also the extension/manifest.json version too
+also bump package.json versions and IMPORTANTLY also the extension/manifest.json version!
+
+
+you also MUST always bump the playwright core package.json version too on any changes made there. so during publishing we know if that package needs to also be published, first, before publishing playwriter. checking if its version is already publishing in npm with `npm show @xmorse/playwright-core version`
+
 
 ## debugging playwriter mcp issues
 
@@ -204,6 +208,8 @@ cd playwright && git branch
 # if not on playwriter branch
 git checkout playwriter
 ```
+
+make sure to always bump the package json and update the 
 
 ### bootstrapping the repo
 
