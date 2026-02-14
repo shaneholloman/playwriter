@@ -9,6 +9,28 @@ export const EXTENSION_IDS = [
   'pebbngnfojnignonigcnkdilknapkgid', // Dev extension (stable ID from manifest key)
 ]
 
+/**
+ * Parse a relay host string into HTTP and WebSocket base URLs.
+ * Supports both plain hostnames (appends port) and full URLs (uses as-is).
+ *
+ * Examples:
+ *   "192.168.1.10"                        → http://192.168.1.10:19988, ws://192.168.1.10:19988
+ *   "https://my-machine-tunnel.traforo.dev" → https://my-machine-tunnel.traforo.dev, wss://my-machine-tunnel.traforo.dev
+ */
+export function parseRelayHost(host: string, port: number = 19988): { httpBaseUrl: string; wsBaseUrl: string } {
+  if (host.startsWith('https://') || host.startsWith('http://')) {
+    const url = new URL(host)
+    const httpBaseUrl = url.origin
+    const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsBaseUrl = `${wsProtocol}//${url.host}`
+    return { httpBaseUrl, wsBaseUrl }
+  }
+  return {
+    httpBaseUrl: `http://${host}:${port}`,
+    wsBaseUrl: `ws://${host}:${port}`,
+  }
+}
+
 export function getCdpUrl({
   port = 19988,
   host = '127.0.0.1',
@@ -30,7 +52,8 @@ export function getCdpUrl({
   }
   const queryString = params.toString()
   const suffix = queryString ? `?${queryString}` : ''
-  return `ws://${host}:${port}/cdp/${id}${suffix}`
+  const { wsBaseUrl } = parseRelayHost(host, port)
+  return `${wsBaseUrl}/cdp/${id}${suffix}`
 }
 
 // Use ~/.playwriter for logs so each OS user gets their own dir (avoids permission errors on shared machines, see #44)

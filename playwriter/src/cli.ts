@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cac } from '@xmorse/cac'
 import { killPortProcess } from './kill-port.js'
-import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH } from './utils.js'
+import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH, parseRelayHost } from './utils.js'
 import { ensureRelayServer, RELAY_PORT, waitForExtension } from './relay-client.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -52,7 +52,8 @@ cli
 
 async function getServerUrl(host?: string): Promise<string> {
   const serverHost = host || process.env.PLAYWRITER_HOST || '127.0.0.1'
-  return `http://${serverHost}:${RELAY_PORT}`
+  const { httpBaseUrl } = parseRelayHost(serverHost, RELAY_PORT)
+  return httpBaseUrl
 }
 
 async function fetchExtensionsStatus(host?: string): Promise<ExtensionStatus[]> {

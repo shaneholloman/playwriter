@@ -180,27 +180,23 @@ Color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=
 +---------------------+     (no extension click)      +-----------------+
 ```
 
-## Remote CLI
+## Remote Access
 
-Run CLI from a different machine (devcontainer, VM, SSH) while Chrome runs on your host.
+Control Chrome on a remote machine over the internet using [traforo](https://traforo.dev) tunnels:
 
 **On host:**
 ```bash
-playwriter serve --token <secret>
+npx -y traforo -p 19988 -t my-machine -- npx -y playwriter serve --token <secret>
 ```
 
 **From remote:**
 ```bash
-playwriter --host 192.168.1.10 --token <secret> session new
-playwriter --host 192.168.1.10 --token <secret> -s 1 -e "await page.goto('https://example.com')"
-```
-
-Or with env vars:
-```bash
-export PLAYWRITER_HOST=192.168.1.10
+export PLAYWRITER_HOST=https://my-machine-tunnel.traforo.dev
 export PLAYWRITER_TOKEN=<secret>
 playwriter -s 1 -e "await page.goto('https://example.com')"
 ```
+
+Also works on a LAN without traforo (`PLAYWRITER_HOST=192.168.1.10`). Full guide with use cases (remote Mac mini, user support, multi-machine control): [docs/remote-access.md](./docs/remote-access.md)
 
 ## Security
 

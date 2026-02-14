@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import dedent from 'string-dedent'
-import { LOG_FILE_PATH, VERSION } from './utils.js'
+import { LOG_FILE_PATH, VERSION, parseRelayHost } from './utils.js'
 import { ensureRelayServer, RELAY_PORT } from './relay-client.js'
 import { PlaywrightExecutor, CodeExecutionTimeoutError } from './executor.js'
 
@@ -38,7 +38,8 @@ function getRemoteConfig(): RemoteConfig | null {
 function getLogServerUrl(): string {
   const remote = getRemoteConfig()
   if (remote) {
-    return `http://${remote.host}:${remote.port}/mcp-log`
+    const { httpBaseUrl } = parseRelayHost(remote.host, remote.port)
+    return `${httpBaseUrl}/mcp-log`
   }
   return `http://127.0.0.1:${RELAY_PORT}/mcp-log`
 }
@@ -100,7 +101,8 @@ async function getOrCreateExecutor(): Promise<PlaywrightExecutor> {
 }
 
 async function checkRemoteServer({ host, port }: { host: string; port: number }): Promise<void> {
-  const versionUrl = `http://${host}:${port}/version`
+  const { httpBaseUrl } = parseRelayHost(host, port)
+  const versionUrl = `${httpBaseUrl}/version`
   try {
     const response = await fetch(versionUrl, { signal: AbortSignal.timeout(3000) })
     if (!response.ok) {
@@ -110,7 +112,7 @@ async function checkRemoteServer({ host, port }: { host: string; port: number })
     const isConnectionError = error.cause?.code === 'ECONNREFUSED' || error.name === 'TimeoutError'
     if (isConnectionError) {
       throw new Error(
-        `Cannot connect to remote relay server at ${host}:${port}. ` +
+        `Cannot connect to remote relay server at ${host}. ` +
           `Make sure 'npx -y playwriter serve' is running on the host machine.`,
       )
     }
@@ -276,7 +278,7 @@ export async function startMcp(options: { host?: string; token?: string } = {}) 
   if (!remote) {
     await ensureRelayServerForMcp()
   } else {
-    mcpLog(`Using remote CDP relay server: ${remote.host}:${remote.port}`)
+    mcpLog(`Using remote CDP relay server: ${remote.host}`)
     await checkRemoteServer(remote)
   }
 

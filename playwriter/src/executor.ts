@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import * as acorn from 'acorn'
 import { createSmartDiff } from './diff-utils.js'
-import { getCdpUrl } from './utils.js'
+import { getCdpUrl, parseRelayHost } from './utils.js'
 import { waitForPageLoad, WaitForPageLoadOptions, WaitForPageLoadResult } from './wait-for-page-load.js'
 import { ICDPSession, getCDPSessionForPage } from './cdp-session.js'
 import { Debugger } from './debugger.js'
@@ -332,13 +332,14 @@ export class PlaywrightExecutor {
 
   private async checkExtensionStatus(): Promise<{ connected: boolean; activeTargets: number }> {
     const { host = '127.0.0.1', port = 19988, extensionId } = this.cdpConfig
+    const { httpBaseUrl } = parseRelayHost(host, port)
     try {
       if (extensionId) {
-        const response = await fetch(`http://${host}:${port}/extensions/status`, {
+        const response = await fetch(`${httpBaseUrl}/extensions/status`, {
           signal: AbortSignal.timeout(2000),
         })
         if (!response.ok) {
-          const fallback = await fetch(`http://${host}:${port}/extension/status`, {
+          const fallback = await fetch(`${httpBaseUrl}/extension/status`, {
             signal: AbortSignal.timeout(2000),
           })
           if (!fallback.ok) {
@@ -358,7 +359,7 @@ export class PlaywrightExecutor {
         return { connected: true, activeTargets: extension.activeTargets }
       }
 
-      const response = await fetch(`http://${host}:${port}/extension/status`, {
+      const response = await fetch(`${httpBaseUrl}/extension/status`, {
         signal: AbortSignal.timeout(2000),
       })
       if (!response.ok) {
