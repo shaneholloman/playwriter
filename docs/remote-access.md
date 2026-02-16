@@ -1,4 +1,4 @@
----
+<!--
 title: Remote Browser Control with Playwriter
 description: |
   How to control a Chrome browser on a remote machine over
@@ -17,7 +17,7 @@ prompt: |
   @opensrc/repos/github.com/remorses/traforo/src/client.ts
   @opensrc/repos/github.com/remorses/traforo/src/tunnel.ts
   @https://traforo.dev
----
+-->
 
 # Remote Browser Control with Playwriter
 
