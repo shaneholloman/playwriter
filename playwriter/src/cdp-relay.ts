@@ -17,6 +17,13 @@ import type {
   IsRecordingParams,
 } from './protocol.js'
 import pc from 'picocolors'
+import util from 'node:util'
+
+// Prevent Buffers from dumping hex bytes in util.inspect output.
+Buffer.prototype[util.inspect.custom] = function () {
+  return `<Buffer ${this.length} bytes>`
+}
+
 import { EventEmitter } from 'node:events'
 import { VERSION, EXTENSION_IDS } from './utils.js'
 import { createCdpLogger, type CdpLogEntry, type CdpLogger } from './cdp-log.js'

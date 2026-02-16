@@ -2,8 +2,14 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import util from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { cac } from '@xmorse/cac'
+
+// Prevent Buffers from dumping hex bytes in util.inspect output.
+Buffer.prototype[util.inspect.custom] = function () {
+  return `<Buffer ${this.length} bytes>`
+}
 import { killPortProcess } from './kill-port.js'
 import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH, parseRelayHost } from './utils.js'
 import { ensureRelayServer, RELAY_PORT, waitForExtension, getExtensionOutdatedWarning, getExtensionStatus } from './relay-client.js'

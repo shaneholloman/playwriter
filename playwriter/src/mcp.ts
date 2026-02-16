@@ -3,8 +3,16 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
+import util from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+
+// Prevent Buffers from dumping hex bytes in util.inspect output.
+// Without this, returning a screenshot Buffer would log ~400+ chars of useless hex.
+Buffer.prototype[util.inspect.custom] = function () {
+  return `<Buffer ${this.length} bytes>`
+}
+
 import dedent from 'string-dedent'
 import { LOG_FILE_PATH, VERSION, parseRelayHost } from './utils.js'
 import { ensureRelayServer, RELAY_PORT } from './relay-client.js'

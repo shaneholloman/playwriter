@@ -22,7 +22,7 @@ export function createFileLogger({ logFilePath }: { logFilePath?: string } = {})
 
   const log = (...args: unknown[]): Promise<void> => {
     const message = args.map(arg =>
-      typeof arg === 'string' ? arg : util.inspect(arg, { depth: null, colors: false })
+      typeof arg === 'string' ? arg : util.inspect(arg, { depth: null, colors: false, maxStringLength: 1000 })
     ).join(' ')
     queue = queue.then(() => fs.promises.appendFile(resolvedLogFilePath, stripAnsi(message) + '\n'))
     return queue

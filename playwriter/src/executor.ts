@@ -514,7 +514,7 @@ export class PlaywrightExecutor {
         const formattedArgs = args
           .map((arg) => {
             if (typeof arg === 'string') return arg
-            return util.inspect(arg, { depth: 4, colors: false, maxArrayLength: 100, breakLength: 80 })
+            return util.inspect(arg, { depth: 4, colors: false, maxArrayLength: 100, maxStringLength: 1000, breakLength: 80 })
           })
           .join(' ')
         text += `[${method}] ${formattedArgs}\n`
@@ -853,7 +853,7 @@ export class PlaywrightExecutor {
           const formatted =
             typeof resolvedResult === 'string'
               ? resolvedResult
-              : util.inspect(resolvedResult, { depth: 4, colors: false, maxArrayLength: 100, breakLength: 80 })
+              : util.inspect(resolvedResult, { depth: 4, colors: false, maxArrayLength: 100, maxStringLength: 1000, breakLength: 80 })
           if (formatted.trim()) {
             responseText += `[return value] ${formatted}\n`
           }
