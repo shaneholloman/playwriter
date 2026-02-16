@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { cac } from '@xmorse/cac'
 import { killPortProcess } from './kill-port.js'
 import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH, parseRelayHost } from './utils.js'
-import { ensureRelayServer, RELAY_PORT, waitForExtension } from './relay-client.js'
+import { ensureRelayServer, RELAY_PORT, waitForExtension, getExtensionOutdatedWarning, getExtensionStatus } from './relay-client.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -20,6 +20,7 @@ type ExtensionStatus = {
   browser: string | null
   profile: { email: string; id: string } | null
   activeTargets: number
+  playwriterVersion?: string | null
 }
 
 cli
@@ -74,22 +75,24 @@ async function fetchExtensionsStatus(host?: string): Promise<ExtensionStatus[]> 
         activeTargets: number
         browser: string | null
         profile: { email: string; id: string } | null
+        playwriterVersion?: string | null
       }
-      if (!fallbackData.connected) {
+      if (!fallbackData?.connected) {
         return []
       }
       return [{
         extensionId: 'default',
         stableKey: undefined,
-        browser: fallbackData.browser,
-        profile: fallbackData.profile,
-        activeTargets: fallbackData.activeTargets,
+        browser: fallbackData?.browser,
+        profile: fallbackData?.profile,
+        activeTargets: fallbackData?.activeTargets,
+        playwriterVersion: fallbackData?.playwriterVersion || null,
       }]
     }
     const data = await response.json() as {
       extensions: ExtensionStatus[]
     }
-    return data.extensions
+    return data?.extensions || []
   } catch {
     return []
   }
@@ -124,6 +127,13 @@ async function executeCode(options: {
         console.error('Warning: Extension not connected. Commands may fail.')
       }
     }
+  }
+
+  // Warn once if extension is outdated
+  const extensionStatus = await getExtensionStatus()
+  const outdatedWarning = getExtensionOutdatedWarning(extensionStatus?.playwriterVersion)
+  if (outdatedWarning) {
+    console.error(outdatedWarning)
   }
 
   // Build request URL with token if provided
@@ -195,6 +205,15 @@ cli
     if (extensions.length === 0) {
       console.error('No connected browsers detected. Click the Playwriter extension icon.')
       process.exit(1)
+    }
+
+    // Warn if any connected extension was built with an older playwriter version
+    for (const ext of extensions) {
+      const warning = getExtensionOutdatedWarning(ext.playwriterVersion)
+      if (warning) {
+        console.error(warning)
+        break
+      }
     }
 
     let selectedExtension: ExtensionStatus | null = null

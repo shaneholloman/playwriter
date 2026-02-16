@@ -71,6 +71,8 @@ type ExtensionInfo = {
   browser?: string
   email?: string
   id?: string
+  /** playwriter package version the extension was built with (sent as ?v= query param) */
+  version?: string
 }
 
 type ExtensionConnection = {
@@ -675,6 +677,7 @@ export async function startPlayWriterCDPRelayServer({
       activeTargets,
       browser: info?.browser || null,
       profile: info ? { email: info.email || '', id: info.id || '' } : null,
+      playwriterVersion: info?.version || null,
     })
   })
 
@@ -686,6 +689,7 @@ export async function startPlayWriterCDPRelayServer({
         browser: extension.info.browser || null,
         profile: extension.info ? { email: extension.info.email || '', id: extension.info.id || '' } : null,
         activeTargets: extension.connectedTargets.size,
+        playwriterVersion: extension.info?.version || null,
       }
     })
     return c.json({ extensions })
@@ -1002,10 +1006,12 @@ export async function startPlayWriterCDPRelayServer({
     const browser = c.req.query('browser')
     const email = c.req.query('email')
     const id = c.req.query('id')
+    const version = c.req.query('v')
     return {
       browser: browser || undefined,
       email: email || undefined,
       id: id || undefined,
+      version: version || undefined,
     }
   }
 

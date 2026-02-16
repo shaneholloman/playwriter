@@ -15,6 +15,7 @@ import vm from 'node:vm'
 import * as acorn from 'acorn'
 import { createSmartDiff } from './diff-utils.js'
 import { getCdpUrl, parseRelayHost } from './utils.js'
+import { getExtensionOutdatedWarning } from './relay-client.js'
 import { waitForPageLoad, WaitForPageLoadOptions, WaitForPageLoadResult } from './wait-for-page-load.js'
 import { ICDPSession, getCDPSessionForPage } from './cdp-session.js'
 import { Debugger } from './debugger.js'
@@ -225,6 +226,7 @@ export class PlaywrightExecutor {
   private cdpConfig: CdpConfig
   private logger: ExecutorLogger
   private sessionMetadata: SessionMetadata
+  private hasWarnedExtensionOutdated = false
 
   constructor(options: ExecutorOptions) {
     this.cdpConfig = options.cdpConfig
@@ -292,6 +294,17 @@ export class PlaywrightExecutor {
     this.context = null
   }
 
+  private warnIfExtensionOutdated(playwriterVersion: string | null) {
+    if (this.hasWarnedExtensionOutdated) {
+      return
+    }
+    const warning = getExtensionOutdatedWarning(playwriterVersion)
+    if (warning) {
+      this.logger.log(warning)
+      this.hasWarnedExtensionOutdated = true
+    }
+  }
+
   private setupPageConsoleListener(page: Page) {
     // Use targetId() if available, fallback to internal _guid for CDP connections
     const targetId = page.targetId() || (page as any)._guid as string | undefined
@@ -330,9 +343,10 @@ export class PlaywrightExecutor {
     })
   }
 
-  private async checkExtensionStatus(): Promise<{ connected: boolean; activeTargets: number }> {
+  private async checkExtensionStatus(): Promise<{ connected: boolean; activeTargets: number; playwriterVersion: string | null }> {
     const { host = '127.0.0.1', port = 19988, extensionId } = this.cdpConfig
     const { httpBaseUrl } = parseRelayHost(host, port)
+    const notConnected = { connected: false, activeTargets: 0, playwriterVersion: null }
     try {
       if (extensionId) {
         const response = await fetch(`${httpBaseUrl}/extensions/status`, {
@@ -343,31 +357,31 @@ export class PlaywrightExecutor {
             signal: AbortSignal.timeout(2000),
           })
           if (!fallback.ok) {
-            return { connected: false, activeTargets: 0 }
+            return notConnected
           }
-          return (await fallback.json()) as { connected: boolean; activeTargets: number }
+          return (await fallback.json()) as { connected: boolean; activeTargets: number; playwriterVersion: string | null }
         }
         const data = await response.json() as {
-          extensions: Array<{ extensionId: string; stableKey?: string; activeTargets: number }>
+          extensions: Array<{ extensionId: string; stableKey?: string; activeTargets: number; playwriterVersion?: string | null }>
         }
         const extension = data.extensions.find((item) => {
           return item.extensionId === extensionId || item.stableKey === extensionId
         })
         if (!extension) {
-          return { connected: false, activeTargets: 0 }
+          return notConnected
         }
-        return { connected: true, activeTargets: extension.activeTargets }
+        return { connected: true, activeTargets: extension.activeTargets, playwriterVersion: extension?.playwriterVersion || null }
       }
 
       const response = await fetch(`${httpBaseUrl}/extension/status`, {
         signal: AbortSignal.timeout(2000),
       })
       if (!response.ok) {
-        return { connected: false, activeTargets: 0 }
+        return notConnected
       }
-      return (await response.json()) as { connected: boolean; activeTargets: number }
+      return (await response.json()) as { connected: boolean; activeTargets: number; playwriterVersion: string | null }
     } catch {
-      return { connected: false, activeTargets: 0 }
+      return notConnected
     }
   }
 
@@ -381,6 +395,7 @@ export class PlaywrightExecutor {
     if (!extensionStatus.connected) {
       throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
     }
+    this.warnIfExtensionOutdated(extensionStatus.playwriterVersion)
 
     // Generate a fresh unique URL for each Playwright connection
     const cdpUrl = getCdpUrl(this.cdpConfig)
@@ -455,6 +470,7 @@ export class PlaywrightExecutor {
     if (!extensionStatus.connected) {
       throw new Error(EXTENSION_NOT_CONNECTED_ERROR)
     }
+    this.warnIfExtensionOutdated(extensionStatus.playwriterVersion)
 
     // Generate a fresh unique URL for each Playwright connection
     const cdpUrl = getCdpUrl(this.cdpConfig)

@@ -1,4 +1,7 @@
 declare const process: { env: { PLAYWRITER_PORT: string } }
+// Injected by vite at build time from playwriter/package.json version.
+// CLI/MCP compare this against their own version to warn when the extension is outdated.
+declare const __PLAYWRITER_VERSION__: string
 
 import { createStore } from 'zustand/vanilla'
 import type { ExtensionState, ConnectionState, TabState, TabInfo } from './types'
@@ -205,6 +208,9 @@ class ConnectionManager {
     }
     if (identity.id) {
       relayUrl.searchParams.set('id', identity.id)
+    }
+    if (typeof __PLAYWRITER_VERSION__ !== 'undefined') {
+      relayUrl.searchParams.set('v', __PLAYWRITER_VERSION__)
     }
     logger.debug('Creating WebSocket connection to:', relayUrl)
     const socket = new WebSocket(relayUrl.toString())

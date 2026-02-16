@@ -30,7 +30,7 @@ export async function getRelayServerVersion(port: number = RELAY_PORT): Promise<
   }
 }
 
-export async function getExtensionStatus(port: number = RELAY_PORT): Promise<{ connected: boolean; activeTargets: number } | null> {
+export async function getExtensionStatus(port: number = RELAY_PORT): Promise<{ connected: boolean; activeTargets: number; playwriterVersion: string | null } | null> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/extension/status`, {
       signal: AbortSignal.timeout(500),
@@ -38,7 +38,7 @@ export async function getExtensionStatus(port: number = RELAY_PORT): Promise<{ c
     if (!response.ok) {
       return null
     }
-    return await response.json() as { connected: boolean; activeTargets: number }
+    return await response.json() as { connected: boolean; activeTargets: number; playwriterVersion: string | null }
   } catch {
     return null
   }
@@ -96,7 +96,7 @@ async function killRelayServer(options: { port: number; waitForFreeMs?: number }
  * - 0 if v1 === v2
  * - positive if v1 > v2
  */
-function compareVersions(v1: string, v2: string): number {
+export function compareVersions(v1: string, v2: string): number {
   const parts1 = v1.split('.').map(Number)
   const parts2 = v2.split('.').map(Number)
   const len = Math.max(parts1.length, parts2.length)
@@ -109,6 +109,22 @@ function compareVersions(v1: string, v2: string): number {
     }
   }
   return 0
+}
+
+/**
+ * Check if the running playwriter package is older than the version the extension was built with.
+ * The extension bundles the playwriter version at build time. If the extension reports a newer
+ * version, it means the user's CLI/MCP needs updating.
+ * Returns a warning message if outdated, null otherwise.
+ */
+export function getExtensionOutdatedWarning(extensionPlaywriterVersion: string | null | undefined): string | null {
+  if (!extensionPlaywriterVersion) {
+    return null
+  }
+  if (compareVersions(extensionPlaywriterVersion, VERSION) > 0) {
+    return `Playwriter ${VERSION} is outdated (extension requires ${extensionPlaywriterVersion}). Run \`npm install -g playwriter@latest\` or update the playwriter package in your project.`
+  }
+  return null
 }
 
 export interface EnsureRelayServerOptions {

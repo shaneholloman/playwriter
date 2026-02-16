@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
@@ -6,8 +7,16 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Bundle the playwriter package version into the extension so it can report
+// which playwriter version it was built against. CLI/MCP use this to warn
+// when the extension is outdated.
+const playwriterPkg = JSON.parse(
+  readFileSync(resolve(__dirname, '../playwriter/package.json'), 'utf-8')
+);
+
 const defineEnv: Record<string, string> = {
   'process.env.PLAYWRITER_PORT': JSON.stringify(process.env.PLAYWRITER_PORT || '19988'),
+  '__PLAYWRITER_VERSION__': JSON.stringify(playwriterPkg.version),
 };
 if (process.env.TESTING) {
   defineEnv['import.meta.env.TESTING'] = 'true';
