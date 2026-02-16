@@ -119,6 +119,35 @@ If you find a bug, you can create a gh issue using `gh issue create -R remorses/
 
 Control user's Chrome browser via playwright code snippets. Prefer single-line code with semicolons between statements. Use playwriter immediately without waiting for user actions; only if you get "extension is not connected" or "no browser tabs have Playwriter enabled" should you ask the user to click the playwriter extension icon on the target tab.
 
+**If Chrome is not running**, the extension can't connect. Start Chrome from the command line before retrying:
+
+```bash
+# macOS
+open -a "Google Chrome"
+
+# Linux
+google-chrome &
+
+# Windows (cmd)
+start chrome.exe
+
+# Windows (PowerShell)
+Start-Process chrome.exe
+```
+
+To also enable automatic tab capture for screen recording (no manual extension click needed), add the `--allowlisted-extension-id` and `--auto-accept-this-tab-capture` flags:
+
+```bash
+# macOS
+open -a "Google Chrome" --args --allowlisted-extension-id=jfeammnjpkecdekppnclgkkffahnhfhe --auto-accept-this-tab-capture
+
+# Linux
+google-chrome --allowlisted-extension-id=jfeammnjpkecdekppnclgkkffahnhfhe --auto-accept-this-tab-capture &
+
+# Windows
+start chrome.exe --allowlisted-extension-id=jfeammnjpkecdekppnclgkkffahnhfhe --auto-accept-this-tab-capture
+```
+
 You can collaborate with the user - they can help with captchas, difficult elements, or reproducing bugs.
 
 ## context variables
