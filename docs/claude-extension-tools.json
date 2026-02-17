@@ -1,0 +1,443 @@
+{
+  "$comment": "Claude Chrome Extension (v1.0.39) tool schemas - extracted from minified mcpPermissions-4qerIYTq.js",
+  "tools": [
+    {
+      "name": "computer",
+      "description": "Use a mouse and keyboard to interact with a web browser, and take screenshots. If you don't have a valid tab ID, use tabs_context first to get available tabs.\n* Whenever you intend to click on an element like an icon, you should consult a screenshot to determine the coordinates of the element before moving the cursor.\n* If you tried clicking on a program or link but it failed to load, even after waiting, try adjusting your click location.\n* Make sure to click any buttons, links, icons, etc with the cursor tip in the center of the element.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "left_click",
+              "right_click",
+              "double_click",
+              "triple_click",
+              "type",
+              "screenshot",
+              "wait",
+              "scroll",
+              "key",
+              "left_click_drag",
+              "zoom",
+              "scroll_to",
+              "hover"
+            ],
+            "description": "The action to perform"
+          },
+          "coordinate": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "(x, y) pixels from left edge and top edge. Required for left_click, right_click, double_click, triple_click, scroll. For left_click_drag this is the end position."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text for type action, or space-separated keys for key action (e.g. 'Backspace Delete', 'cmd+a')"
+          },
+          "duration": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 30,
+            "description": "Seconds to wait. Required for wait action."
+          },
+          "scroll_direction": {
+            "type": "string",
+            "enum": ["up", "down", "left", "right"],
+            "description": "Direction to scroll. Required for scroll action."
+          },
+          "scroll_amount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Number of scroll wheel ticks. Default 3."
+          },
+          "start_coordinate": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Starting coordinates for left_click_drag action."
+          },
+          "region": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "[x0, y0, x1, y1] rectangle to capture for zoom action."
+          },
+          "repeat": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Repeat count for key action. Default 1."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Element reference (e.g. 'ref_1'). Required for scroll_to. Alternative to coordinate for click actions."
+          },
+          "modifiers": {
+            "type": "string",
+            "description": "Modifier keys: 'ctrl', 'shift', 'alt', 'cmd'/'meta', 'win'/'windows'. Combine with '+' (e.g. 'ctrl+shift')."
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID in current group."
+          }
+        },
+        "required": ["action", "tabId"]
+      }
+    },
+    {
+      "name": "read_page",
+      "description": "Get an accessibility tree representation of elements on the page. By default returns all elements including non-visible ones. Output is limited to 50000 characters. If the output exceeds this limit, you will receive an error asking you to specify a smaller depth or focus on a specific element using ref_id. Optionally filter for only interactive elements. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID in current group"
+          },
+          "filter": {
+            "type": "string",
+            "enum": ["interactive", "all"],
+            "description": "'interactive' for buttons/links/inputs only, 'all' for everything (default: all)"
+          },
+          "depth": {
+            "type": "number",
+            "description": "Max tree depth. Default 15. Use smaller if output too large."
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "Reference ID of a parent element - returns that element and all children. Use to focus on specific page region."
+          },
+          "max_chars": {
+            "type": "number",
+            "description": "Max characters for output. Default 50000."
+          }
+        },
+        "required": ["tabId"]
+      }
+    },
+    {
+      "name": "find",
+      "description": "Find elements on the page using natural language. Can search for elements by their purpose (e.g., 'search bar', 'login button') or by text content (e.g., 'organic mango product'). Returns up to 20 matching elements with references that can be used with other tools. If more than 20 matches exist, you'll be notified to use a more specific query. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language description (e.g., 'search bar', 'add to cart button', 'product title containing organic')"
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID in current group"
+          }
+        },
+        "required": ["query", "tabId"]
+      }
+    },
+    {
+      "name": "form_input",
+      "description": "Set values in form elements using element reference ID from the read_page tool. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "Element reference ID (e.g. 'ref_1', 'ref_2')"
+          },
+          "value": {
+            "description": "Value to set. Checkboxes: boolean. Selects: option value or text. Others: string/number."
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          }
+        },
+        "required": ["ref", "value", "tabId"]
+      }
+    },
+    {
+      "name": "navigate",
+      "description": "Navigate to a URL, or go forward/back in browser history. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to. No protocol defaults to https://. Use 'forward' or 'back' for history navigation."
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          }
+        },
+        "required": ["url", "tabId"]
+      }
+    },
+    {
+      "name": "get_page_text",
+      "description": "Extract raw text content from the page, prioritizing article content. Ideal for reading articles, blog posts, or other text-heavy pages. Returns plain text without HTML formatting. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          }
+        },
+        "required": ["tabId"]
+      }
+    },
+    {
+      "name": "update_plan",
+      "description": "Present a plan to the user for approval before taking actions. The user will see the domains you intend to visit and your approach. Once approved, you can proceed with actions on the approved domains without additional permission prompts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "domains": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Domains to visit (e.g. ['github.com', 'stackoverflow.com']). Get pre-approved when user accepts."
+          },
+          "approach": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "High-level steps. Focus on outcomes/key actions. Aim for 3-7 items."
+          }
+        },
+        "required": ["domains", "approach"]
+      }
+    },
+    {
+      "name": "tabs_context",
+      "description": "Get context information about all tabs in the current tab group.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "tabs_create",
+      "description": "Creates a new empty tab in the current tab group.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "upload_image",
+      "description": "Upload a previously captured screenshot or user-uploaded image to a file input or drag & drop target. Supports two approaches: (1) ref - for targeting specific elements, especially hidden file inputs, (2) coordinate - for drag & drop to visible locations like Google Docs. Provide either ref or coordinate, not both.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "description": "ID of previously captured screenshot (from computer tool's screenshot action) or user-uploaded image"
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID where target element is located"
+          },
+          "ref": {
+            "type": "string",
+            "description": "Element ref from read_page/find. Use for file inputs. Mutually exclusive with coordinate."
+          },
+          "coordinate": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Viewport coordinates for drag & drop. Mutually exclusive with ref."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Filename for uploaded file. Default: 'image.png'"
+          }
+        },
+        "required": ["imageId", "tabId"]
+      }
+    },
+    {
+      "name": "read_console_messages",
+      "description": "Read browser console messages (console.log, console.error, console.warn, etc.) from a specific tab. Useful for debugging JavaScript errors, viewing application logs. Returns console messages from the current domain only. IMPORTANT: Always provide a pattern to filter messages - without a pattern, you may get too many irrelevant messages.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          },
+          "onlyErrors": {
+            "type": "boolean",
+            "description": "If true, only error/exception messages. Default: false."
+          },
+          "clear": {
+            "type": "boolean",
+            "description": "If true, clear messages after reading. Default: false."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Regex filter (e.g. 'error|warning', 'MyApp'). Always recommended."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max messages to return. Default: 100."
+          }
+        },
+        "required": ["tabId"]
+      }
+    },
+    {
+      "name": "read_network_requests",
+      "description": "Read HTTP network requests (XHR, Fetch, documents, images, etc.) from a specific tab. Useful for debugging API calls, monitoring network activity. Returns all network requests including cross-origin. Requests are automatically cleared when the page navigates to a different domain.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          },
+          "urlPattern": {
+            "type": "string",
+            "description": "Filter - only requests whose URL contains this string (e.g. '/api/', 'example.com')"
+          },
+          "clear": {
+            "type": "boolean",
+            "description": "Clear requests after reading. Default: false."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max requests to return. Default: 100."
+          }
+        },
+        "required": ["tabId"]
+      }
+    },
+    {
+      "name": "resize_window",
+      "description": "Resize the current browser window to specified dimensions. Useful for testing responsive designs or setting up specific screen sizes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "number",
+            "description": "Target window width in pixels (max 7680)"
+          },
+          "height": {
+            "type": "number",
+            "description": "Target window height in pixels (max 4320)"
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID to identify the window"
+          }
+        },
+        "required": ["width", "height", "tabId"]
+      }
+    },
+    {
+      "name": "gif_creator",
+      "description": "Manage GIF recording and export for browser automation sessions. Control when to start/stop recording browser actions (clicks, scrolls, navigation), then export as an animated GIF with visual overlays (click indicators, action labels, progress bar, watermark). All operations are scoped to the tab's group.\nWhen starting recording, take a screenshot immediately after to capture the initial state as the first frame.\nWhen stopping recording, take a screenshot immediately before to capture the final state as the last frame.\nFor export, either provide coordinate to drag/drop upload to a page element, or set download: true to download the GIF.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["start_recording", "stop_recording", "export", "clear"],
+            "description": "GIF action to perform"
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID to identify which tab group"
+          },
+          "coordinate": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "For export: drag & drop target coordinates. Required unless download is true."
+          },
+          "download": {
+            "type": "boolean",
+            "description": "For export: download GIF instead of drag/drop."
+          },
+          "filename": {
+            "type": "string",
+            "description": "For export: filename. Default: 'recording-[timestamp].gif'"
+          },
+          "options": {
+            "type": "object",
+            "description": "For export: GIF enhancement options",
+            "properties": {
+              "showClickIndicators": {
+                "type": "boolean",
+                "description": "Orange circles at click locations. Default: true."
+              },
+              "showDragPaths": {
+                "type": "boolean",
+                "description": "Red arrows for drag actions. Default: true."
+              },
+              "showActionLabels": {
+                "type": "boolean",
+                "description": "Black labels describing actions. Default: true."
+              },
+              "showProgressBar": {
+                "type": "boolean",
+                "description": "Orange progress bar at bottom. Default: true."
+              },
+              "showWatermark": {
+                "type": "boolean",
+                "description": "Claude logo watermark. Default: true."
+              },
+              "quality": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 30,
+                "description": "Compression quality (lower = better but slower). Default: 10."
+              }
+            }
+          }
+        },
+        "required": ["action", "tabId"]
+      }
+    },
+    {
+      "name": "turn_answer_start",
+      "description": "Call this immediately before your text response to the user for this turn. Required every turn - whether or not you made tool calls. After calling, write your response. No more tools after this.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "javascript_tool",
+      "description": "Execute JavaScript code in the context of the current page. The code runs in the page's context and can interact with the DOM, window object, and page variables. Returns the result of the last expression or any thrown errors. If you don't have a valid tab ID, use tabs_context first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["javascript_exec"],
+            "description": "Must be 'javascript_exec'"
+          },
+          "text": {
+            "type": "string",
+            "description": "JavaScript code to execute. Do NOT use return statements - just write the expression (e.g. window.myData.value). Can access/modify DOM, call page functions, interact with page variables. Timeout: 10s. Output truncated at 50KB. Sensitive data (tokens, passwords, secrets) is redacted."
+          },
+          "tabId": {
+            "type": "number",
+            "description": "Tab ID"
+          }
+        },
+        "required": ["action", "text", "tabId"]
+      }
+    }
+  ]
+}

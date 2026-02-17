@@ -923,6 +923,95 @@ Examples of what playwriter can do:
 - Record videos of browser sessions that survive page navigation
 
 
+## computer use
+
+Playwriter provides the same browser control as Anthropic's `computer_20250124` tool and the Claude Chrome extension, using Playwright APIs instead of screenshot-based coordinate clicking. No computer use beta needed.
+
+This section covers low-level mouse/keyboard APIs not documented elsewhere. For locator-based clicking, screenshots, navigation, forms, evaluate, snapshots, and network interception see their dedicated sections above.
+
+### clicking
+
+```js
+// Preferred: by locator (stable, auto-waits, no coordinates needed)
+await page.locator('button[name="Submit"]').click()
+await page.locator('text=Login').click({ button: 'right' })
+await page.locator('text=Login').dblclick()
+await page.locator('a').first().click({ modifiers: ['Meta'] })  // cmd+click opens new tab
+
+// By coordinates (when locators aren't available, e.g. canvas, maps, custom widgets)
+await page.mouse.click(450, 320)                              // left click
+await page.mouse.click(450, 320, { button: 'right' })         // right click
+await page.mouse.dblclick(450, 320)                            // double click
+await page.mouse.click(450, 320, { clickCount: 3 })           // triple click
+await page.mouse.click(450, 320, { modifiers: ['Shift'] })    // shift+click
+```
+
+### hover
+
+```js
+await page.locator('.tooltip-trigger').hover()  // by locator (preferred)
+await page.mouse.move(450, 320)                 // by coordinates
+```
+
+### scroll
+
+```js
+// By locator (preferred)
+await page.locator('#footer').scrollIntoViewIfNeeded()
+
+// By pixel (for canvas, maps, infinite scroll)
+await page.mouse.wheel(0, 300)   // scroll down 300px
+await page.mouse.wheel(0, -300)  // scroll up
+await page.mouse.wheel(300, 0)   // scroll right
+await page.mouse.wheel(-300, 0)  // scroll left
+
+// Scroll at a specific position
+await page.mouse.move(450, 320)
+await page.mouse.wheel(0, 500)
+
+// Scroll inside a container
+await page.locator('.scrollable-list').evaluate(el => { el.scrollTop += 500 })
+```
+
+### drag
+
+```js
+// By locator (preferred)
+await page.locator('#item').dragTo(page.locator('#target'))
+
+// By coordinates (for canvas, sliders, custom drag targets)
+await page.mouse.move(100, 200)
+await page.mouse.down()
+await page.mouse.move(400, 500, { steps: 10 })  // steps for smooth drag
+await page.mouse.up()
+```
+
+### key hold / release / repeat
+
+```js
+// Hold modifier while pressing another key
+await page.keyboard.down('Shift')
+await page.keyboard.press('ArrowDown')
+await page.keyboard.up('Shift')
+
+// Repeat a key
+for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown')
+```
+
+### resize viewport
+
+```js
+await page.setViewportSize({ width: 1280, height: 720 })
+```
+
+### region screenshot (zoom equivalent)
+
+```js
+await page.screenshot({ path: 'region.png', scale: 'css', clip: { x: 100, y: 200, width: 400, height: 300 } })
+```
+
+Prefer locator-based actions over coordinates — locators are stable across scroll/resize, auto-wait for elements, and don't require screenshot round-trips that burn ~800 image tokens per cycle.
+
 ## Ghost Browser integration
 
 Playwriter supports [Ghost Browser](https://ghostbrowser.com/) for multi-identity automation. When running in Ghost Browser, the `chrome` object exposes APIs to control identities, proxies, and sessions - useful for managing multiple accounts, rotating proxies, or isolated cookie sessions.
