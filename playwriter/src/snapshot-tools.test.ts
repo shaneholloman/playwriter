@@ -138,6 +138,45 @@ describe('Snapshot & Screenshot Tests', () => {
         await page.close()
     }, 60000)
 
+    it('should match window.innerWidth/Height without clip param', async () => {
+        // Proves that in connectOverCDP mode, Playwright already queries
+        // window.innerWidth/innerHeight for viewport screenshots, so passing
+        // a manual clip is redundant.
+        const browserContext = getBrowserContext()
+        const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+        const page = await browserContext.newPage()
+        await page.goto('https://example.com/')
+        await page.bringToFront()
+
+        await serviceWorker.evaluate(async () => {
+            await globalThis.toggleExtensionForActiveTab()
+        })
+        await new Promise(r => setTimeout(r, 100))
+
+        const browser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
+        const cdpPage = browser.contexts()[0].pages().find(p => p.url().includes('example.com'))
+        expect(cdpPage).toBeDefined()
+
+        // Get actual browser viewport via JS
+        const actualViewport = await cdpPage!.evaluate(() => ({
+            width: window.innerWidth,
+            height: window.innerHeight,
+        }))
+        console.log('Actual viewport (window.inner*):', actualViewport)
+
+        // Plain screenshot with scale:'css', NO clip
+        const screenshot = await cdpPage!.screenshot({ scale: 'css' })
+        const dimensions = imageSize(screenshot)
+        console.log('Screenshot dimensions (no clip):', dimensions)
+
+        expect(dimensions.width).toBe(actualViewport.width)
+        expect(dimensions.height).toBe(actualViewport.height)
+
+        await browser.close()
+        await page.close()
+    }, 60000)
+
     it('should capture element screenshot with correct coordinates', async () => {
         const browserContext = getBrowserContext()
         const serviceWorker = await getExtensionServiceWorker(browserContext)
