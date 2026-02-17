@@ -172,14 +172,97 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 - **Wait for load**: use `page.waitForLoadState('domcontentloaded')` not `page.waitForEvent('load')` - waitForEvent times out if already loaded
 - **Avoid timeouts**: prefer proper waits over `page.waitForTimeout()` - there are better ways to wait for elements
 
+## interaction feedback loop
+
+Every browser interaction should follow a **observe → act → observe** loop. After every action, you must check its result before proceeding. Never chain multiple actions blindly — the page may not have responded as expected.
+
+**Core loop:**
+
+1. **Open page** — get or create your page and navigate to the target URL
+2. **Observe** — take an accessibility snapshot to understand the current state
+3. **Update priors** — read the snapshot, identify the element to interact with
+4. **Act** — perform one action (click, type, submit)
+5. **Observe again** — take another snapshot to verify the action's effect
+6. **Repeat** — continue from step 3 until the task is complete
+
+```
+┌─────────────────────────────────────────────┐
+│            open page + goto URL             │
+└──────────────────┬──────────────────────────┘
+                   ▼
+          ┌────────────────┐
+          │    observe      │◄─────────────────┐
+          │  (snapshot)     │                   │
+          └───────┬────────┘                   │
+                  ▼                            │
+          ┌────────────────┐                   │
+          │  update priors  │                   │
+          │  (read result)  │                   │
+          └───────┬────────┘                   │
+                  ▼                            │
+          ┌────────────────┐                   │
+          │      act        │                   │
+          │  (click/type)   │──────────────────┘
+          └────────────────┘
+```
+
+**Example: opening a Framer plugin via the command palette**
+
+Each step is a separate execute call. Notice how every action is followed by a snapshot to verify what happened:
+
+```js
+// 1. Open page and observe
+state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
+await state.myPage.goto('https://framer.com/projects/my-project', { waitUntil: 'domcontentloaded' });
+await accessibilitySnapshot({ page: state.myPage }).then(console.log)
+```
+
+```js
+// 2. Act: open command palette → observe result
+await state.myPage.keyboard.press('Meta+k');
+await accessibilitySnapshot({ page: state.myPage, search: /dialog|Search/ }).then(console.log)
+```
+
+```js
+// 3. Act: type search query → observe result
+await state.myPage.keyboard.type('MCP');
+await accessibilitySnapshot({ page: state.myPage, search: /MCP/ }).then(console.log)
+```
+
+```js
+// 4. Act: press Enter → observe plugin loaded
+await state.myPage.keyboard.press('Enter');
+await state.myPage.waitForTimeout(1000);
+const frame = state.myPage.frames().find(f => f.url().includes('plugins.framercdn.com'));
+await accessibilitySnapshot({ page: state.myPage, frame: frame || undefined }).then(console.log)
+```
+
+**Other ways to observe action results:**
+
+Snapshots are the primary feedback mechanism, but some actions have side effects that are better observed through other channels:
+
+- **Console logs** — check for errors or app state after an action:
+  ```js
+  await getLatestLogs({ page, search: /error|fail/i, count: 20 })
+  ```
+- **Network requests** — verify API calls were made after a form submit or button click:
+  ```js
+  page.on('response', async res => { if (res.url().includes('/api/')) { console.log(res.status(), res.url()); } });
+  ```
+- **URL changes** — confirm navigation happened:
+  ```js
+  console.log(page.url())
+  ```
+- **Screenshots** — only when you need to verify visual layout (CSS, spatial positioning, colors). Snapshots are always preferred for content verification.
+
 ## common mistakes to avoid
 
 **1. Not verifying actions succeeded**
-Always screenshot and READ the image after important actions (form submissions, uploads, typing). Your mental model can diverge from actual browser state:
+Always check page state after important actions (form submissions, uploads, typing). Your mental model can diverge from actual browser state:
 ```js
 await page.keyboard.type('my text');
-await page.screenshotWithAccessibilityLabels({ page });
-// Then READ the screenshot file to verify text appeared correctly
+await accessibilitySnapshot({ page, search: /my text/ })
+// If verifying visual layout specifically, use screenshotWithAccessibilityLabels instead
 ```
 
 **2. Assuming paste/upload worked**
@@ -224,7 +307,36 @@ await page.keyboard.press('Enter');
 await page.keyboard.type('Line 2');
 ```
 
-**6. Assuming page content loaded**
+**6. Quote escaping in $'...' syntax**
+When using `$'...'` for multiline code, nested quotes break parsing. Use different quote styles or escape them:
+```bash
+# BAD: nested double quotes break $'...' 
+playwriter -s 1 -e $'await page.locator("[id=\"_r_a_\"]").click()'
+
+# GOOD: use single quotes inside, or template strings
+playwriter -s 1 -e $'await page.locator(\'[id="_r_a_"]\').click()'
+
+# GOOD: use heredoc for complex quoting
+playwriter -s 1 -e "$(cat <<'EOF'
+await page.locator('[id="_r_a_"]').click()
+EOF
+)"
+```
+
+**7. Using screenshots when snapshots suffice**
+Screenshots + image analysis is expensive and slow. Only use screenshots for visual/CSS issues:
+```js
+// BAD: screenshot to check if text appeared (wastes tokens on image analysis)
+await page.screenshot({ path: 'check.png', scale: 'css' });
+
+// GOOD: snapshot is text — fast, cheap, searchable
+await accessibilitySnapshot({ page, search: /expected text/i })
+
+// GOOD: evaluate DOM directly for content checks
+const text = await page.evaluate(() => document.querySelector('.message')?.textContent);
+```
+
+**8. Assuming page content loaded**
 Even after `goto()`, dynamic content may not be ready:
 ```js
 await page.goto('https://example.com');
@@ -234,7 +346,7 @@ await page.waitForSelector('article', { timeout: 10000 });
 await waitForPageLoad({ page, timeout: 5000 });
 ```
 
-**7. Login buttons that open popups**
+**9. Login buttons that open popups**
 Playwriter extension cannot control popup windows. If a login button opens a popup (common with OAuth/SSO), use cmd+click to open in a new tab instead:
 ```js
 // BAD: popup window is not controllable by playwriter
@@ -259,13 +371,17 @@ await loginPage.waitForURL('**/callback**');
 
 ## checking page state
 
-After any action (click, submit, navigate), verify what happened:
+After any action (click, submit, navigate), verify what happened. **Always prefer accessibility snapshots over screenshots** — snapshots are text (cheap, fast, searchable), screenshots require image analysis (expensive, slow).
 
 ```js
+// Default: use snapshot with optional filtering
 page.url() + '\n' + await accessibilitySnapshot({ page })
+
+// Filter for specific content when snapshot is large
+await accessibilitySnapshot({ page, search: /dialog|button|error/i })
 ```
 
-For visually complex pages (grids, galleries, dashboards), use `screenshotWithAccessibilityLabels({ page })` instead to understand spatial layout. Label refs are short `eN` strings (e.g. `e3`).
+Only use `screenshotWithAccessibilityLabels({ page })` for **visual layout issues** (CSS bugs, spatial positioning, colors). For verifying text content, button states, or form values, snapshots are always sufficient.
 
 If nothing changed, try `await waitForPageLoad({ page, timeout: 3000 })` or you may have clicked the wrong element.
 
@@ -313,6 +429,18 @@ Search for specific elements:
 ```js
 const snapshot = await accessibilitySnapshot({ page, search: /button|submit/i })
 ```
+
+**Filtering large snapshots in JS** — when the built-in `search` isn't enough (e.g., you need multiple patterns or custom logic), filter the snapshot string directly:
+
+```js
+const snap = await accessibilitySnapshot({ page, showDiffSinceLastCall: false });
+const relevant = snap.split('\n').filter(l =>
+  l.includes('dialog') || l.includes('error') || l.includes('button')
+).join('\n');
+console.log(relevant);
+```
+
+This is much cheaper than taking a screenshot — use it as your primary debugging tool for verifying text content, checking if elements exist, or confirming state changes.
 
 ## choosing between snapshot methods
 
@@ -362,14 +490,17 @@ await page.locator('li').nth(3).click()       // 4th item (0-indexed)
 
 ## working with pages
 
-**Pages are shared, state is not.** `context.pages()` returns all browser tabs with playwriter enabled — shared across all sessions. Multiple agents see the same tabs. If another agent navigates or closes a page you're using, you'll be affected. To avoid interference, **always create your own page**.
+**Pages are shared, state is not.** `context.pages()` returns all browser tabs with playwriter enabled — shared across all sessions. Multiple agents see the same tabs. If another agent navigates or closes a page you're using, you'll be affected. To avoid interference, **get your own page**.
 
-**Always create your own page (first call):**
+**Get or create your page (first call):**
 
-On your very first execute call, create a dedicated page and store it in `state`. Use `state.myPage` for all subsequent operations — never the default `page` variable:
+On your very first execute call, reuse an existing empty tab or create a new one, and navigate it **in the same execute call**. Store it in `state` and use `state.myPage` for all subsequent operations instead of the default `page` variable:
 
 ```js
-state.myPage = await context.newPage();
+// Reuse an empty about:blank tab if available, otherwise create a new one.
+// IMPORTANT: always navigate immediately in the same call to avoid another
+// agent grabbing the same about:blank tab between execute calls.
+state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
 await state.myPage.goto('https://example.com');
 // Use state.myPage for ALL subsequent operations
 ```
@@ -380,7 +511,7 @@ The user may close your page by accident (e.g., closing a tab in Chrome). Always
 
 ```js
 if (!state.myPage || state.myPage.isClosed()) {
-  state.myPage = await context.newPage();
+  state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
 }
 await state.myPage.goto('https://example.com');
 ```
@@ -742,6 +873,42 @@ console.log(data);
 ```
 
 Clean up listeners when done: `page.removeAllListeners('request'); page.removeAllListeners('response');`
+
+## debugging web apps
+
+When debugging why a web app isn't working (e.g., content not rendering, API errors, state issues), use these techniques **before** resorting to screenshots:
+
+**1. Console logs** — use `getLatestLogs` to check for errors:
+
+```js
+const errors = await getLatestLogs({ page, search: /error|fail/i, count: 20 });
+const appLogs = await getLatestLogs({ page, search: /myComponent|state/i });
+```
+
+**2. DOM inspection via evaluate** — check content directly without screenshots:
+
+```js
+const info = await page.evaluate(() => {
+  const msgs = document.querySelectorAll('.message');
+  return Array.from(msgs).map(m => ({
+    text: m.textContent?.slice(0, 200),
+    visible: m.offsetHeight > 0,
+  }));
+});
+console.log(JSON.stringify(info, null, 2));
+```
+
+**3. Combine snapshot + logs for full picture:**
+
+```js
+await page.keyboard.press('Enter');
+await page.waitForTimeout(2000);
+
+const snap = await accessibilitySnapshot({ page, search: /dialog|error|message/ });
+const logs = await getLatestLogs({ page, search: /error/i, count: 10 });
+console.log('UI:', snap);
+console.log('Logs:', logs);
+```
 
 ## capabilities
 

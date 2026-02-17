@@ -172,6 +172,89 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 - **Wait for load**: use `page.waitForLoadState('domcontentloaded')` not `page.waitForEvent('load')` - waitForEvent times out if already loaded
 - **Avoid timeouts**: prefer proper waits over `page.waitForTimeout()` - there are better ways to wait for elements
 
+## interaction feedback loop
+
+Every browser interaction should follow a **observe → act → observe** loop. After every action, you must check its result before proceeding. Never chain multiple actions blindly — the page may not have responded as expected.
+
+**Core loop:**
+
+1. **Open page** — get or create your page and navigate to the target URL
+2. **Observe** — take an accessibility snapshot to understand the current state
+3. **Update priors** — read the snapshot, identify the element to interact with
+4. **Act** — perform one action (click, type, submit)
+5. **Observe again** — take another snapshot to verify the action's effect
+6. **Repeat** — continue from step 3 until the task is complete
+
+```
+┌─────────────────────────────────────────────┐
+│            open page + goto URL             │
+└──────────────────┬──────────────────────────┘
+                   ▼
+          ┌────────────────┐
+          │    observe      │◄─────────────────┐
+          │  (snapshot)     │                   │
+          └───────┬────────┘                   │
+                  ▼                            │
+          ┌────────────────┐                   │
+          │  update priors  │                   │
+          │  (read result)  │                   │
+          └───────┬────────┘                   │
+                  ▼                            │
+          ┌────────────────┐                   │
+          │      act        │                   │
+          │  (click/type)   │──────────────────┘
+          └────────────────┘
+```
+
+**Example: opening a Framer plugin via the command palette**
+
+Each step is a separate execute call. Notice how every action is followed by a snapshot to verify what happened:
+
+```js
+// 1. Open page and observe
+state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
+await state.myPage.goto('https://framer.com/projects/my-project', { waitUntil: 'domcontentloaded' });
+await accessibilitySnapshot({ page: state.myPage }).then(console.log)
+```
+
+```js
+// 2. Act: open command palette → observe result
+await state.myPage.keyboard.press('Meta+k');
+await accessibilitySnapshot({ page: state.myPage, search: /dialog|Search/ }).then(console.log)
+```
+
+```js
+// 3. Act: type search query → observe result
+await state.myPage.keyboard.type('MCP');
+await accessibilitySnapshot({ page: state.myPage, search: /MCP/ }).then(console.log)
+```
+
+```js
+// 4. Act: press Enter → observe plugin loaded
+await state.myPage.keyboard.press('Enter');
+await state.myPage.waitForTimeout(1000);
+const frame = state.myPage.frames().find(f => f.url().includes('plugins.framercdn.com'));
+await accessibilitySnapshot({ page: state.myPage, frame: frame || undefined }).then(console.log)
+```
+
+**Other ways to observe action results:**
+
+Snapshots are the primary feedback mechanism, but some actions have side effects that are better observed through other channels:
+
+- **Console logs** — check for errors or app state after an action:
+  ```js
+  await getLatestLogs({ page, search: /error|fail/i, count: 20 })
+  ```
+- **Network requests** — verify API calls were made after a form submit or button click:
+  ```js
+  page.on('response', async res => { if (res.url().includes('/api/')) { console.log(res.status(), res.url()); } });
+  ```
+- **URL changes** — confirm navigation happened:
+  ```js
+  console.log(page.url())
+  ```
+- **Screenshots** — only when you need to verify visual layout (CSS, spatial positioning, colors). Snapshots are always preferred for content verification.
+
 ## common mistakes to avoid
 
 **1. Not verifying actions succeeded**
@@ -407,14 +490,17 @@ await page.locator('li').nth(3).click()       // 4th item (0-indexed)
 
 ## working with pages
 
-**Pages are shared, state is not.** `context.pages()` returns all browser tabs with playwriter enabled — shared across all sessions. Multiple agents see the same tabs. If another agent navigates or closes a page you're using, you'll be affected. To avoid interference, **always create your own page**.
+**Pages are shared, state is not.** `context.pages()` returns all browser tabs with playwriter enabled — shared across all sessions. Multiple agents see the same tabs. If another agent navigates or closes a page you're using, you'll be affected. To avoid interference, **get your own page**.
 
-**Always create your own page (first call):**
+**Get or create your page (first call):**
 
-On your very first execute call, create a dedicated page and store it in `state`. Use `state.myPage` for all subsequent operations — never the default `page` variable:
+On your very first execute call, reuse an existing empty tab or create a new one, and navigate it **in the same execute call**. Store it in `state` and use `state.myPage` for all subsequent operations instead of the default `page` variable:
 
 ```js
-state.myPage = await context.newPage();
+// Reuse an empty about:blank tab if available, otherwise create a new one.
+// IMPORTANT: always navigate immediately in the same call to avoid another
+// agent grabbing the same about:blank tab between execute calls.
+state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
 await state.myPage.goto('https://example.com');
 // Use state.myPage for ALL subsequent operations
 ```
@@ -425,7 +511,7 @@ The user may close your page by accident (e.g., closing a tab in Chrome). Always
 
 ```js
 if (!state.myPage || state.myPage.isClosed()) {
-  state.myPage = await context.newPage();
+  state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
 }
 await state.myPage.goto('https://example.com');
 ```
