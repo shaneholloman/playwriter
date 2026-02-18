@@ -318,7 +318,8 @@ export class PlaywrightExecutor {
     page.on('popup', (popup) => {
       const context = page.context()
       const pages = context.pages()
-      const pageIndex = pages.indexOf(popup)
+      const rawIndex = pages.indexOf(popup)
+      const pageIndex = rawIndex >= 0 ? String(rawIndex) : 'unknown'
       const url = popup.url()
       this.popupWarnings.push(
         `Popup window detected (page index ${pageIndex}, url: ${url}). ` +
@@ -918,12 +919,16 @@ export class PlaywrightExecutor {
       this.logger.error('Error in execute:', errorStack)
 
       const logsText = formatConsoleLogs(consoleLogs, 'Console output (before error)')
+      const popupText = this.popupWarnings.length > 0
+        ? this.popupWarnings.map((w) => `[WARNING] ${w}`).join('\n') + '\n'
+        : ''
+      this.popupWarnings = []
       const resetHint = isTimeoutError
         ? ''
         : '\n\n[HINT: If this is an internal Playwright error, page/browser closed, or connection issue, call reset to reconnect.]'
 
       return {
-        text: `${logsText}\nError executing code: ${error.message}\n${errorStack}${resetHint}`,
+        text: `${logsText}${popupText}\nError executing code: ${error.message}\n${errorStack}${resetHint}`,
         images: [],
         isError: true,
       }
