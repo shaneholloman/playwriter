@@ -155,14 +155,14 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 - `state` - object persisted between calls **within your session**. Each session has its own isolated state. Use to store pages, data, listeners (e.g., `state.myPage = await context.newPage()`)
 - `page` - a default page (may be shared with other agents). Prefer creating your own page and storing it in `state` (see "working with pages")
 - `context` - browser context, access all pages via `context.pages()`
-- `require` - load Node.js modules like fs
+- `require` - load Node.js modules (e.g., `const fs = require('node:fs')`). ESM `import` is not available in the sandbox
 - Node.js globals: `setTimeout`, `setInterval`, `fetch`, `URL`, `Buffer`, `crypto`, etc.
 
 **Important:** `state` is **session-isolated** but pages are **shared** across all sessions. See "working with pages" for how to avoid interference.
 
 ## rules
 
-- **Create your own page**: see "working with pages" — always create and store your own page in `state`, never use the default `page` for automation
+- **Create your own page**: see "working with pages" — always create and store your own page in `state`, never use the default `page` for automation. Examples below use bare `page` for brevity, but in real automation always use `state.myPage`
 - **Multiple calls**: use multiple execute calls for complex logic - helps understand intermediate state and isolate which action failed
 - **Never close**: never call `browser.close()` or `context.close()`. Only close pages you created or if user asks
 - **No bringToFront**: never call unless user asks - it's disruptive and unnecessary, you can interact with background pages
@@ -170,7 +170,7 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 - **Clean up listeners**: call `page.removeAllListeners()` at end of message to prevent leaks
 - **CDP sessions**: use `getCDPSession({ page })` not `page.context().newCDPSession()` - NEVER use `newCDPSession()` method, it doesn't work through playwriter relay
 - **Wait for load**: use `page.waitForLoadState('domcontentloaded')` not `page.waitForEvent('load')` - waitForEvent times out if already loaded
-- **Avoid timeouts**: prefer proper waits over `page.waitForTimeout()` - there are better ways to wait for elements
+- **Minimize timeouts**: prefer proper waits (`waitForSelector`, `waitForPageLoad`) over `page.waitForTimeout()`. Short timeouts (1-2s) are acceptable for non-deterministic events like popups, animations, or tab opens where no specific selector is available
 
 ## interaction feedback loop
 
@@ -257,7 +257,7 @@ Snapshots are the primary feedback mechanism, but some actions have side effects
   ```js
   console.log(page.url())
   ```
-- **Screenshots** — only when you need to verify visual layout (CSS, spatial positioning, colors). Snapshots are always preferred for content verification.
+- **Screenshots** — only for visual layout issues (see "choosing between snapshot methods" below).
 
 ## common mistakes to avoid
 
@@ -295,7 +295,7 @@ await snapshot({ page, showDiffSinceLastCall: true })
 Before destructive actions (delete, submit), verify you're targeting the right thing:
 ```js
 // Before deleting, verify it's the right item
-await page.screenshotWithAccessibilityLabels({ page });
+await screenshotWithAccessibilityLabels({ page });
 // READ the screenshot to confirm, THEN proceed with delete
 ```
 
@@ -375,7 +375,7 @@ await loginPage.waitForURL('**/callback**');
 
 ## checking page state
 
-After any action (click, submit, navigate), verify what happened. **Always prefer accessibility snapshots over screenshots** — snapshots are text (cheap, fast, searchable), screenshots require image analysis (expensive, slow).
+After any action (click, submit, navigate), verify what happened. Always print URL first, then snapshot:
 
 ```js
 // Always print URL first, then snapshot
@@ -384,8 +384,6 @@ console.log('URL:', page.url()); await snapshot({ page }).then(console.log)
 // Filter for specific content when snapshot is large
 console.log('URL:', page.url()); await snapshot({ page, search: /dialog|button|error/i }).then(console.log)
 ```
-
-Only use `screenshotWithAccessibilityLabels({ page })` for **visual layout issues** (CSS bugs, spatial positioning, colors). For verifying text content, button states, or form values, snapshots are always sufficient.
 
 If nothing changed, try `await waitForPageLoad({ page, timeout: 3000 })` or you may have clicked the wrong element.
 
@@ -400,7 +398,7 @@ await snapshot({ page, search?, showDiffSinceLastCall? })
 - `search` - string/regex to filter results (returns first 10 matching lines)
 - `showDiffSinceLastCall` - returns diff since last snapshot (default: `true`). Pass `false` to get full snapshot.
 
-Snapshots return full content on first call, then diffs on subsequent calls. If nothing changed, returns "No changes since last snapshot" message. Use `showDiffSinceLastCall: false` to always get full content.
+Snapshots return full content on first call, then diffs on subsequent calls. Diff is only returned when shorter than full content. If nothing changed, returns "No changes since last snapshot" message. Use `showDiffSinceLastCall: false` to always get full content. This diffing behavior also applies to `getCleanHTML` and `getPageMarkdown`.
 
 Example output:
 
@@ -587,33 +585,33 @@ await page.evaluate(async (url) => {
 
 Instead, use simpler alternatives (single download via `a.click()`, store data in `state`, etc).
 
-**Links that open new tabs** - use cmd+click to open in a controllable new tab:
+**Links that open new tabs** - playwriter cannot control popup windows opened via `window.open`. Use cmd+click to open in a controllable new tab instead (see mistake #9 above for a full example):
 
 ```js
-// For links with target=_blank or buttons that open popups
 await page.locator('a[target=_blank]').click({ modifiers: ['Meta'] });
 await page.waitForTimeout(1000);
-
-// New tab is last in context.pages()
 const pages = context.pages();
 const newTab = pages[pages.length - 1];
 console.log('New tab URL:', newTab.url());
 ```
 
-Note: `page.waitForEvent('popup')` is unreliable - playwriter cannot control popup windows opened via `window.open`. Use cmd+click instead.
-
 **Downloads** - capture and save:
 
 ```js
 const [download] = await Promise.all([page.waitForEvent('download'), page.click('button.download')]);
-await download.saveAs(`/tmp/${download.suggestedFilename()}`);
+await download.saveAs(`./${download.suggestedFilename()}`);
 ```
 
-**iFrames** - use frameLocator:
+**iFrames** - two approaches depending on what you need:
 
 ```js
+// frameLocator: for chaining locator operations (click, fill, etc.)
 const frame = page.frameLocator('#my-iframe');
 await frame.locator('button').click();
+
+// contentFrame: returns a Frame object, needed for snapshot({ frame })
+const frame2 = await page.locator('iframe').contentFrame();
+await snapshot({ frame: frame2 })
 ```
 
 **Dialogs** - handle alerts/confirms/prompts:
@@ -664,8 +662,6 @@ The function cleans HTML for compact, readable output:
 - All `data-*` test attributes
 - Frequently used test IDs and special attributes (e.g., `testid`, `qa`, `e2e`, `vimium-label`)
 
-Snapshots return full content on first call, then diffs on subsequent calls. Diff is only returned when shorter than full content.
-
 **getPageMarkdown** - extract main page content as plain text using Mozilla Readability (same algorithm as Firefox Reader View). Strips navigation, ads, sidebars, and other clutter. Returns formatted text with title, author, and content:
 
 ```js
@@ -690,8 +686,6 @@ The main article content as plain text, with paragraphs preserved...
 - `page` - Playwright Page to extract content from
 - `search` - string/regex to filter content (returns first 10 matching lines with 5 lines context)
 - `showDiffSinceLastCall` - returns diff since last call (default: `true`). Pass `false` to get full content.
-
-Snapshots return full content on first call, then diffs on subsequent calls. Diff is only returned when shorter than full content.
 
 **Use cases:**
 - Extract article text for LLM processing without HTML noise
@@ -1036,7 +1030,3 @@ For complete API reference with all methods, types, and examples, read:
 `extension/src/ghost-browser-api.d.ts`
 
 Note: Only works in Ghost Browser. In regular Chrome, calls fail with "not available".
-
-## debugging playwriter issues
-
-if some internal critical error happens you can read your own relay ws logs to understand the issue, it will show logs from extension, mcp and ws server together. then you can create a gh issue using `gh issue create -R remorses/playwriter --title title --body body`. ask for user confirmation before doing this.
