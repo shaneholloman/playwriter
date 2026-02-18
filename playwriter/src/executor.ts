@@ -312,20 +312,20 @@ export class PlaywrightExecutor {
   }
 
   private setupPopupDetection(page: Page) {
-    // Check if this page was opened by window.open() (has an opener)
-    const opener = page.opener()
-    if (!opener) {
-      return
-    }
-    const context = page.context()
-    const pages = context.pages()
-    const pageIndex = pages.indexOf(page)
-    const url = page.url()
-    this.popupWarnings.push(
-      `Popup window detected (page index ${pageIndex}, url: ${url}). ` +
-        `Popup windows cannot be controlled by playwriter. ` +
-        `Repeat the interaction in a way that does not open a popup, or navigate to the URL directly in a new tab.`,
-    )
+    // Listen for popup events (window.open, target=_blank) on each page.
+    // This is more reliable than checking page.opener() on context 'page' event,
+    // which also fires for context.newPage() and CDP reconnection scenarios.
+    page.on('popup', (popup) => {
+      const context = page.context()
+      const pages = context.pages()
+      const pageIndex = pages.indexOf(popup)
+      const url = popup.url()
+      this.popupWarnings.push(
+        `Popup window detected (page index ${pageIndex}, url: ${url}). ` +
+          `Popup windows cannot be controlled by playwriter. ` +
+          `Repeat the interaction in a way that does not open a popup, or navigate to the URL directly in a new tab.`,
+      )
+    })
   }
 
   private setupPageConsoleListener(page: Page) {
@@ -436,7 +436,7 @@ export class PlaywrightExecutor {
       this.setupPageListeners(page)
     })
 
-    context.pages().forEach((p) => this.setupPageConsoleListener(p))
+    context.pages().forEach((p) => this.setupPageListeners(p))
     const page = await this.ensurePageForContext({ context, timeout: 10000 })
 
     await this.preserveSystemColorScheme(context)
@@ -511,7 +511,7 @@ export class PlaywrightExecutor {
       this.setupPageListeners(page)
     })
 
-    context.pages().forEach((p) => this.setupPageConsoleListener(p))
+    context.pages().forEach((p) => this.setupPageListeners(p))
     const page = await this.ensurePageForContext({ context, timeout: 10000 })
 
     await this.preserveSystemColorScheme(context)
