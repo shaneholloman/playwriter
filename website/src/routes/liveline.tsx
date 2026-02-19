@@ -287,6 +287,39 @@ function Divider() {
   );
 }
 
+function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <>
+      <Divider />
+      <SectionHeading id={id}>{title}</SectionHeading>
+      {children}
+    </>
+  );
+}
+
+function List({ children }: { children: React.ReactNode }) {
+  return (
+    <ul
+      className="m-0 pl-5"
+      style={{
+        fontFamily: "var(--ll-font-primary)",
+        fontSize: "14px",
+        fontWeight: 475,
+        lineHeight: "20px",
+        letterSpacing: "-0.09px",
+        color: "var(--ll-text-primary)",
+        listStyleType: "disc",
+      }}
+    >
+      {children}
+    </ul>
+  );
+}
+
+function Li({ children }: { children: React.ReactNode }) {
+  return <li style={{ padding: "0 0 8px 12px" }}>{children}</li>;
+}
+
 function CodeBlock({ children, lang = "jsx" }: { children: string; lang?: string }) {
   const codeRef = useRef<HTMLElement>(null);
   const lines = children.split("\n");
@@ -618,10 +651,7 @@ export default function LivelinePage() {
             Everything else is opt-in.
           </Paragraph>
 
-          <Divider />
-
-          {/* Getting started */}
-          <SectionHeading id="getting-started">Getting started</SectionHeading>
+          <Section id="getting-started" title="Getting started">
 
           <CodeBlock lang="bash">npm install liveline</CodeBlock>
 
@@ -662,10 +692,9 @@ function Chart({ data, value }) {
             Resting heart rate. Custom formatter, exaggerated Y-axis.
           </Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Momentum */}
-          <SectionHeading id="momentum">Momentum</SectionHeading>
+          <Section id="momentum" title="Momentum">
 
           <Paragraph>
             The <InlineCode>momentum</InlineCode> prop adds directional arrows
@@ -682,10 +711,9 @@ function Chart({ data, value }) {
             Arrows fade out fully before the new direction fades in.
           </Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Value overlay */}
-          <SectionHeading id="value-overlay">Value overlay</SectionHeading>
+          <Section id="value-overlay" title="Value overlay">
 
           <Paragraph>
             <InlineCode>showValue</InlineCode> renders the current value as a
@@ -698,10 +726,9 @@ function Chart({ data, value }) {
           <ChartPlaceholder height={204} label="$17,138.03" />
           <Caption>60fps value overlay with momentum colouring.</Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Time windows */}
-          <SectionHeading id="time-windows">Time windows</SectionHeading>
+          <Section id="time-windows" title="Time windows">
 
           <Paragraph>
             Pass a <InlineCode>windows</InlineCode> array to render time horizon
@@ -728,10 +755,9 @@ function Chart({ data, value }) {
             CPU usage with occasional spikes. Rounded time windows.
           </Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Reference line */}
-          <SectionHeading id="reference-line">Reference line</SectionHeading>
+          <Section id="reference-line" title="Reference line">
 
           <Paragraph>
             <InlineCode>referenceLine</InlineCode> draws a horizontal line at a
@@ -745,10 +771,9 @@ function Chart({ data, value }) {
             $67,500?&quot;
           </Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Orderbook */}
-          <SectionHeading id="orderbook">Orderbook</SectionHeading>
+          <Section id="orderbook" title="Orderbook">
 
           <Paragraph>
             Pass an <InlineCode>orderbook</InlineCode> prop with{" "}
@@ -771,10 +796,9 @@ function Chart({ data, value }) {
             the price line.
           </Caption>
 
-          <Divider />
+          </Section>
 
-          {/* Theming */}
-          <SectionHeading id="theming">Theming</SectionHeading>
+          <Section id="theming" title="Theming">
 
           <Paragraph>
             Pass any CSS colour string to <InlineCode>color</InlineCode> and
@@ -786,52 +810,39 @@ function Chart({ data, value }) {
           <ChartPlaceholder height={204} label="540.42" />
           <Caption>Dark theme. Same component, different colour.</Caption>
 
-          <Divider />
+          </Section>
 
-          {/* More features */}
-          <SectionHeading id="more-features">More features</SectionHeading>
+          <Section id="more-features" title="More features">
 
           <Paragraph>
             Everything is off by default or has sensible defaults. A few more
             things you can turn on:
           </Paragraph>
 
-          <ul
-            className="m-0 pl-5"
-            style={{
-              fontFamily: "var(--ll-font-primary)",
-              fontSize: "14px",
-              fontWeight: 475,
-              lineHeight: "20px",
-              letterSpacing: "-0.09px",
-              color: "var(--ll-text-primary)",
-              listStyleType: "disc",
-            }}
-          >
-            <li style={{ padding: "0 0 8px 12px" }}>
+          <List>
+            <Li>
               <InlineCode>exaggerate</InlineCode> tightens the Y-axis range so
               small movements fill the full chart height. Useful for values that
               move in tiny increments, like the heart rate demo above.
-            </li>
-            <li style={{ padding: "0 0 8px 12px" }}>
+            </Li>
+            <Li>
               <InlineCode>scrub</InlineCode> shows a crosshair with time and
               value tooltips on hover. On by default.
-            </li>
-            <li style={{ padding: "0 0 8px 12px" }}>
+            </Li>
+            <Li>
               <InlineCode>degen</InlineCode> enables burst particles and chart
               shake on momentum swings. For when subtlety is not the goal.
-            </li>
-            <li style={{ padding: "0 0 8px 12px" }}>
+            </Li>
+            <Li>
               <InlineCode>badgeVariant=&quot;minimal&quot;</InlineCode> renders a
               quieter white pill instead of the accent-colored default. Or{" "}
               <InlineCode>{"badge={false}"}</InlineCode> to remove it entirely.
-            </li>
-          </ul>
+            </Li>
+          </List>
 
-          <Divider />
+          </Section>
 
-          {/* How it works */}
-          <SectionHeading id="how-it-works">How it works</SectionHeading>
+          <Section id="how-it-works" title="How it works">
 
           <Paragraph>
             One <InlineCode>{"<canvas>"}</InlineCode>, one{" "}
@@ -844,10 +855,9 @@ function Chart({ data, value }) {
             of parts updating independently.
           </Paragraph>
 
-          <Divider />
+          </Section>
 
-          {/* Props */}
-          <SectionHeading id="props">Props</SectionHeading>
+          <Section id="props" title="Props">
 
           <PropsTable
             title="Required"
@@ -925,10 +935,9 @@ function Chart({ data, value }) {
             ]}
           />
 
-          <Divider />
+          </Section>
 
-          {/* Stress testing */}
-          <SectionHeading id="stress-testing">Stress testing</SectionHeading>
+          <Section id="stress-testing" title="Stress testing">
 
           <Paragraph>
             A chart that only looks good on calm data isn&apos;t much use. These
@@ -958,10 +967,9 @@ function Chart({ data, value }) {
 
           <ChartPlaceholder height={200} />
 
-          <Divider />
+          </Section>
 
-          {/* Just a line */}
-          <SectionHeading id="just-a-line">Just a line</SectionHeading>
+          <Section id="just-a-line" title="Just a line">
 
           <Paragraph>
             Liveline can do a lot. Momentum arrows, particles, orderbooks,
@@ -971,18 +979,17 @@ function Chart({ data, value }) {
 
           <ChartPlaceholder height={180} />
 
-          <Divider />
+          </Section>
 
-          {/* Acknowledgements */}
-          <SectionHeading id="acknowledgements">
-            Acknowledgements
-          </SectionHeading>
+          <Section id="acknowledgements" title="Acknowledgements">
 
           <Paragraph>
             Built with React and HTML Canvas. Inspired by TradingView, Robinhood,
             and Polymarket chart aesthetics. The interpolation approach is
             borrowed from game development &mdash; lerp everything, snap nothing.
           </Paragraph>
+
+          </Section>
         </article>
       </div>
     </div>
