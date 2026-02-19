@@ -162,7 +162,7 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 
 ## rules
 
-- **Create your own page**: see "working with pages" — always create and store your own page in `state`, never use the default `page` for automation. Examples below use bare `page` for brevity, but in real automation always use `state.myPage`
+- **Create your own page**: see "working with pages" — create and store your own page in `state`, don't use the default `page` for automation unless the user asks you to use a specific tab. Reusing an existing `about:blank` tab is fine. Examples below use bare `page` for brevity, but in real automation always use `state.myPage`
 - **Multiple calls**: use multiple execute calls for complex logic - helps understand intermediate state and isolate which action failed
 - **Never close**: never call `browser.close()` or `context.close()`. Only close pages you created or if user asks
 - **No bringToFront**: never call unless user asks - it's disruptive and unnecessary, you can interact with background pages
@@ -599,7 +599,7 @@ console.log('New tab URL:', newTab.url());
 
 ```js
 const [download] = await Promise.all([page.waitForEvent('download'), page.click('button.download')]);
-await download.saveAs(`./${download.suggestedFilename()}`);
+await download.saveAs(`/tmp/${download.suggestedFilename()}`);
 ```
 
 **iFrames** - two approaches depending on what you need:

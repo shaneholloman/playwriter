@@ -1,7 +1,7 @@
 /*
- * Recreation of benji.org/liveline page design.
+ * Playwriter editorial page — benji.org/liveline-inspired design.
  * Uses the same editorial layout, typography, and styling system.
- * Chart canvas components are replaced with dark placeholder boxes.
+ * ChartPlaceholder boxes reserved for future showcase videos.
  *
  * Prism.js is used for syntax highlighting with a custom light theme
  * that matches the original benji.org subtle code block style.
@@ -79,18 +79,16 @@ function useActiveTocId() {
 
 const tocItems = [
   { label: "Getting started", href: "#getting-started" },
-  { label: "Momentum", href: "#momentum" },
-  { label: "Value overlay", href: "#value-overlay" },
-  { label: "Time windows", href: "#time-windows" },
-  { label: "Reference line", href: "#reference-line" },
-  { label: "Orderbook", href: "#orderbook" },
-  { label: "Theming", href: "#theming" },
-  { label: "More features", href: "#more-features" },
   { label: "How it works", href: "#how-it-works" },
-  { label: "Props", href: "#props" },
-  { label: "Stress testing", href: "#stress-testing" },
-  { label: "Just a line", href: "#just-a-line" },
-  { label: "Acknowledgements", href: "#acknowledgements" },
+  { label: "Snapshots", href: "#snapshots" },
+  { label: "Visual labels", href: "#visual-labels" },
+  { label: "Sessions", href: "#sessions" },
+  { label: "Debugger & editor", href: "#debugger-and-editor" },
+  { label: "Network interception", href: "#network-interception" },
+  { label: "Screen recording", href: "#screen-recording" },
+  { label: "Comparison", href: "#comparison" },
+  { label: "Remote access", href: "#remote-access" },
+  { label: "Security", href: "#security" },
 ];
 
 function TableOfContents() {
@@ -615,7 +613,7 @@ export default function LivelinePage() {
               padding: "0 0 16px",
             }}
           >
-            Liveline
+            Playwriter
           </h2>
           <time
             style={{
@@ -627,367 +625,403 @@ export default function LivelinePage() {
               color: "rgba(18, 18, 18, 0.25)",
             }}
           >
-            16 February, 2026
+            2025
           </time>
         </header>
 
         <article className="liveline-article flex flex-col gap-[16px]">
           {/* Intro */}
           <Paragraph>
-            Liveline is a real-time animated line chart component for React. One{" "}
-            <InlineCode>{"<canvas>"}</InlineCode>, no dependencies beyond React
-            18, smooth interpolation at 60fps.
+            Playwriter lets you control your Chrome browser with the full
+            Playwright API. A Chrome extension, a local relay, and a CLI. No new
+            browser windows, no Chrome flags, no context bloat.
           </Paragraph>
 
-          <ChartPlaceholder height={300} label="684.89" />
+          <ChartPlaceholder height={300} label="demo" />
           <Caption>
-            Degen mode (chart shake and particles) with momentum arrows.
+            Your existing Chrome session. Extensions, logins, cookies &mdash; all there.
           </Caption>
 
           <Paragraph>
-            I built this because every charting library I tried was either too
-            heavy for a simple live feed, or too rigid to feel alive. Liveline
-            does one thing: draw a line that moves smoothly as new data arrives.
-            Everything else is opt-in.
+            Every browser automation MCP I tried either spawns a new Chrome
+            instance or forces you into a limited set of predefined tools. Playwriter
+            does neither. It connects to the browser you already have open,
+            exposes the full Playwright API through a single{" "}
+            <InlineCode>execute</InlineCode> tool, and gets out of the way.
+            One tool. Any Playwright code. No wrappers.
           </Paragraph>
 
           <Section id="getting-started" title="Getting started">
 
-          <CodeBlock lang="bash">npm install liveline</CodeBlock>
-
           <Paragraph>
-            The component fills its parent container. Set a height on the
-            wrapper.
+            Three steps. Extension, icon click, then you&apos;re automating.
           </Paragraph>
 
-          <CodeBlock>
-            {`import { Liveline } from 'liveline'
- 
-function Chart({ data, value }) {
-  return (
-    <div style={{ height: 200 }}>
-      <Liveline data={data} value={value} />
-    </div>
-  )
-}`}
-          </CodeBlock>
+          <CodeBlock lang="bash">{`# 1. Install the Chrome extension
+#    https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
+
+# 2. Click the extension icon on a tab — it turns green
+
+# 3. Install CLI and run your first command
+npm i -g playwriter
+playwriter -s 1 -e "await page.goto('https://example.com')"`}</CodeBlock>
 
           <Paragraph>
-            <InlineCode>data</InlineCode> is an array of{" "}
-            <InlineCode>{"{ time, value }"}</InlineCode> points.{" "}
-            <InlineCode>value</InlineCode> is the latest number.
+            The extension connects your browser to a local WebSocket relay on{" "}
+            <InlineCode>localhost:19988</InlineCode>. The CLI sends Playwright
+            code through the relay. No remote servers, no accounts, nothing
+            leaves your machine.
           </Paragraph>
 
-          <ChartPlaceholder height={200} label="303.34" />
-          <Caption>Two props. That&apos;s it.</Caption>
+          <CodeBlock lang="bash">{`playwriter session new              # new sandbox, outputs id (e.g. 1)
+playwriter -s 1 -e "await page.goto('https://example.com')"
+playwriter -s 1 -e "console.log(await snapshot({ page }))"
+playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"`}</CodeBlock>
 
-          <Paragraph>
-            Feed it data however you like. WebSocket, polling, random walk.
-            Liveline interpolates between updates so even infrequent data looks
-            smooth. It works for anything with a value that changes over time.
-          </Paragraph>
-
-          <ChartPlaceholder height={200} label="98 bpm" />
+          <ChartPlaceholder height={200} label="getting started" />
           <Caption>
-            Resting heart rate. Custom formatter, exaggerated Y-axis.
+            Extension icon green = connected. Gray = not attached to this tab.
           </Caption>
-
-          </Section>
-
-          <Section id="momentum" title="Momentum">
-
-          <Paragraph>
-            The <InlineCode>momentum</InlineCode> prop adds directional arrows
-            and a glow to the live dot. Green for up, red for down, grey for
-            flat. Pass <InlineCode>true</InlineCode> to auto-detect direction,
-            or force it with{" "}
-            <InlineCode>&quot;up&quot;</InlineCode>,{" "}
-            <InlineCode>&quot;down&quot;</InlineCode>, or{" "}
-            <InlineCode>&quot;flat&quot;</InlineCode>.
-          </Paragraph>
-
-          <ChartPlaceholder height={220} label="449.73" />
-          <Caption>
-            Arrows fade out fully before the new direction fades in.
-          </Caption>
-
-          </Section>
-
-          <Section id="value-overlay" title="Value overlay">
-
-          <Paragraph>
-            <InlineCode>showValue</InlineCode> renders the current value as a
-            large number over the chart. It updates at 60fps through direct DOM
-            manipulation, not React re-renders. Pair it with{" "}
-            <InlineCode>valueMomentumColor</InlineCode> to tint the number based
-            on direction.
-          </Paragraph>
-
-          <ChartPlaceholder height={204} label="$17,138.03" />
-          <Caption>60fps value overlay with momentum colouring.</Caption>
-
-          </Section>
-
-          <Section id="time-windows" title="Time windows">
-
-          <Paragraph>
-            Pass a <InlineCode>windows</InlineCode> array to render time horizon
-            buttons. Each entry has a <InlineCode>label</InlineCode> and{" "}
-            <InlineCode>secs</InlineCode> value. Three styles are available via{" "}
-            <InlineCode>windowStyle</InlineCode>:{" "}
-            <InlineCode>&quot;default&quot;</InlineCode>,{" "}
-            <InlineCode>&quot;rounded&quot;</InlineCode>, and{" "}
-            <InlineCode>&quot;text&quot;</InlineCode>.
-          </Paragraph>
-
-          <CodeBlock>
-            {`<Liveline
-  windows={[
-    { label: '1m', secs: 60 },
-    { label: '5m', secs: 300 },
-  ]}
-  windowStyle="rounded"
-/>`}
-          </CodeBlock>
-
-          <ChartPlaceholder height={186} label="30%" />
-          <Caption>
-            CPU usage with occasional spikes. Rounded time windows.
-          </Caption>
-
-          </Section>
-
-          <Section id="reference-line" title="Reference line">
-
-          <Paragraph>
-            <InlineCode>referenceLine</InlineCode> draws a horizontal line at a
-            fixed value. Pass an object with <InlineCode>value</InlineCode> and
-            an optional <InlineCode>label</InlineCode>.
-          </Paragraph>
-
-          <ChartPlaceholder height={186} label="$-18,576" />
-          <Caption>
-            Polymarket-style prediction line. &quot;Will Bitcoin stay above
-            $67,500?&quot;
-          </Caption>
-
-          </Section>
-
-          <Section id="orderbook" title="Orderbook">
-
-          <Paragraph>
-            Pass an <InlineCode>orderbook</InlineCode> prop with{" "}
-            <InlineCode>bids</InlineCode> and <InlineCode>asks</InlineCode>{" "}
-            arrays to render streaming order labels behind the line. Each entry
-            is a <InlineCode>[price, size]</InlineCode> tuple. Labels spawn at
-            the bottom, drift upward, and fade out. Green for bids, red for
-            asks. Bigger orders appear brighter.
-          </Paragraph>
-
-          <Paragraph>
-            The stream speed reacts to price momentum and orderbook churn (how
-            much the bid/ask totals are changing). Calm markets drift slowly,
-            volatile ones rush.
-          </Paragraph>
-
-          <ChartPlaceholder height={260} label="$61,904" />
-          <Caption>
-            Kalshi-style orderbook stream. Bid and ask sizes float upward behind
-            the price line.
-          </Caption>
-
-          </Section>
-
-          <Section id="theming" title="Theming">
-
-          <Paragraph>
-            Pass any CSS colour string to <InlineCode>color</InlineCode> and
-            Liveline derives the full palette. Line, fill gradient, glow, badge,
-            grid labels. It converts the input to HSL and generates every variant
-            from there.
-          </Paragraph>
-
-          <ChartPlaceholder height={204} label="540.42" />
-          <Caption>Dark theme. Same component, different colour.</Caption>
-
-          </Section>
-
-          <Section id="more-features" title="More features">
-
-          <Paragraph>
-            Everything is off by default or has sensible defaults. A few more
-            things you can turn on:
-          </Paragraph>
-
-          <List>
-            <Li>
-              <InlineCode>exaggerate</InlineCode> tightens the Y-axis range so
-              small movements fill the full chart height. Useful for values that
-              move in tiny increments, like the heart rate demo above.
-            </Li>
-            <Li>
-              <InlineCode>scrub</InlineCode> shows a crosshair with time and
-              value tooltips on hover. On by default.
-            </Li>
-            <Li>
-              <InlineCode>degen</InlineCode> enables burst particles and chart
-              shake on momentum swings. For when subtlety is not the goal.
-            </Li>
-            <Li>
-              <InlineCode>badgeVariant=&quot;minimal&quot;</InlineCode> renders a
-              quieter white pill instead of the accent-colored default. Or{" "}
-              <InlineCode>{"badge={false}"}</InlineCode> to remove it entirely.
-            </Li>
-          </List>
 
           </Section>
 
           <Section id="how-it-works" title="How it works">
 
           <Paragraph>
-            One <InlineCode>{"<canvas>"}</InlineCode>, one{" "}
-            <InlineCode>requestAnimationFrame</InlineCode> loop. When a new
-            value arrives, nothing jumps. The chart lerps toward the new state at
-            8% per frame (<InlineCode>lerpSpeed</InlineCode>). The Y-axis range,
-            the badge, the grid labels all use the same lerp. The range snaps
-            outward instantly when data exceeds it, so the line is never clipped.
-            That&apos;s why it feels like one thing breathing rather than a bunch
-            of parts updating independently.
+            The extension uses <InlineCode>chrome.debugger</InlineCode> to
+            attach to tabs where you clicked the icon. It opens a WebSocket
+            connection to a local relay server. The CLI (or MCP, or your own
+            Playwright script) connects to the same relay. CDP commands flow
+            through; the extension forwards them to Chrome and sends responses
+            back.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`+---------------------+     +-------------------+     +-----------------+
+|   BROWSER           |     |   LOCALHOST        |     |   CLIENT        |
+|                     |     |                    |     |                 |
+|  +---------------+  |     | WebSocket Server   |     |  +-----------+ |
+|  |   Extension   |<--------->  :19988          |     |  | CLI / MCP | |
+|  +-------+-------+  | WS  |                    |     |  +-----------+ |
+|          |          |     |  /extension        |     |        |       |
+|    chrome.debugger  |     |       |            |     |        v       |
+|          v          |     |       v            |     |  +-----------+ |
+|  +---------------+  |     |  /cdp/:id <------------> |  | execute   | |
+|  | Tab 1 (green) |  |     +--------------------+  WS |  +-----------+ |
+|  | Tab 2 (green) |  |                                |        |       |
+|  | Tab 3 (gray)  |  |     Tab 3 not controlled       | Playwright API |
++---------------------+     (extension not clicked)    +-----------------+`}</CodeBlock>
+
+          <Paragraph>
+            No Chrome restart required. No <InlineCode>--remote-debugging-port</InlineCode>{" "}
+            flags. The extension handles the CDP attachment transparently, and
+            the relay multiplexes sessions so multiple agents or CLI instances
+            can work with the same browser simultaneously.
           </Paragraph>
 
           </Section>
 
-          <Section id="props" title="Props">
+          <Section id="snapshots" title="Accessibility snapshots">
+
+          <Paragraph>
+            The core feedback loop is <strong>observe &rarr; act &rarr; observe</strong>.
+            Accessibility snapshots are the primary way to read page state. They return
+            the full interactive element tree as text, with Playwright locators attached
+            to every element.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`playwriter -s 1 -e "await snapshot({ page })"
+
+# Output:
+# - banner:
+#     - link "Home" [id="nav-home"]
+#     - navigation:
+#         - link "Docs" [data-testid="docs-link"]
+#         - link "Blog" role=link[name="Blog"]`}</CodeBlock>
+
+          <Paragraph>
+            Each line ends with a locator you can pass directly to{" "}
+            <InlineCode>page.locator()</InlineCode>. Subsequent calls return a
+            diff, so you only see what changed. Use{" "}
+            <InlineCode>search</InlineCode> to filter large pages.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`# Search for specific elements
+playwriter -s 1 -e "await snapshot({ page, search: /button|submit/i })"
+
+# Always print URL first, then snapshot — pages can redirect
+playwriter -s 1 -e "console.log('URL:', page.url()); await snapshot({ page }).then(console.log)"`}</CodeBlock>
+
+          <Paragraph>
+            Snapshots are text. They cost a fraction of what screenshots cost in
+            tokens. Use them as your primary debugging tool. Only reach for
+            screenshots when spatial layout matters &mdash; grids, dashboards, maps.
+          </Paragraph>
+
+          <ChartPlaceholder height={200} label="snapshot" />
+          <Caption>
+            Accessibility tree as text. 5&ndash;20KB vs 100KB+ for screenshots.
+          </Caption>
+
+          </Section>
+
+          <Section id="visual-labels" title="Visual labels">
+
+          <Paragraph>
+            For pages where spatial layout matters,{" "}
+            <InlineCode>screenshotWithAccessibilityLabels</InlineCode> overlays
+            Vimium-style labels on every interactive element. Take a screenshot,
+            read the labels, click by reference.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`playwriter -s 1 -e "await screenshotWithAccessibilityLabels({ page })"
+# Returns screenshot + accessibility snapshot with aria-ref selectors
+
+playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"`}</CodeBlock>
+
+          <Paragraph>
+            Labels are color-coded by element type: yellow for links, orange for
+            buttons, coral for inputs, pink for checkboxes, peach for sliders,
+            salmon for menus, amber for tabs. The ref system is shared with{" "}
+            <InlineCode>snapshot()</InlineCode>, so you can switch between text
+            and visual modes freely.
+          </Paragraph>
+
+          <ChartPlaceholder height={260} label="visual labels" />
+          <Caption>
+            Vimium-style labels. Screenshot + snapshot in one call.
+          </Caption>
+
+          </Section>
+
+          <Section id="sessions" title="Sessions">
+
+          <Paragraph>
+            Each session runs in an isolated sandbox with its own{" "}
+            <InlineCode>state</InlineCode> object. Variables, pages, listeners
+            persist between calls within a session. Different sessions get
+            different state. Browser tabs are shared.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`playwriter session new    # => 1
+playwriter session new    # => 2
+playwriter session list   # shows sessions + state keys
+
+# Session 1 stores data
+playwriter -s 1 -e "state.users = await page.$$eval('.user', els => els.map(e => e.textContent))"
+
+# Session 2 can't see it
+playwriter -s 2 -e "console.log(state.users)"  # undefined`}</CodeBlock>
+
+          <Paragraph>
+            Create your own page to avoid interference from other agents. Reuse
+            an existing <InlineCode>about:blank</InlineCode> tab or create a
+            fresh one, and store it in <InlineCode>state</InlineCode>.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`playwriter -s 1 -e "state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage(); await state.myPage.goto('https://example.com')"
+
+# All subsequent calls use state.myPage
+playwriter -s 1 -e "console.log(await state.myPage.title())"`}</CodeBlock>
+
+          </Section>
+
+          <Section id="debugger-and-editor" title="Debugger & editor">
+
+          <Paragraph>
+            Full Chrome DevTools Protocol access. Set breakpoints, step through
+            code, inspect variables at runtime. Live-edit page scripts and CSS
+            without reloading.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`# Set breakpoints and debug
+playwriter -s 1 -e "state.cdp = await getCDPSession({ page }); state.dbg = createDebugger({ cdp: state.cdp }); await state.dbg.enable()"
+playwriter -s 1 -e "state.scripts = await state.dbg.listScripts({ search: 'app' }); console.log(state.scripts.map(s => s.url))"
+playwriter -s 1 -e "await state.dbg.setBreakpoint({ file: state.scripts[0].url, line: 42 })"
+
+# Live edit page code
+playwriter -s 1 -e "state.editor = createEditor({ cdp: state.cdp }); await state.editor.enable()"
+playwriter -s 1 -e "await state.editor.edit({ url: 'https://example.com/app.js', oldString: 'const DEBUG = false', newString: 'const DEBUG = true' })"`}</CodeBlock>
+
+          <Paragraph>
+            Edits are in-memory and persist until the page reloads. Useful for
+            toggling debug flags, patching broken code, or testing quick fixes
+            without touching source files. The editor also supports{" "}
+            <InlineCode>grep</InlineCode> across all loaded scripts.
+          </Paragraph>
+
+          <ChartPlaceholder height={200} label="debugger" />
+          <Caption>
+            Breakpoints, stepping, variable inspection &mdash; from the CLI.
+          </Caption>
+
+          </Section>
+
+          <Section id="network-interception" title="Network interception">
+
+          <Paragraph>
+            Intercept requests and responses to reverse-engineer APIs, scrape
+            data, or debug network issues. Store captured data in{" "}
+            <InlineCode>state</InlineCode> and analyze across calls.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`# Start intercepting
+playwriter -s 1 -e "state.responses = []; page.on('response', async res => { if (res.url().includes('/api/')) { try { state.responses.push({ url: res.url(), status: res.status(), body: await res.json() }); } catch {} } })"
+
+# Trigger actions, then analyze
+playwriter -s 1 -e "await page.click('button.load-more')"
+playwriter -s 1 -e "console.log('Captured', state.responses.length, 'API calls'); state.responses.forEach(r => console.log(r.status, r.url.slice(0, 80)))"
+
+# Replay an API call directly
+playwriter -s 1 -e "const data = await page.evaluate(async (url) => { const res = await fetch(url); return res.json(); }, state.responses[0].url); console.log(data)"`}</CodeBlock>
+
+          <Paragraph>
+            This is faster than scrolling through DOM. Capture the real API
+            calls, inspect their schemas, and replay them with different
+            parameters. Works for pagination, authenticated endpoints, and
+            anything behind JavaScript rendering.
+          </Paragraph>
+
+          </Section>
+
+          <Section id="screen-recording" title="Screen recording">
+
+          <Paragraph>
+            Record the active tab as video using{" "}
+            <InlineCode>chrome.tabCapture</InlineCode>. The recording runs in
+            the extension context, so it survives page navigation. Video is saved
+            as MP4.
+          </Paragraph>
+
+          <CodeBlock lang="bash">{`# Start recording
+playwriter -s 1 -e "await startRecording({ page, outputPath: './recording.mp4', frameRate: 30 })"
+
+# Navigate, interact — recording continues
+playwriter -s 1 -e "await page.click('a'); await page.waitForLoadState('domcontentloaded')"
+playwriter -s 1 -e "await page.goBack()"
+
+# Stop and save
+playwriter -s 1 -e "const { path, duration, size } = await stopRecording({ page }); console.log(path, duration + 'ms', size + ' bytes')"`}</CodeBlock>
+
+          <Paragraph>
+            Unlike <InlineCode>getDisplayMedia</InlineCode>, this approach
+            persists across navigations because the extension holds the{" "}
+            <InlineCode>MediaRecorder</InlineCode>, not the page. You can also
+            check recording status with <InlineCode>isRecording</InlineCode> or
+            cancel without saving with <InlineCode>cancelRecording</InlineCode>.
+          </Paragraph>
+
+          <ChartPlaceholder height={200} label="recording" />
+          <Caption>
+            Native tab capture. 30&ndash;60fps. Survives navigation.
+          </Caption>
+
+          </Section>
+
+          <Section id="comparison" title="Comparison">
+
+          <Paragraph>
+            How Playwriter compares to other browser automation approaches.
+          </Paragraph>
 
           <PropsTable
-            title="Required"
+            title="vs Playwright MCP"
             rows={[
-              ["data", "LivelinePoint[]", "required"],
-              ["value", "number", "required"],
+              ["Browser", "Spawns new Chrome", "Uses your Chrome"],
+              ["Extensions", "None", "Your existing ones"],
+              ["Login state", "Fresh", "Already logged in"],
+              ["Bot detection", "Always detected", "Can bypass"],
+              ["Collaboration", "Separate window", "Same browser as user"],
             ]}
           />
 
           <PropsTable
-            title="Appearance"
+            title="vs BrowserMCP"
             rows={[
-              ["theme", "'light' | 'dark'", "'dark'"],
-              ["color", "string", "'#3b82f6'"],
-              ["grid", "boolean", "true"],
-              ["badge", "boolean", "true"],
-              ["badgeVariant", "'default' | 'minimal'", "'default'"],
-              ["badgeTail", "boolean", "true"],
-              ["fill", "boolean", "true"],
-              ["pulse", "boolean", "true"],
+              ["Tools", "12+ dedicated tools", "1 execute tool"],
+              ["API", "Limited actions", "Full Playwright"],
+              ["Context usage", "High (tool schemas)", "Low"],
+              ["LLM knowledge", "Must learn tools", "Already knows Playwright"],
             ]}
           />
 
           <PropsTable
-            title="Behaviour"
+            title="vs Antigravity (Jetski)"
             rows={[
-              ["momentum", "boolean | Momentum", "true"],
-              ["scrub", "boolean", "true"],
-              ["exaggerate", "boolean", "false"],
-              ["showValue", "boolean", "false"],
-              ["valueMomentumColor", "boolean", "false"],
-              ["degen", "boolean | DegenOptions", "false"],
+              ["Tools", "17+ tools", "1 tool"],
+              ["Subagent", "Spawns for each task", "Direct execution"],
+              ["Latency", "High (agent overhead)", "Low"],
             ]}
           />
 
           <PropsTable
-            title="Time"
+            title="vs Claude Browser Extension"
             rows={[
-              ["window", "number", "30"],
-              ["windows", "WindowOption[]", "\u2014"],
-              ["onWindowChange", "(secs: number) => void", "\u2014"],
-              ["windowStyle", "'default' | 'rounded' | 'text'", "\u2014"],
-            ]}
-          />
-
-          <PropsTable
-            title="Tooltip"
-            rows={[
-              ["tooltipY", "number", "14"],
-              ["tooltipOutline", "boolean", "true"],
-            ]}
-          />
-
-          <PropsTable
-            title="Orderbook"
-            rows={[["orderbook", "OrderbookData", "\u2014"]]}
-          />
-
-          <PropsTable
-            title="Advanced"
-            rows={[
-              ["referenceLine", "ReferenceLine", "\u2014"],
-              ["formatValue", "(v: number) => string", "v.toFixed(2)"],
-              ["formatTime", "(t: number) => string", "HH:MM:SS"],
-              ["lerpSpeed", "number", "0.08"],
-              [
-                "padding",
-                "Padding",
-                "{ top: 12, right: 80, bottom: 28, left: 12 }",
-              ],
-              ["onHover", "(point: HoverPoint | null) => void", "\u2014"],
-              ["cursor", "string", "'crosshair'"],
-              ["className", "string", "\u2014"],
-              ["style", "CSSProperties", "\u2014"],
+              ["Agent support", "Claude only", "Any MCP client"],
+              ["Windows WSL", "No", "Yes"],
+              ["Context method", "Screenshots (100KB+)", "A11y snapshots (5\u201320KB)"],
+              ["Playwright API", "No", "Full"],
+              ["Debugger", "No", "Yes"],
+              ["Live code editing", "No", "Yes"],
+              ["Network interception", "Limited", "Full"],
+              ["Raw CDP access", "No", "Yes"],
             ]}
           />
 
           </Section>
 
-          <Section id="stress-testing" title="Stress testing">
+          <Section id="remote-access" title="Remote access">
 
           <Paragraph>
-            A chart that only looks good on calm data isn&apos;t much use. These
-            demos throw the worst stuff I could think of at it: wild volatility,
-            sharp direction changes, isolated spikes on flat lines, and irregular
-            data arrival with random gaps.
+            Control Chrome on a remote machine over the internet using tunnels.
+            Run the relay on the host, expose it through a tunnel, and connect
+            from anywhere.
           </Paragraph>
 
-          <ChartPlaceholder height={200} />
+          <CodeBlock lang="bash">{`# On the host machine
+npx -y traforo -p 19988 -t my-machine -- npx -y playwriter serve --token <secret>
+
+# From anywhere
+export PLAYWRITER_HOST=https://my-machine-tunnel.traforo.dev
+export PLAYWRITER_TOKEN=<secret>
+playwriter -s 1 -e "await page.goto('https://example.com')"`}</CodeBlock>
 
           <Paragraph>
-            Sharp reversals are the classic breaking point. The first chart
-            hammers the line with frequent direction changes at 60ms. The second
-            holds nearly flat, then fires massive isolated spikes. The third is
-            just chaos.
+            Also works on a LAN without tunnels &mdash; just set{" "}
+            <InlineCode>PLAYWRITER_HOST=192.168.1.10</InlineCode>. Use cases
+            include controlling a headless Mac mini, providing remote user
+            support, and multi-machine automation.
           </Paragraph>
-
-          <ChartPlaceholder height={200} />
-
-          <Paragraph>
-            Real-world data doesn&apos;t arrive at regular intervals. WebSocket
-            connections drop, batch updates land all at once, mobile networks
-            stall. This one simulates that: long quiet stretches of 1&ndash;3
-            seconds between points, then sudden bursts at 40&ndash;80ms. The
-            tick interval itself is random.
-          </Paragraph>
-
-          <ChartPlaceholder height={200} />
 
           </Section>
 
-          <Section id="just-a-line" title="Just a line">
+          <Section id="security" title="Security">
 
           <Paragraph>
-            Liveline can do a lot. Momentum arrows, particles, orderbooks,
-            scrubbing, time windows. But at the end of the day, if you just want
-            a line that moves when a number changes, it does that just fine too.
+            Playwriter is local by default. The relay runs on{" "}
+            <InlineCode>localhost:19988</InlineCode> and only accepts connections
+            from the extension. There&apos;s no remote server, no account, no
+            telemetry.
           </Paragraph>
 
-          <ChartPlaceholder height={180} />
-
-          </Section>
-
-          <Section id="acknowledgements" title="Acknowledgements">
-
-          <Paragraph>
-            Built with React and HTML Canvas. Inspired by TradingView, Robinhood,
-            and Polymarket chart aesthetics. The interpolation approach is
-            borrowed from game development &mdash; lerp everything, snap nothing.
-          </Paragraph>
+          <List>
+            <Li>
+              <strong>Local only</strong> &mdash; WebSocket server binds to
+              localhost. Nothing leaves your machine.
+            </Li>
+            <Li>
+              <strong>Origin validation</strong> &mdash; only the Playwriter
+              extension origin is accepted. Browsers cannot spoof the Origin
+              header, so malicious websites cannot connect.
+            </Li>
+            <Li>
+              <strong>Explicit consent</strong> &mdash; only tabs where you
+              clicked the extension icon are controlled. No background access.
+            </Li>
+            <Li>
+              <strong>Visible automation</strong> &mdash; Chrome shows an
+              automation banner on controlled tabs.
+            </Li>
+          </List>
 
           </Section>
         </article>
