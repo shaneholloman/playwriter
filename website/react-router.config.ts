@@ -6,6 +6,5 @@ export default {
   appDirectory: "src",
   ssr: true,
   presets: [vercelPreset()],
-
-  // prerender: ["/", "/defer-example"],
+  prerender: ["/"],
 } satisfies Config;
