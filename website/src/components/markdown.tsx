@@ -198,10 +198,15 @@ export function SectionHeading({ id, children }: { id: string; children: React.R
         color: "var(--ll-text-primary)",
         margin: 0,
         padding: 0,
-        transform: "translateY(-10px)",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        paddingTop: "24px",
+        paddingBottom: "24px",
       }}
     >
-      {children}
+      <span style={{ whiteSpace: "nowrap" }}>{children}</span>
+      <span style={{ flex: 1, height: "1px", background: "var(--ll-divider)" }} />
     </h1>
   );
 }
@@ -267,7 +272,6 @@ export function Divider() {
 export function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
     <>
-      <Divider />
       <SectionHeading id={id}>{title}</SectionHeading>
       {children}
     </>
@@ -569,7 +573,7 @@ export function EditorialPage({
       >
         <div style={{ height: "80px" }} />
 
-        <article className="liveline-article flex flex-col gap-[24px]">
+        <article className="liveline-article flex flex-col gap-[32px]">
           {children}
         </article>
       </div>
