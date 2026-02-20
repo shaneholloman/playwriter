@@ -4,6 +4,7 @@
  * Styles from liveline.css and liveline-prism.css.
  */
 
+import type { MetaFunction } from "react-router";
 import dedent from "string-dedent";
 import "website/src/styles/liveline.css";
 import "website/src/styles/liveline-prism.css";
@@ -21,19 +22,19 @@ import {
   Li,
 } from "website/src/components/markdown";
 
-export function meta() {
+export const meta: MetaFunction = () => {
   const title = "Playwriter - Control your Chrome with Playwright API";
   const description =
     "Chrome extension + CLI for browser automation. Full Playwright API on your existing browser. No new windows, no flags, no context bloat.";
-  const image = "https://playwriter.dev/screenshot@2x.png";
+  const image = "https://playwriter.dev/og-image.png";
   return [
     { title },
     { name: "description", content: description },
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:image", content: image },
-    { property: "og:image:width", content: "1280" },
-    { property: "og:image:height", content: "800" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
     { property: "og:type", content: "website" },
     { property: "og:url", content: "https://playwriter.dev/liveline" },
     { name: "twitter:card", content: "summary_large_image" },
@@ -41,7 +42,7 @@ export function meta() {
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: image },
   ];
-}
+};
 
 const tocItems = [
   { label: "Getting started", href: "#getting-started" },

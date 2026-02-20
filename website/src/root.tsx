@@ -1,4 +1,5 @@
 import "website/src/styles/globals.css";
+import type { LinksFunction } from "react-router";
 import { Route } from "./+types/root";
 import {
   isRouteErrorResponse,
@@ -8,6 +9,11 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+
+export const links: LinksFunction = () => [
+  { rel: "icon", type: "image/png", href: "/favicon-32.png", sizes: "32x32" },
+  { rel: "icon", type: "image/png", href: "/favicon-16.png", sizes: "16x16" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
