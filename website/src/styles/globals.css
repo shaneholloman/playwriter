@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@import "./liveline.css";
-@import "./liveline-prism.css";
+@import "./editorial.css";
+@import "./editorial-prism.css";
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @plugin "@tailwindcss/typography";

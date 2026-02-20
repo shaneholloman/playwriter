@@ -1,7 +1,7 @@
 /*
  * Playwriter editorial page — content only.
  * Components imported from website/src/components/markdown.tsx.
- * Styles from globals.css (editorial tokens) and liveline-prism.css.
+ * Styles from globals.css (editorial tokens) and editorial-prism.css.
  */
 
 import type { MetaFunction } from "react-router";
