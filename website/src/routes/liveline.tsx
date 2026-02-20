@@ -14,13 +14,34 @@ import {
   Code,
   Caption,
   CodeBlock,
-  ChartPlaceholder,
   Section,
-  PropsTable,
+  ComparisonTable,
   List,
   OL,
   Li,
 } from "website/src/components/markdown";
+
+export function meta() {
+  const title = "Playwriter - Control your Chrome with Playwright API";
+  const description =
+    "Chrome extension + CLI for browser automation. Full Playwright API on your existing browser. No new windows, no flags, no context bloat.";
+  const image = "https://playwriter.dev/screenshot@2x.png";
+  return [
+    { title },
+    { name: "description", content: description },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: image },
+    { property: "og:image:width", content: "1280" },
+    { property: "og:image:height", content: "800" },
+    { property: "og:type", content: "website" },
+    { property: "og:url", content: "https://playwriter.dev/liveline" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: image },
+  ];
+}
 
 const tocItems = [
   { label: "Getting started", href: "#getting-started" },
@@ -101,7 +122,6 @@ export default function LivelinePage() {
           playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"
         `}</CodeBlock>
 
-        <ChartPlaceholder height={200} label="getting started" />
         <Caption>
           Extension icon green = connected. Gray = not attached to this tab.
         </Caption>
@@ -186,7 +206,6 @@ export default function LivelinePage() {
           screenshots when spatial layout matters &mdash; grids, dashboards, maps.
         </P>
 
-        <ChartPlaceholder height={200} label="snapshot" />
         <Caption>
           Accessibility tree as text. 5&ndash;20KB vs 100KB+ for screenshots.
         </Caption>
@@ -217,7 +236,6 @@ export default function LivelinePage() {
           and visual modes freely.
         </P>
 
-        <ChartPlaceholder height={260} label="visual labels" />
         <Caption>
           Vimium-style labels. Screenshot + snapshot in one call.
         </Caption>
@@ -286,7 +304,6 @@ export default function LivelinePage() {
           <Code>grep</Code> across all loaded scripts.
         </P>
 
-        <ChartPlaceholder height={200} label="debugger" />
         <Caption>
           Breakpoints, stepping, variable inspection &mdash; from the CLI.
         </Caption>
@@ -351,7 +368,6 @@ export default function LivelinePage() {
           cancel without saving with <Code>cancelRecording</Code>.
         </P>
 
-        <ChartPlaceholder height={200} label="recording" />
         <Caption>
           Native tab capture. 30&ndash;60fps. Survives navigation.
         </Caption>
@@ -364,8 +380,9 @@ export default function LivelinePage() {
           How Playwriter compares to other browser automation approaches.
         </P>
 
-        <PropsTable
+        <ComparisonTable
           title="vs Playwright MCP"
+          headers={["", "Playwright MCP", "Playwriter"]}
           rows={[
             ["Browser", "Spawns new Chrome", "Uses your Chrome"],
             ["Extensions", "None", "Your existing ones"],
@@ -375,8 +392,9 @@ export default function LivelinePage() {
           ]}
         />
 
-        <PropsTable
+        <ComparisonTable
           title="vs BrowserMCP"
+          headers={["", "BrowserMCP", "Playwriter"]}
           rows={[
             ["Tools", "12+ dedicated tools", "1 execute tool"],
             ["API", "Limited actions", "Full Playwright"],
@@ -385,17 +403,9 @@ export default function LivelinePage() {
           ]}
         />
 
-        <PropsTable
-          title="vs Antigravity (Jetski)"
-          rows={[
-            ["Tools", "17+ tools", "1 tool"],
-            ["Subagent", "Spawns for each task", "Direct execution"],
-            ["Latency", "High (agent overhead)", "Low"],
-          ]}
-        />
-
-        <PropsTable
+        <ComparisonTable
           title="vs Claude Browser Extension"
+          headers={["", "Claude Extension", "Playwriter"]}
           rows={[
             ["Agent support", "Claude only", "Any MCP client"],
             ["Windows WSL", "No", "Yes"],
@@ -413,16 +423,19 @@ export default function LivelinePage() {
       <Section id="remote-access" title="Remote access">
 
         <P>
-          Control Chrome on a remote machine over the internet using tunnels.
-          Run the relay on the host, expose it through a tunnel, and connect
-          from anywhere.
+          Control Chrome on any machine from anywhere over the internet.
+          The relay runs on the host alongside Chrome.
+          A{" "}
+          <A href="https://traforo.dev">traforo</A>{" "}
+          tunnel exposes it through Cloudflare, giving you a secure public URL.
+          No VPN, no firewall rules, no port forwarding.
         </P>
 
         <CodeBlock lang="bash">{dedent`
-          # On the host machine
+          # On the host machine — start relay with tunnel
           npx -y traforo -p 19988 -t my-machine -- npx -y playwriter serve --token <secret>
 
-          # From anywhere
+          # From anywhere — set env vars and use normally
           export PLAYWRITER_HOST=https://my-machine-tunnel.traforo.dev
           export PLAYWRITER_TOKEN=<secret>
           playwriter -s 1 -e "await page.goto('https://example.com')"
@@ -430,9 +443,11 @@ export default function LivelinePage() {
 
         <P>
           Also works on a LAN without tunnels &mdash; just set{" "}
-          <Code>PLAYWRITER_HOST=192.168.1.10</Code>. Use cases
-          include controlling a headless Mac mini, providing remote user
-          support, and multi-machine automation.
+          <Code>PLAYWRITER_HOST=192.168.1.10</Code>. Works for MCP
+          too &mdash; set <Code>PLAYWRITER_HOST</Code> and{" "}
+          <Code>PLAYWRITER_TOKEN</Code> in your MCP client env config.
+          Use cases: headless Mac mini, remote user support,
+          multi-machine automation, dev from a VM or devcontainer.
         </P>
 
       </Section>

@@ -113,9 +113,10 @@
   --ll-fade-12: rgba(255, 255, 255, 0);
 }
 
-/* Dark mode overrides — plain CSS, not processed by Tailwind.
-   Uses .dark ancestor selector matching @custom-variant dark in globals.css */
-.dark .liveline-page {
+/* Dark mode overrides — uses @variant dark from globals.css
+   so the strategy is defined in one place */
+@variant dark {
+.liveline-page {
   --ll-text-primary: rgba(255, 255, 255, 0.9);
   --ll-text-secondary: rgba(255, 255, 255, 0.45);
   --ll-text-tertiary: rgba(255, 255, 255, 0.25);
@@ -160,6 +161,7 @@
   --ll-fade-10: rgba(17, 17, 17, 0.008);
   --ll-fade-11: rgba(17, 17, 17, 0.002);
   --ll-fade-12: rgba(17, 17, 17, 0);
+}
 }
 
 @supports (color: color(display-p3 1 1 1)) {
@@ -258,12 +260,14 @@
   z-index: -1;
 }
 
-.dark .ll-inline-code {
-  color: rgba(255, 255, 255, 0.75);
-}
+@variant dark {
+  .ll-inline-code {
+    color: rgba(255, 255, 255, 0.75);
+  }
 
-.dark .ll-inline-code::before {
-  background: rgba(255, 255, 255, 0.08);
+  .ll-inline-code::before {
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 /* ========================================================================

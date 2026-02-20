@@ -478,11 +478,13 @@ export function ChartPlaceholder({ height = 200, label }: { height?: number; lab
    Comparison table
    ========================================================================= */
 
-export function PropsTable({
+export function ComparisonTable({
   title,
+  headers,
   rows,
 }: {
   title?: string;
+  headers: [string, string, string];
   rows: Array<[string, string, string]>;
 }) {
   return (
@@ -511,7 +513,7 @@ export function PropsTable({
       >
         <thead>
           <tr>
-            {["Prop", "Type", "Default"].map((header) => {
+            {headers.map((header) => {
               return (
                 <th
                   key={header}
@@ -532,9 +534,9 @@ export function PropsTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map(([prop, type, def]) => {
+          {rows.map(([feature, them, us]) => {
             return (
-              <tr key={prop}>
+              <tr key={feature}>
                 <td
                   style={{
                     padding: "4.8px 12px 4.8px 0",
@@ -546,7 +548,7 @@ export function PropsTable({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {prop}
+                  {feature}
                 </td>
                 <td
                   style={{
@@ -559,7 +561,7 @@ export function PropsTable({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {type}
+                  {them}
                 </td>
                 <td
                   style={{
@@ -571,7 +573,7 @@ export function PropsTable({
                     borderBottom: "1px solid var(--ll-border)",
                   }}
                 >
-                  {def}
+                  {us}
                 </td>
               </tr>
             );

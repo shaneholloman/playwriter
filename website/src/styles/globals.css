@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 @plugin "@tailwindcss/typography";
 
@@ -38,9 +38,8 @@
     --sidebar-border: oklch(0.92 0.004 286.32);
     --sidebar-ring: oklch(0.871 0.006 286.286);
 
-    /* Dark mode overrides — @variant dark inside :root compiles to
-       :root:where(.dark, .dark *), following whatever strategy is
-       configured in @custom-variant dark above */
+    /* Dark mode overrides — uses prefers-color-scheme media query
+       via @custom-variant dark above */
     @variant dark {
         --background: oklch(0.21 0.006 285.885);
         --foreground: oklch(0.985 0 0);
@@ -137,11 +136,21 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--color-muted);
+    background: rgba(0, 0, 0, 0.15);
     border-radius: var(--radius-md);
     border: none;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-muted-foreground);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+@variant dark {
+    ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
 }
