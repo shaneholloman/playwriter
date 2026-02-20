@@ -214,14 +214,15 @@ export function SectionHeading({ id, children }: { id: string; children: React.R
 export function P({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <p
-      className={className}
+      className={`ll-prose ${className}`}
       style={{
         fontFamily: "var(--ll-font-primary)",
         fontSize: "14px",
         fontWeight: 475,
-        lineHeight: "20px",
+        lineHeight: "22px",
         letterSpacing: "-0.09px",
         color: "var(--ll-text-primary)",
+        opacity: 0.82,
         margin: 0,
       }}
     >
@@ -541,7 +542,7 @@ export function ComparisonTable({
                   style={{
                     padding: "4.8px 12px 4.8px 0",
                     fontSize: "11px",
-                    fontWeight: 400,
+                    fontWeight: 500,
                     fontFamily: "var(--ll-font-code)",
                     color: "var(--ll-text-primary)",
                     borderBottom: "1px solid var(--ll-border)",
@@ -554,9 +555,9 @@ export function ComparisonTable({
                   style={{
                     padding: "4.8px 12px 4.8px 0",
                     fontSize: "11px",
-                    fontWeight: 400,
+                    fontWeight: 500,
                     fontFamily: "var(--ll-font-code)",
-                    color: "var(--ll-text-muted)",
+                    color: "var(--ll-text-primary)",
                     borderBottom: "1px solid var(--ll-border)",
                     whiteSpace: "nowrap",
                   }}
@@ -567,9 +568,9 @@ export function ComparisonTable({
                   style={{
                     padding: "4.8px 12px 4.8px 0",
                     fontSize: "11px",
-                    fontWeight: 400,
+                    fontWeight: 500,
                     fontFamily: "var(--ll-font-code)",
-                    color: "var(--ll-text-muted)",
+                    color: "var(--ll-text-primary)",
                     borderBottom: "1px solid var(--ll-border)",
                   }}
                 >

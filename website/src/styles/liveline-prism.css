@@ -138,95 +138,150 @@ pre[class*="language-"] {
 
 /* ======================================================================
    Dark mode - GitHub Dark inspired palette.
-   Uses @variant dark from globals.css so the strategy is defined in
-   one place (@custom-variant dark in globals.css).
+   @variant dark works here because globals.css imports this file via
+   CSS @import (part of Tailwind compilation chain). Dark colors are
+   defined as CSS variables on :root, then referenced in selectors.
    ====================================================================== */
 
-@variant dark {
-  code[class*="language-"],
-  pre[class*="language-"] {
-    color: #e6edf3;
+:root {
+  @variant dark {
+    --prism-fg: #e6edf3;
+    --prism-keyword: #ff7b72;
+    --prism-string: #a5d6ff;
+    --prism-function: #d2a8ff;
+    --prism-property: #ffa657;
+    --prism-tag: #7ee787;
+    --prism-attr: #79c0ff;
+    --prism-number: #79c0ff;
+    --prism-operator: #ff7b72;
+    --prism-punctuation: #e6edf3;
+    --prism-builtin: #79c0ff;
+    --prism-comment: #8b949e;
+    --prism-spread: #ff7b72;
+    --prism-regex: #a5d6ff;
+    --prism-bash-fn: #79c0ff;
   }
+}
 
-  .token.keyword,
-  .token.module,
-  .token.imports,
-  .token.control-flow {
-    color: #ff7b72;
+code[class*="language-"],
+pre[class*="language-"] {
+  @variant dark {
+    color: var(--prism-fg);
   }
+}
 
-  .token.string,
-  .token.template-string,
-  .token.attr-value {
-    color: #a5d6ff;
+.token.keyword,
+.token.module,
+.token.imports,
+.token.control-flow {
+  @variant dark {
+    color: var(--prism-keyword);
   }
+}
 
-  .token.function,
-  .token.class-name {
-    color: #d2a8ff;
+.token.string,
+.token.template-string,
+.token.attr-value {
+  @variant dark {
+    color: var(--prism-string);
   }
+}
 
-  .token.property,
-  .token.parameter {
-    color: #ffa657;
+.token.function,
+.token.class-name {
+  @variant dark {
+    color: var(--prism-function);
   }
+}
 
-  .token.tag .token.tag {
-    color: #7ee787;
+.token.property,
+.token.parameter {
+  @variant dark {
+    color: var(--prism-property);
   }
+}
 
-  .token.tag .token.class-name {
-    color: #7ee787;
+.token.tag .token.tag {
+  @variant dark {
+    color: var(--prism-tag);
   }
+}
 
-  .token.tag .token.attr-name,
-  .token.attr-name {
-    color: #79c0ff;
+.token.tag .token.class-name {
+  @variant dark {
+    color: var(--prism-tag);
   }
+}
 
-  .token.number {
-    color: #79c0ff;
+.token.tag .token.attr-name,
+.token.attr-name {
+  @variant dark {
+    color: var(--prism-attr);
   }
+}
 
-  .token.operator {
-    color: #ff7b72;
+.token.number {
+  @variant dark {
+    color: var(--prism-number);
   }
+}
 
-  .token.punctuation {
-    color: #e6edf3;
+.token.operator {
+  @variant dark {
+    color: var(--prism-operator);
   }
+}
 
-  .token.boolean,
-  .token.constant,
-  .token.builtin {
-    color: #79c0ff;
+.token.punctuation {
+  @variant dark {
+    color: var(--prism-punctuation);
   }
+}
 
-  .token.comment,
-  .token.prolog,
-  .token.doctype,
-  .token.cdata {
-    color: #8b949e;
+.token.boolean,
+.token.constant,
+.token.builtin {
+  @variant dark {
+    color: var(--prism-builtin);
+  }
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  @variant dark {
+    color: var(--prism-comment);
     font-style: italic;
   }
+}
 
-  .token.tag .token.punctuation {
-    color: #e6edf3;
+.token.tag .token.punctuation {
+  @variant dark {
+    color: var(--prism-punctuation);
   }
+}
 
-  .token.spread {
-    color: #ff7b72;
+.token.spread {
+  @variant dark {
+    color: var(--prism-spread);
   }
+}
 
-  .token.plain-text {
-    color: #e6edf3;
+.token.plain-text {
+  @variant dark {
+    color: var(--prism-fg);
   }
+}
 
-  .token.regex {
-    color: #a5d6ff;
+.token.regex {
+  @variant dark {
+    color: var(--prism-regex);
   }
+}
 
-  .language-bash .token.function {
-    color: #79c0ff;
+.language-bash .token.function {
+  @variant dark {
+    color: var(--prism-bash-fn);
   }
 }

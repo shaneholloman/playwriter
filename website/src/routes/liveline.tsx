@@ -6,8 +6,6 @@
 
 import type { MetaFunction } from "react-router";
 import dedent from "string-dedent";
-import "website/src/styles/liveline.css";
-import "website/src/styles/liveline-prism.css";
 import {
   EditorialPage,
   P,
