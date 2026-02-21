@@ -2,7 +2,7 @@
  * Generate pixelated placeholder images for the website.
  *
  * Scans website/public/ for all image files (png, jpg, jpeg, webp) and
- * generates a tiny 32px-wide version into src/assets/placeholders/.
+ * generates a tiny 64px-wide version into src/assets/placeholders/.
  * When displayed at full size with CSS `image-rendering: pixelated`
  * (nearest-neighbor / point sampling), these produce a crisp mosaic effect.
  *
@@ -24,7 +24,7 @@ import fs from "node:fs";
 const PUBLIC_DIR = path.resolve(import.meta.dirname, "../public");
 const OUTPUT_DIR = path.resolve(import.meta.dirname, "../src/assets/placeholders");
 const PLACEHOLDER_PREFIX = "placeholder-";
-const PLACEHOLDER_WIDTH = 32;
+const PLACEHOLDER_WIDTH = 64;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 async function main() {
