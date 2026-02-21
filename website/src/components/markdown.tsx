@@ -348,7 +348,7 @@ export function Li({ children }: { children: React.ReactNode }) {
    Code block with Prism syntax highlighting and line numbers
    ========================================================================= */
 
-export function CodeBlock({ children, lang = "jsx" }: { children: string; lang?: string }) {
+export function CodeBlock({ children, lang = "jsx", lineHeight = "1.85" }: { children: string; lang?: string; lineHeight?: string }) {
   const codeRef = useRef<HTMLElement>(null);
   const lines = children.split("\n");
 
@@ -377,7 +377,7 @@ export function CodeBlock({ children, lang = "jsx" }: { children: string; lang?:
               fontFamily: "var(--font-code)",
               fontSize: "12px",
               fontWeight: 400,
-              lineHeight: "24px",
+              lineHeight,
               letterSpacing: "normal",
               color: "var(--text-primary)",
               tabSize: 2,

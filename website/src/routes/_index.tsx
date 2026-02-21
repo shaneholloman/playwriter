@@ -150,7 +150,7 @@ export default function IndexPage() {
           no flags, no special setup.
         </P>
 
-        <CodeBlock lang="bash">{dedent`
+        <CodeBlock lang="bash" lineHeight="1.5">{dedent`
         ┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
         │   BROWSER           │     │   LOCALHOST          │     │   CLIENT        │
         │                     │     │                      │     │                 │
