@@ -119,6 +119,8 @@ If you find a bug, you can create a gh issue using `gh issue create -R remorses/
 
 Control user's Chrome browser via playwright code snippets. Prefer single-line code with semicolons between statements. Use playwriter immediately without waiting for user actions; only if you get "extension is not connected" or "no browser tabs have Playwriter enabled" should you ask the user to click the playwriter extension icon on the target tab.
 
+**When to use playwriter instead of webfetch/curl:** If a website is JS-heavy (SPAs like Instagram, Twitter, Facebook, etc.), has cookie consent modals, login walls, lazy-loaded content, carousels, or infinite scroll — **always use playwriter**. Simple fetch/webfetch will return an empty HTML shell with no content. Do NOT waste time trying curl, webfetch, or parsing raw HTML from JS-rendered sites. Go straight to playwriter: navigate with a real browser, dismiss modals, then extract what you need via `page.evaluate()` or network interception.
+
 **If Chrome is not running**, the extension can't connect. Start Chrome from the command line before retrying:
 
 ```bash
@@ -171,6 +173,7 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 - **CDP sessions**: use `getCDPSession({ page: state.page })` not `state.page.context().newCDPSession()` - NEVER use `newCDPSession()` method, it doesn't work through playwriter relay
 - **Wait for load**: use `state.page.waitForLoadState('domcontentloaded')` not `state.page.waitForEvent('load')` - waitForEvent times out if already loaded
 - **Minimize timeouts**: prefer proper waits (`waitForSelector`, `waitForPageLoad`) over `state.page.waitForTimeout()`. Short timeouts (1-2s) are acceptable for non-deterministic events like popups, animations, or tab opens where no specific selector is available
+- **Snapshot before screenshot**: always use `snapshot()` first to understand page state (text-based, fast, cheap). Only use `screenshot` or `screenshotWithAccessibilityLabels` when you specifically need visual/spatial information. Never take a screenshot just to check if a page loaded or to read text content — snapshot gives you that instantly without burning image tokens
 
 ## interaction feedback loop
 
@@ -350,7 +353,21 @@ await state.page.waitForSelector('article', { timeout: 10000 });
 await waitForPageLoad({ page: state.page, timeout: 5000 });
 ```
 
-**9. Login buttons that open popups**
+**9. Not using playwriter for JS-rendered sites**
+Do NOT waste context trying webfetch, curl, or Playwright CLI screenshots on SPAs (Instagram, Twitter, etc.). These sites return empty HTML shells — the real content is rendered by JavaScript. Use playwriter with a real browser session instead:
+```js
+// BAD: webfetch/curl on Instagram returns empty HTML, grep finds nothing, huge context wasted
+// BAD: Playwright CLI screenshot needs browser install, produces blank/modal-blocked images
+
+// GOOD: use playwriter — real browser, full JS rendering, interactive
+state.page = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage();
+await state.page.goto('https://www.instagram.com/p/ABC123/', { waitUntil: 'domcontentloaded' });
+await waitForPageLoad({ page: state.page, timeout: 8000 });
+await snapshot({ page: state.page, search: /cookie|consent|accept/i }).then(console.log)
+// Now you can see modals, dismiss them, navigate carousels, extract content
+```
+
+**10. Login buttons that open popups**
 Playwriter extension cannot control popup windows. If a login button opens a popup (common with OAuth/SSO), use cmd+click to open in a new tab instead:
 ```js
 // BAD: popup window is not controllable by playwriter
@@ -620,6 +637,42 @@ await snapshot({ frame: frame2 })
 state.page.on('dialog', async dialog => { console.log(dialog.message()); await dialog.accept(); });
 await state.page.click('button.trigger-alert');
 ```
+
+**Handling page obstacles (cookie modals, login walls, age gates)** - most major websites show blocking overlays. Always check for these with `snapshot()` right after navigation and dismiss them before doing anything else:
+
+```js
+// After navigating, check for common obstacles
+await waitForPageLoad({ page: state.page, timeout: 5000 });
+const snap = await snapshot({ page: state.page, search: /cookie|consent|accept|reject|decline|allow|age|verify|login|sign.in/i });
+console.log(snap);
+// Look for dismiss/accept/decline buttons in the snapshot, then click them:
+// await state.page.locator('button:has-text("Accept")').click();
+// await state.page.locator('button:has-text("Decline optional")').click();
+// Then re-snapshot to confirm the modal is gone before proceeding
+```
+
+If the page requires login and the user is already logged into Chrome, their session cookies are available — just navigate and the page should load authenticated. If not, ask the user for help or use their existing logged-in tab via `context.pages()`.
+
+**Extracting and downloading media (images, videos)** - use `page.evaluate()` to extract URLs from the rendered DOM, then download via Node.js in the sandbox. This is far more reliable than parsing raw HTML:
+
+```js
+// Extract all image URLs from rendered DOM
+const images = await state.page.evaluate(() =>
+  Array.from(document.querySelectorAll('img[src]')).map(img => ({
+    src: img.src, alt: img.alt, width: img.naturalWidth
+  }))
+);
+console.log(JSON.stringify(images, null, 2));
+
+// Download a specific image to disk
+const fs = require('node:fs');
+const resp = await fetch(images[0].src);
+const buf = Buffer.from(await resp.arrayBuffer());
+fs.writeFileSync('./downloaded-image.jpg', buf);
+console.log('Saved', buf.length, 'bytes');
+```
+
+For carousels or lazy-loaded galleries, you may need to click navigation arrows or scroll first, then re-extract. Use network interception (see "network interception" section) to capture high-resolution CDN URLs that may differ from the `img.src` thumbnails.
 
 ## utility functions
 
