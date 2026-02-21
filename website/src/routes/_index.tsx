@@ -20,6 +20,7 @@ import {
   Li,
   PixelatedImage,
 } from "website/src/components/markdown";
+import placeholderScreenshot from "../assets/placeholders/placeholder-screenshot@2x.png";
 
 export const meta: MetaFunction = () => {
   const title = "Playwriter - Control your Chrome with Playwright API";
@@ -73,7 +74,7 @@ export default function IndexPage() {
       <div className="bleed" style={{ display: "flex", justifyContent: "center" }}>
         <PixelatedImage
           src="/screenshot@2x.png"
-          placeholder="/placeholder-screenshot@2x.png"
+          placeholder={placeholderScreenshot}
           alt="Playwriter controlling Chrome with accessibility labels overlay"
           width={1280}
           height={800}

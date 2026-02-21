@@ -2,9 +2,14 @@
  * Generate pixelated placeholder images for the website.
  *
  * Scans website/public/ for all image files (png, jpg, jpeg, webp) and
- * generates a tiny 32px-wide version of each. When displayed at full size
- * with CSS `image-rendering: pixelated` (nearest-neighbor / point sampling),
- * these produce a crisp mosaic effect instead of a blurry upscale.
+ * generates a tiny 32px-wide version into src/assets/placeholders/.
+ * When displayed at full size with CSS `image-rendering: pixelated`
+ * (nearest-neighbor / point sampling), these produce a crisp mosaic effect.
+ *
+ * Output goes to src/assets/placeholders/ (NOT public/) so that Vite's
+ * asset pipeline processes them. Since all placeholders are < 4KB, Vite
+ * automatically inlines them as base64 data URIs via assetsInlineLimit,
+ * eliminating extra HTTP requests.
  *
  * Skips files that already have the `placeholder-` prefix.
  * Skips regeneration if the placeholder is newer than the source image.
@@ -17,11 +22,14 @@ import path from "node:path";
 import fs from "node:fs";
 
 const PUBLIC_DIR = path.resolve(import.meta.dirname, "../public");
+const OUTPUT_DIR = path.resolve(import.meta.dirname, "../src/assets/placeholders");
 const PLACEHOLDER_PREFIX = "placeholder-";
 const PLACEHOLDER_WIDTH = 32;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 async function main() {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
   const entries = fs.readdirSync(PUBLIC_DIR);
 
   const images = entries.filter((name) => {
@@ -41,7 +49,7 @@ async function main() {
     const inputPath = path.join(PUBLIC_DIR, name);
     const ext = path.extname(name);
     const base = path.basename(name, ext);
-    const outputPath = path.join(PUBLIC_DIR, `${PLACEHOLDER_PREFIX}${base}${ext}`);
+    const outputPath = path.join(OUTPUT_DIR, `${PLACEHOLDER_PREFIX}${base}${ext}`);
 
     // Skip if placeholder already exists and is newer than source
     if (fs.existsSync(outputPath)) {

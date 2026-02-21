@@ -434,6 +434,20 @@ export function PixelatedImage({
   style,
 }: {
   src: string;
+  /**
+   * URL of the tiny pixelated placeholder image. Use a static import so Vite
+   * inlines it as a base64 data URI (all placeholders are < 4KB, well under
+   * Vite's default assetsInlineLimit of 4096 bytes). This makes the
+   * placeholder available synchronously on first render with zero HTTP
+   * requests. Do NOT use dynamic imports or public/ paths — dynamic imports
+   * add a microtask delay, and public/ files bypass Vite's asset pipeline.
+   *
+   * @example
+   * ```tsx
+   * import placeholderScreenshot from "../assets/placeholders/placeholder-screenshot@2x.png";
+   * <PixelatedImage placeholder={placeholderScreenshot} src="/screenshot@2x.png" ... />
+   * ```
+   */
   placeholder: string;
   alt: string;
   width: number;
@@ -500,6 +514,133 @@ export function PixelatedImage({
           zIndex: 1,
         }}
       />
+    </div>
+  );
+}
+
+/* =========================================================================
+   Lazy video with pixelated poster placeholder
+   Same visual pattern as PixelatedImage but for <video> elements.
+   Poster layers (pixelated → real) show through the transparent video element.
+   Video uses native loading="lazy" + preload="none" so zero bytes are
+   downloaded until the element is near the viewport and the user clicks play.
+   No custom IntersectionObserver needed — all native HTML attributes.
+   ========================================================================= */
+
+export function LazyVideo({
+  src,
+  poster,
+  placeholderPoster,
+  width,
+  height,
+  type = "video/mp4",
+  className = "",
+  style,
+}: {
+  src: string;
+  poster: string;
+  /**
+   * URL of the tiny pixelated poster placeholder. Use a static import so Vite
+   * inlines it as a base64 data URI (all placeholders are < 4KB, well under
+   * Vite's default assetsInlineLimit of 4096 bytes). This makes the
+   * placeholder available synchronously on first render with zero HTTP
+   * requests. Do NOT use dynamic imports or public/ paths — dynamic imports
+   * add a microtask delay, and public/ files bypass Vite's asset pipeline.
+   *
+   * @example
+   * ```tsx
+   * import placeholderPoster from "../assets/placeholders/placeholder-demo-poster.png";
+   * <LazyVideo placeholderPoster={placeholderPoster} poster="/demo-poster.png" ... />
+   * ```
+   */
+  placeholderPoster: string;
+  width: number;
+  height: number;
+  type?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [posterLoaded, setPosterLoaded] = useState(false);
+
+  // Handles cached poster images (same pattern as PixelatedImage)
+  const posterRef = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) {
+      setPosterLoaded(true);
+    }
+  }, []);
+
+  return (
+    <div
+      className={className}
+      style={{
+        position: "relative",
+        width: "100%",
+        maxWidth: `${width}px`,
+        aspectRatio: `${width} / ${height}`,
+        overflow: "hidden",
+        ...style,
+      }}
+    >
+      {/* Pixelated poster placeholder: loads instantly (~500 bytes) */}
+      <img
+        src={placeholderPoster}
+        alt=""
+        aria-hidden
+        width={width}
+        height={height}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          imageRendering: "pixelated",
+          zIndex: 0,
+        }}
+      />
+      {/* Real poster: fades in over the pixelated placeholder */}
+      <img
+        ref={posterRef}
+        src={poster}
+        alt=""
+        aria-hidden
+        width={width}
+        height={height}
+        onLoad={() => {
+          setPosterLoaded(true);
+        }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity: posterLoaded ? 1 : 0,
+          transition: "opacity 0.4s ease",
+          zIndex: 1,
+        }}
+      />
+      {/* Video: transparent until playing, native lazy + no preload.
+          Controls float on top of poster layers. No poster attr needed
+          because the img layers handle the visual placeholder.
+          loading="lazy" is a newer HTML attr not yet in React's TS types. */}
+      <video
+        controls
+        preload="none"
+        {...{ loading: "lazy" } as React.VideoHTMLAttributes<HTMLVideoElement>}
+        width={width}
+        height={height}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          zIndex: 2,
+          background: "transparent",
+        }}
+      >
+        <source src={src} type={type} />
+      </video>
     </div>
   );
 }
