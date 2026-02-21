@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
+    "placeholders": "tsx scripts/generate-placeholders.ts",
+    "build": "tsx scripts/generate-placeholders.ts && react-router build",
     "dev": "react-router dev --port 8044",
     "typecheck": "react-router typegen && tsc"
   },
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "@xmorse/deployment-utils": "^0.7.2",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",

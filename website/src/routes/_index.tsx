@@ -18,6 +18,7 @@ import {
   List,
   OL,
   Li,
+  PixelatedImage,
 } from "website/src/components/markdown";
 
 export const meta: MetaFunction = () => {
@@ -70,8 +71,9 @@ export default function IndexPage() {
       </P>
 
       <div className="bleed" style={{ display: "flex", justifyContent: "center" }}>
-        <img
+        <PixelatedImage
           src="/screenshot@2x.png"
+          placeholder="/placeholder-screenshot@2x.png"
           alt="Playwriter controlling Chrome with accessibility labels overlay"
           width={1280}
           height={800}
@@ -102,7 +104,7 @@ export default function IndexPage() {
       <Section id="getting-started" title="Getting started">
 
         <P>
-          <strong>Three steps</strong> and your agent is browsing.
+          <strong>Four steps</strong> and your agent is browsing.
         </P>
 
         <OL>
@@ -110,13 +112,22 @@ export default function IndexPage() {
             Install the{" "}
             <A href="https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe">Chrome extension</A>
           </Li>
-          <Li>Click the extension icon on a tab — it turns green</Li>
-          <Li>Install CLI and run your first command:</Li>
+          <Li>Click the extension icon on a tab {" \u2014 "} it turns green</Li>
+          <Li>Install the CLI:</Li>
         </OL>
 
         <CodeBlock lang="bash">{dedent`
           npm i -g playwriter
-          playwriter -s 1 -e "await page.goto('https://example.com')"
+        `}</CodeBlock>
+
+        <P>
+          Then install the <strong>skill</strong> {" \u2014 "} it teaches your agent how to use
+          Playwriter: which selectors to use, how to avoid timeouts, how to
+          read snapshots, and all available utilities.
+        </P>
+
+        <CodeBlock lang="bash">{dedent`
+          npx -y skills add remorses/playwriter
         `}</CodeBlock>
 
         <P>

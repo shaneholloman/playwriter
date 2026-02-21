@@ -6,7 +6,7 @@
  * --link-accent, --page-border.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Prism from "prismjs";
 import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
@@ -413,6 +413,94 @@ export function CodeBlock({ children, lang = "jsx", lineHeight = "1.85" }: { chi
         </pre>
       </div>
     </figure>
+  );
+}
+
+/* =========================================================================
+   Pixelated placeholder image
+   Uses a tiny pre-generated image with CSS image-rendering: pixelated
+   (nearest-neighbor / point sampling in GPU terms) for a crisp mosaic
+   effect. The real image fades in on top once loaded — no flash because
+   the placeholder stays underneath and the real image starts at opacity 0.
+   ========================================================================= */
+
+export function PixelatedImage({
+  src,
+  placeholder,
+  alt,
+  width,
+  height,
+  className = "",
+  style,
+}: {
+  src: string;
+  placeholder: string;
+  alt: string;
+  width: number;
+  height: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  // Handles both the normal onLoad event and the case where the image is
+  // already cached (img.complete is true before React mounts the handler).
+  const imgRef = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, []);
+
+  return (
+    <div
+      className={className}
+      style={{
+        position: "relative",
+        width: "100%",
+        maxWidth: `${width}px`,
+        aspectRatio: `${width} / ${height}`,
+        overflow: "hidden",
+        ...style,
+      }}
+    >
+      {/* Placeholder: tiny image rendered with nearest-neighbor sampling */}
+      <img
+        src={placeholder}
+        alt=""
+        aria-hidden
+        width={width}
+        height={height}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          imageRendering: "pixelated",
+          zIndex: 0,
+        }}
+      />
+      {/* Real image: starts invisible, fades in over the placeholder */}
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        onLoad={() => {
+          setLoaded(true);
+        }}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity: loaded ? 1 : 0,
+          transition: "opacity 0.4s ease",
+          zIndex: 1,
+        }}
+      />
+    </div>
   );
 }
 
