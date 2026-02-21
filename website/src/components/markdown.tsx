@@ -405,7 +405,7 @@ export function CodeBlock({ children, lang = "jsx", lineHeight = "1.85" }: { chi
             <code
               ref={codeRef}
               className={`language-${lang}`}
-              style={{ whiteSpace: "pre", background: "none", padding: 0 }}
+              style={{ whiteSpace: "pre", background: "none", padding: 0, lineHeight }}
             >
               {children}
             </code>
