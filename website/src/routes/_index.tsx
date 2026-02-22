@@ -23,9 +23,9 @@ import {
 import placeholderScreenshot from '../assets/placeholders/placeholder-screenshot@2x.png'
 
 export const meta: MetaFunction = () => {
-  const title = 'Playwriter - Control your Chrome with Playwright API'
+  const title = 'Playwriter - Chrome extension & CLI that lets agents use your real browser'
   const description =
-    'Chrome extension + CLI for browser automation. Full Playwright API on your existing browser. No new windows, no flags, no context bloat.'
+    'Chrome extension and CLI that let your agents control your actual browser. Your logins, extensions, cookies — already there. No headless instance, no bot detection.'
   const image = 'https://playwriter.dev/og-image.png'
   return [
     { title },
@@ -63,9 +63,9 @@ export default function IndexPage() {
   return (
     <EditorialPage toc={tocItems} logo='playwriter'>
       <P>
-        You want your agent to control the browser. <strong>Your actual Chrome</strong> {' \u2014 '} with logins,
-        extensions, and cookies already there. Not a headless instance that gets blocked by every captcha and bot
-        detector. <A href='https://github.com/remorses/playwriter'>Star on GitHub</A>.
+        A Chrome extension and CLI that let your agents control <strong>your actual browser</strong> {' \u2014 '} with
+        logins, extensions, and cookies already there. No headless instance, no bot detection, no extra memory.{' '}
+        <A href='https://github.com/remorses/playwriter'>Star on GitHub</A>.
       </P>
 
       <div className='bleed' style={{ display: 'flex', justifyContent: 'center' }}>
