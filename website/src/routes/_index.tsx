@@ -130,9 +130,9 @@ export default function IndexPage() {
 
         <CodeBlock lang='bash'>{dedent`
           playwriter session new              # new sandbox, outputs id (e.g. 1)
-          playwriter -s 1 -e "await page.goto('https://example.com')"
-          playwriter -s 1 -e "console.log(await snapshot({ page }))"
-          playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"
+          playwriter -e "page.goto('https://example.com')"
+          playwriter -e "snapshot({ page })"
+          playwriter -e "page.locator('aria-ref=e5').click()"
         `}</CodeBlock>
 
         <Caption>Extension icon green = connected. Gray = not attached to this tab.</Caption>
@@ -193,7 +193,7 @@ export default function IndexPage() {
         </P>
 
         <CodeBlock lang='bash'>{dedent`
-          playwriter -s 1 -e "await snapshot({ page })"
+          playwriter -e "snapshot({ page })"
 
           # Output:
           # - banner:
@@ -211,10 +211,10 @@ export default function IndexPage() {
 
         <CodeBlock lang='bash'>{dedent`
           # Search for specific elements
-          playwriter -s 1 -e "await snapshot({ page, search: /button|submit/i })"
+          playwriter -e "snapshot({ page, search: /button|submit/i })"
 
           # Always print URL first, then snapshot — pages can redirect
-          playwriter -s 1 -e "console.log('URL:', page.url()); await snapshot({ page }).then(console.log)"
+          playwriter -e "console.log('URL:', page.url()); snapshot({ page }).then(console.log)"
         `}</CodeBlock>
 
         <P>
@@ -231,10 +231,10 @@ export default function IndexPage() {
         </P>
 
         <CodeBlock lang='bash'>{dedent`
-          playwriter -s 1 -e "await screenshotWithAccessibilityLabels({ page })"
+          playwriter -e "screenshotWithAccessibilityLabels({ page })"
           # Returns screenshot + accessibility snapshot with aria-ref selectors
 
-          playwriter -s 1 -e "await page.locator('aria-ref=e5').click()"
+          playwriter -e "page.locator('aria-ref=e5').click()"
         `}</CodeBlock>
 
         <P>
@@ -259,7 +259,7 @@ export default function IndexPage() {
           playwriter session list   # shows sessions + state keys
 
           # Session 1 stores data
-          playwriter -s 1 -e "state.users = await page.$$eval('.user', els => els.map(e => e.textContent))"
+          playwriter -s 1 -e "state.users = page.$$eval('.user', els => els.map(e => e.textContent))"
 
           # Session 2 can't see it
           playwriter -s 2 -e "console.log(state.users)"  # undefined
@@ -271,10 +271,10 @@ export default function IndexPage() {
         </P>
 
         <CodeBlock lang='bash'>{dedent`
-          playwriter -s 1 -e "state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? await context.newPage(); await state.myPage.goto('https://example.com')"
+          playwriter -s 1 -e "state.myPage = context.pages().find(p => p.url() === 'about:blank') ?? context.newPage(); state.myPage.goto('https://example.com')"
 
           # All subsequent calls use state.myPage
-          playwriter -s 1 -e "console.log(await state.myPage.title())"
+          playwriter -s 1 -e "state.myPage.title()"
         `}</CodeBlock>
       </Section>
 
@@ -287,13 +287,13 @@ export default function IndexPage() {
 
         <CodeBlock lang='bash'>{dedent`
           # Set breakpoints and debug
-          playwriter -s 1 -e "state.cdp = await getCDPSession({ page }); state.dbg = createDebugger({ cdp: state.cdp }); await state.dbg.enable()"
-          playwriter -s 1 -e "state.scripts = await state.dbg.listScripts({ search: 'app' }); console.log(state.scripts.map(s => s.url))"
-          playwriter -s 1 -e "await state.dbg.setBreakpoint({ file: state.scripts[0].url, line: 42 })"
+          playwriter -e "state.cdp = getCDPSession({ page }); state.dbg = createDebugger({ cdp: state.cdp }); state.dbg.enable()"
+          playwriter -e "state.scripts = state.dbg.listScripts({ search: 'app' }); state.scripts.map(s => s.url)"
+          playwriter -e "state.dbg.setBreakpoint({ file: state.scripts[0].url, line: 42 })"
 
           # Live edit page code
-          playwriter -s 1 -e "state.editor = createEditor({ cdp: state.cdp }); await state.editor.enable()"
-          playwriter -s 1 -e "await state.editor.edit({ url: 'https://example.com/app.js', oldString: 'const DEBUG = false', newString: 'const DEBUG = true' })"
+          playwriter -e "state.editor = createEditor({ cdp: state.cdp }); state.editor.enable()"
+          playwriter -e "state.editor.edit({ url: 'https://example.com/app.js', oldString: 'const DEBUG = false', newString: 'const DEBUG = true' })"
         `}</CodeBlock>
 
         <P>
@@ -313,14 +313,14 @@ export default function IndexPage() {
 
         <CodeBlock lang='bash'>{dedent`
           # Start intercepting
-          playwriter -s 1 -e "state.responses = []; page.on('response', async res => { if (res.url().includes('/api/')) { try { state.responses.push({ url: res.url(), status: res.status(), body: await res.json() }); } catch {} } })"
+          playwriter -e "state.responses = []; page.on('response', async res => { if (res.url().includes('/api/')) { try { state.responses.push({ url: res.url(), status: res.status(), body: await res.json() }); } catch {} } })"
 
           # Trigger actions, then analyze
-          playwriter -s 1 -e "await page.click('button.load-more')"
-          playwriter -s 1 -e "console.log('Captured', state.responses.length, 'API calls'); state.responses.forEach(r => console.log(r.status, r.url.slice(0, 80)))"
+          playwriter -e "page.click('button.load-more')"
+          playwriter -e "console.log('Captured', state.responses.length, 'API calls'); state.responses.forEach(r => console.log(r.status, r.url.slice(0, 80)))"
 
           # Replay an API call directly
-          playwriter -s 1 -e "const data = await page.evaluate(async (url) => { const res = await fetch(url); return res.json(); }, state.responses[0].url); console.log(data)"
+          playwriter -e "page.evaluate(async (url) => { const res = await fetch(url); return res.json(); }, state.responses[0].url)"
         `}</CodeBlock>
 
         <P>
@@ -339,14 +339,14 @@ export default function IndexPage() {
 
         <CodeBlock lang='bash'>{dedent`
           # Start recording
-          playwriter -s 1 -e "await startRecording({ page, outputPath: './recording.mp4', frameRate: 30 })"
+          playwriter -e "startRecording({ page, outputPath: './recording.mp4', frameRate: 30 })"
 
           # Navigate, interact — recording continues
-          playwriter -s 1 -e "await page.click('a'); await page.waitForLoadState('domcontentloaded')"
-          playwriter -s 1 -e "await page.goBack()"
+          playwriter -e "page.click('a'); page.waitForLoadState('domcontentloaded')"
+          playwriter -e "page.goBack()"
 
           # Stop and save
-          playwriter -s 1 -e "const { path, duration, size } = await stopRecording({ page }); console.log(path, duration + 'ms', size + ' bytes')"
+          playwriter -e "stopRecording({ page })"
         `}</CodeBlock>
 
         <P>
@@ -415,7 +415,7 @@ export default function IndexPage() {
           # From anywhere — set env vars and use normally
           export PLAYWRITER_HOST=https://my-machine-tunnel.traforo.dev
           export PLAYWRITER_TOKEN=<secret>
-          playwriter -s 1 -e "await page.goto('https://example.com')"
+          playwriter -e "page.goto('https://example.com')"
         `}</CodeBlock>
 
         <P>
