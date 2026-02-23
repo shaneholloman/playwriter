@@ -146,10 +146,26 @@ export async function startPlayWriterCDPRelayServer({
       return null
     }
 
-    const fallbackId = getDefaultExtensionId()
-    if (fallbackId) {
-      return extensionConnections.get(fallbackId) || null
+    // Single extension — use it directly
+    if (extensionConnections.size === 1) {
+      const fallbackId = getDefaultExtensionId()
+      if (fallbackId) {
+        return extensionConnections.get(fallbackId) || null
+      }
     }
+
+    // Multiple extensions — auto-select if exactly one has active targets.
+    // This handles the common case of multiple Chrome profiles with the extension
+    // installed, where only one profile has playwriter-enabled tabs. (#52)
+    if (extensionConnections.size > 1) {
+      const activeExtensions = Array.from(extensionConnections.values()).filter((ext) => {
+        return ext.connectedTargets.size > 0
+      })
+      if (activeExtensions.length === 1) {
+        return activeExtensions[0]
+      }
+    }
+
     return null
   }
 
@@ -838,10 +854,12 @@ export async function startPlayWriterCDPRelayServer({
       const clientId = c.req.param('clientId') || 'default'
       const url = new URL(c.req.url, 'http://localhost')
       const requestedExtensionId = url.searchParams.get('extensionId')
-      const resolvedExtension = getExtensionConnection(requestedExtensionId)
-      const allowDefault = !requestedExtensionId && extensionConnections.size === 1
-      const defaultExtension = allowDefault ? getExtensionConnection(null, { allowFallback: true }) : null
-      const clientExtensionId = resolvedExtension?.id || defaultExtension?.id || null
+      // When extensionId is explicit, resolve directly. Otherwise use fallback which
+      // handles single-extension and uniquely-active-extension cases (#52).
+      const resolvedExtension = requestedExtensionId
+        ? getExtensionConnection(requestedExtensionId)
+        : getExtensionConnection(null, { allowFallback: true })
+      const clientExtensionId = resolvedExtension?.id || null
 
       return {
         async onOpen(_event, ws) {
