@@ -12,6 +12,14 @@ import 'prismjs/components/prism-jsx'
 import 'prismjs/components/prism-tsx'
 import 'prismjs/components/prism-bash'
 
+/* Custom "diagram" language for ASCII/Unicode box-drawing diagrams.
+   Tokenizes box-drawing chars as neutral structure, text as highlighted labels. */
+Prism.languages.diagram = {
+  'box-drawing': /[┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬╭╮╯╰┊┈╌┄╶╴╵╷]+/,
+  'line-char': /[-_|<>]+/,
+  'label': /[^\s┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬╭╮╯╰┊┈╌┄╶╴╵╷\-_|<>]+/,
+}
+
 /* =========================================================================
    TOC sidebar (fixed left)
    ========================================================================= */
@@ -342,19 +350,21 @@ export function CodeBlock({
   children,
   lang = 'jsx',
   lineHeight = '1.85',
+  showLineNumbers = true,
 }: {
   children: string
   lang?: string
   lineHeight?: string
+  showLineNumbers?: boolean
 }) {
   const codeRef = useRef<HTMLElement>(null)
   const lines = children.split('\n')
 
   useEffect(() => {
-    if (codeRef.current) {
+    if (codeRef.current && lang) {
       Prism.highlightElement(codeRef.current)
     }
-  }, [children])
+  }, [children, lang])
 
   return (
     <figure className='m-0 bleed'>
@@ -381,28 +391,30 @@ export function CodeBlock({
               tabSize: 2,
             }}
           >
-            <span
-              className='select-none shrink-0'
-              aria-hidden='true'
-              style={{
-                color: 'var(--code-line-nr)',
-                textAlign: 'right',
-                paddingRight: '20px',
-                width: '36px',
-                userSelect: 'none',
-              }}
-            >
-              {lines.map((_, i) => {
-                return (
-                  <span key={i} className='block'>
-                    {i + 1}
-                  </span>
-                )
-              })}
-            </span>
+            {showLineNumbers && (
+              <span
+                className='select-none shrink-0'
+                aria-hidden='true'
+                style={{
+                  color: 'var(--code-line-nr)',
+                  textAlign: 'right',
+                  paddingRight: '20px',
+                  width: '36px',
+                  userSelect: 'none',
+                }}
+              >
+                {lines.map((_, i) => {
+                  return (
+                    <span key={i} className='block'>
+                      {i + 1}
+                    </span>
+                  )
+                })}
+              </span>
+            )}
             <code
               ref={codeRef}
-              className={`language-${lang}`}
+              className={lang ? `language-${lang}` : undefined}
               style={{ whiteSpace: 'pre', background: 'none', padding: 0, lineHeight }}
             >
               {children}

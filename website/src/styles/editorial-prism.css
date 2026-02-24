@@ -130,6 +130,20 @@ pre[class*='language-'] {
   color: #2563eb;
 }
 
+/* Diagram language: neutral box-drawing, colored text labels */
+.language-diagram .token.box-drawing {
+  color: #c0c0c0;
+}
+
+.language-diagram .token.line-char {
+  color: #c0c0c0;
+}
+
+.language-diagram .token.label {
+  color: #0550ae;
+  font-weight: 600;
+}
+
 /* No text shadow on any token */
 .token {
   text-shadow: none;
@@ -159,6 +173,8 @@ pre[class*='language-'] {
     --prism-spread: #ff7b72;
     --prism-regex: #a5d6ff;
     --prism-bash-fn: #79c0ff;
+    --prism-diagram-structure: #555;
+    --prism-diagram-label: #79bbff;
   }
 }
 
@@ -282,5 +298,18 @@ pre[class*='language-'] {
 .language-bash .token.function {
   @variant dark {
     color: var(--prism-bash-fn);
+  }
+}
+
+.language-diagram .token.box-drawing,
+.language-diagram .token.line-char {
+  @variant dark {
+    color: var(--prism-diagram-structure);
+  }
+}
+
+.language-diagram .token.label {
+  @variant dark {
+    color: var(--prism-diagram-label);
   }
 }

@@ -146,7 +146,7 @@ export default function IndexPage() {
           Chrome restart, no flags, no special setup.
         </P>
 
-        <CodeBlock lang='bash' lineHeight='1.3'>{dedent`
+        <CodeBlock lang='diagram' lineHeight='1.3' showLineNumbers={false}>{dedent`
         ┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
         │   BROWSER           │     │   LOCALHOST          │     │   CLIENT        │
         │                     │     │                      │     │                 │
