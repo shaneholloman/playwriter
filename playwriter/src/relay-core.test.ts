@@ -10,6 +10,7 @@ import {
   withTimeout,
   js,
   tryJsonParse,
+  createSimpleServer,
 } from './test-utils.js'
 import './test-declarations.js'
 
@@ -614,6 +615,81 @@ describe('Relay Core Tests', () => {
       },
     })
   }, 30000)
+
+  it('should capture console logs from cross-origin iframes', async () => {
+    // Two servers on different ports = different origins
+    const iframeServer = await createSimpleServer({
+      routes: {
+        '/iframe.html': `<!doctype html><html><body>
+          <script>
+            console.log('iframe-log-ALPHA');
+            console.error('iframe-error-BETA');
+            console.warn('iframe-warn-GAMMA');
+          </script>
+          <p>cross-origin iframe</p>
+        </body></html>`,
+      },
+    })
+
+    const parentServer = await createSimpleServer({
+      routes: {
+        '/': `<!doctype html><html><body>
+          <script>console.log('parent-log-DELTA');</script>
+          <iframe src="${iframeServer.baseUrl}/iframe.html"></iframe>
+        </body></html>`,
+      },
+    })
+
+    try {
+      // Clear logs and navigate to the parent page with cross-origin iframe
+      await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: js`
+            clearAllLogs();
+            state.iframePage = await context.newPage();
+            await state.iframePage.goto('${parentServer.baseUrl}', { waitUntil: 'networkidle' });
+            // Wait for iframe to load and logs to be captured
+            await state.iframePage.frameLocator('iframe').locator('p').waitFor({ timeout: 5000 });
+            await new Promise(resolve => setTimeout(resolve, 500));
+          `,
+        },
+      })
+
+      // Retrieve logs and verify both parent and iframe logs are captured
+      const logsResult = await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: js`
+            const logs = await getLatestLogs({ page: state.iframePage });
+            console.log('Cross-origin iframe logs count:', logs.length);
+            logs.forEach(log => console.log(log));
+          `,
+        },
+      })
+
+      const output = (logsResult as any).content[0].text
+      // Parent page log
+      expect(output).toContain('parent-log-DELTA')
+      // Cross-origin iframe logs
+      expect(output).toContain('iframe-log-ALPHA')
+      expect(output).toContain('iframe-error-BETA')
+      expect(output).toContain('iframe-warn-GAMMA')
+
+      // Clean up
+      await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: js`
+            await state.iframePage.close();
+            delete state.iframePage;
+          `,
+        },
+      })
+    } finally {
+      await Promise.all([parentServer.close(), iframeServer.close()])
+    }
+  }, 60000)
 
   // right now our extension always forces light mode because of a playwright cdp bug
   it.todo(
