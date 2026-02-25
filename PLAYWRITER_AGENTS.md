@@ -51,10 +51,15 @@ to test CLI changes without publishing:
 
 ```bash
  # mac/linux: kill any existing relay on 19988
- lsof -ti :19988 | xargs kill
+ PIDS=($(lsof -ti :19988))
+ if [ ${#PIDS[@]} -gt 0 ]; then kill "${PIDS[@]}"; fi
+ # verify port is free (must print nothing)
+ lsof -ti :19988
 
  # windows (powershell): kill any existing relay on 19988
  Get-NetTCPConnection -LocalPort 19988 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+ # verify port is free (must print nothing)
+ Get-NetTCPConnection -LocalPort 19988 -ErrorAction SilentlyContinue
 
  tsx playwriter/src/cli.ts -s 1 -e "await page.goto('https://example.com')"
  tsx playwriter/src/cli.ts -s 1 -e "console.log(await snapshot({ page }))"
