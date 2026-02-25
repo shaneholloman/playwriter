@@ -429,6 +429,43 @@ export async function startPlayWriterCDPRelayServer({
 
   const recordingRelays = new Map<string, RecordingRelay>()
 
+  // Find which extension connection owns a CDP session ID (pw-tab-*).
+  // Used by recording routes where sessionId is a CDP tab session, not
+  // an executor session. Searches all connected extensions' targets.
+  const findExtensionIdByCdpSession = (cdpSessionId: string): string | null => {
+    for (const [connectionId, connection] of extensionConnections.entries()) {
+      if (connection.connectedTargets.has(cdpSessionId)) {
+        return connectionId
+      }
+    }
+    return null
+  }
+
+  // Resolve extensionId from a recording route's sessionId parameter.
+  // sessionId can be either:
+  // - CDP session ID (pw-tab-*) — look up which extension owns that tab
+  // - Executor session ID (numeric) — look up which extension the executor is bound to
+  // - null — fall back to default extension
+  const resolveRecordingExtensionId = async (sessionId: string | null): Promise<{
+    extensionId: string | null
+    error?: string
+  }> => {
+    if (!sessionId) {
+      return { extensionId: null }
+    }
+    if (sessionId.startsWith('pw-tab-')) {
+      const extensionId = findExtensionIdByCdpSession(sessionId)
+      return { extensionId }
+    }
+    // Numeric executor session — resolve extension from executor metadata
+    const manager = await getExecutorManager()
+    const executor = manager.getSession(sessionId)
+    if (!executor) {
+      return { extensionId: null, error: `Session ${sessionId} not found` }
+    }
+    return { extensionId: executor.getSessionMetadata().extensionId || null }
+  }
+
   const getRecordingRelay = (extensionId?: string | null): RecordingRelay | null => {
     const allowDefault = !extensionId && extensionConnections.size === 1
     const connection = getExtensionConnection(extensionId, { allowFallback: allowDefault })
@@ -1729,12 +1766,10 @@ export async function startPlayWriterCDPRelayServer({
     }
     const sessionId = normalizeSessionId(body.sessionId)
     const { sessionId: _sessionId, ...recordingOptions } = body
-    const manager = await getExecutorManager()
-    const executor = sessionId ? manager.getSession(sessionId) : null
-    if (sessionId && !executor) {
-      return c.json({ success: false, error: `Session ${sessionId} not found` }, 404)
+    const { extensionId, error } = await resolveRecordingExtensionId(sessionId)
+    if (error) {
+      return c.json({ success: false, error }, 404)
     }
-    const extensionId = executor?.getSessionMetadata().extensionId || null
     const relay = getRecordingRelay(extensionId)
     if (!relay) {
       return c.json({ success: false, error: 'Extension not connected' }, 500)
@@ -1748,12 +1783,10 @@ export async function startPlayWriterCDPRelayServer({
   app.post('/recording/stop', async (c) => {
     const body = (await c.req.json()) as { sessionId?: string | number }
     const sessionId = normalizeSessionId(body.sessionId)
-    const manager = await getExecutorManager()
-    const executor = sessionId ? manager.getSession(sessionId) : null
-    if (sessionId && !executor) {
-      return c.json({ success: false, error: `Session ${sessionId} not found` }, 404)
+    const { extensionId, error } = await resolveRecordingExtensionId(sessionId)
+    if (error) {
+      return c.json({ success: false, error }, 404)
     }
-    const extensionId = executor?.getSessionMetadata().extensionId || null
     const relay = getRecordingRelay(extensionId)
     if (!relay) {
       return c.json({ success: false, error: 'Extension not connected' }, 500)
@@ -1766,15 +1799,12 @@ export async function startPlayWriterCDPRelayServer({
 
   app.get('/recording/status', async (c) => {
     const sessionId = normalizeSessionId(c.req.query('sessionId'))
-    const normalizedSessionId = sessionId || undefined
-    const manager = await getExecutorManager()
-    const executor = normalizedSessionId ? manager.getSession(normalizedSessionId) : null
-    const extensionId = executor?.getSessionMetadata().extensionId || null
+    const { extensionId } = await resolveRecordingExtensionId(sessionId)
     const relay = getRecordingRelay(extensionId)
     if (!relay) {
       return c.json({ isRecording: false })
     }
-    const isRecordingParams: IsRecordingParams = normalizedSessionId ? { sessionId: normalizedSessionId } : {}
+    const isRecordingParams: IsRecordingParams = sessionId ? { sessionId } : {}
     const result = await relay.isRecording(isRecordingParams)
     return c.json(result)
   })
@@ -1782,12 +1812,10 @@ export async function startPlayWriterCDPRelayServer({
   app.post('/recording/cancel', async (c) => {
     const body = (await c.req.json()) as { sessionId?: string | number }
     const sessionId = normalizeSessionId(body.sessionId)
-    const manager = await getExecutorManager()
-    const executor = sessionId ? manager.getSession(sessionId) : null
-    if (sessionId && !executor) {
-      return c.json({ success: false, error: `Session ${sessionId} not found` }, 404)
+    const { extensionId, error } = await resolveRecordingExtensionId(sessionId)
+    if (error) {
+      return c.json({ success: false, error }, 404)
     }
-    const extensionId = executor?.getSessionMetadata().extensionId || null
     const relay = getRecordingRelay(extensionId)
     if (!relay) {
       return c.json({ success: false, error: 'Extension not connected' }, 500)
