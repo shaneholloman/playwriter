@@ -861,13 +861,15 @@ await screenshotWithAccessibilityLabels({ page: state.page })
 
 Labels are color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=sliders, salmon=menus, amber=tabs.
 
-**startRecording / stopRecording** - record the page as a video at native FPS (30-60fps). Uses `chrome.tabCapture` in the extension context, so **recording survives page navigation**. Video is saved as mp4.
+**recording.start / recording.stop** - record the page as a video at native FPS (30-60fps). Uses `chrome.tabCapture` in the extension context, so **recording survives page navigation**. Video is saved as mp4.
+
+While recording is active, Playwriter automatically overlays a smooth ghost cursor that follows automated mouse actions (`page.mouse.*`, `locator.click()`, hover flows) using `page.onMouseAction` from the Playwright fork.
 
 **Note**: Recording requires the user to have clicked the Playwriter extension icon on the tab. This grants `activeTab` permission needed for `chrome.tabCapture`. Recording works on tabs where the icon was clicked - if you need to record a new tab, ask the user to click the icon on it first.
 
 ```js
 // Start recording - outputPath must be specified upfront
-await startRecording({
+await recording.start({
   page: state.page,
   outputPath: './recording.mp4',
   frameRate: 30, // default: 30
@@ -881,7 +883,7 @@ await state.page.waitForLoadState('domcontentloaded')
 await state.page.goBack()
 
 // Stop and get result
-const { path, duration, size } = await stopRecording({ page: state.page })
+const { path, duration, size } = await recording.stop({ page: state.page })
 console.log(`Saved ${size} bytes, duration: ${duration}ms`)
 ```
 
@@ -889,17 +891,32 @@ Additional recording utilities:
 
 ```js
 // Check if recording is active
-const { isRecording, startedAt } = await isRecording({ page: state.page })
+const { isRecording, startedAt } = await recording.isRecording({ page: state.page })
 
 // Cancel recording without saving
-await cancelRecording({ page: state.page })
+await recording.cancel({ page: state.page })
 ```
+
+**ghostCursor.show / ghostCursor.hide** - manually show or hide the in-page cursor overlay. Useful for screenshots and demos even when recording is not running.
+
+```js
+// Show cursor in the center (or keep current position if already visible)
+await ghostCursor.show({ page: state.page })
+
+// Optional styles: 'minimal' (default triangular pointer), 'dot', 'screenstudio'
+await ghostCursor.show({ page: state.page, style: 'minimal' })
+
+// Hide cursor overlay
+await ghostCursor.hide({ page: state.page })
+```
+
+`startRecording`, `stopRecording`, `isRecording`, and `cancelRecording` remain available as backward-compatible aliases.
 
 **Key difference from getDisplayMedia**: This approach uses `chrome.tabCapture` which runs in the extension context, not the page. The recording persists across navigations because the extension holds the `MediaRecorder`, not the page's JavaScript context.
 
 **createDemoVideo** - create a polished demo video from a recording by automatically speeding up idle sections (time between execute() calls) while keeping interactions at normal speed. Useful for creating demo videos of agent workflows without long pauses.
 
-While recording is active, playwriter tracks when each `execute()` call starts and ends. `stopRecording()` returns these timestamps alongside the video file. `createDemoVideo` uses this data to identify idle gaps and speed them up with ffmpeg in a single pass.
+While recording is active, playwriter tracks when each `execute()` call starts and ends. `recording.stop()` returns these timestamps alongside the video file. `createDemoVideo` uses this data to identify idle gaps and speed them up with ffmpeg in a single pass.
 
 A 1-second buffer is preserved around each interaction so viewers see context before and after each action.
 
@@ -907,7 +924,7 @@ Requires `ffmpeg` and `ffprobe` installed on the system.
 
 ```js
 // Start recording
-await startRecording({ page: state.page, outputPath: './recording.mp4' })
+await recording.start({ page: state.page, outputPath: './recording.mp4' })
 ```
 
 ```js
@@ -917,13 +934,13 @@ await startRecording({ page: state.page, outputPath: './recording.mp4' })
 
 ```js
 // Stop recording — executionTimestamps is included in the result
-const recording = await stopRecording({ page: state.page })
+const recordingResult = await recording.stop({ page: state.page })
 
 // Create demo video — idle gaps are sped up 4x (default)
 const demoPath = await createDemoVideo({
-  recordingPath: recording.path,
-  durationMs: recording.duration,
-  executionTimestamps: recording.executionTimestamps,
+  recordingPath: recordingResult.path,
+  durationMs: recordingResult.duration,
+  executionTimestamps: recordingResult.executionTimestamps,
   speed: 5, // optional, default 5x for idle sections
   // outputFile: './demo.mp4', // optional, defaults to recording-demo.mp4
 })

@@ -15,6 +15,15 @@ const __dirname = path.dirname(__filename)
 
 export const RELAY_PORT = Number(process.env.PLAYWRITER_PORT) || 19988
 
+export type ExtensionStatus = {
+  extensionId: string
+  stableKey?: string
+  browser: string | null
+  profile: { email: string; id: string } | null
+  activeTargets: number
+  playwriterVersion: string | null
+}
+
 export async function getRelayServerVersion(port: number = RELAY_PORT): Promise<string | null> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/version`, {
@@ -46,33 +55,81 @@ export async function getExtensionStatus(
   }
 }
 
+export async function getExtensionsStatus(port: number = RELAY_PORT): Promise<ExtensionStatus[]> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/extensions/status`, {
+      signal: AbortSignal.timeout(2000),
+    })
+    if (!response.ok) {
+      const fallback = await fetch(`http://127.0.0.1:${port}/extension/status`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (!fallback.ok) {
+        return []
+      }
+
+      const fallbackData = (await fallback.json()) as {
+        connected: boolean
+        activeTargets: number
+        browser: string | null
+        profile: { email: string; id: string } | null
+        playwriterVersion?: string | null
+      }
+
+      if (!fallbackData?.connected) {
+        return []
+      }
+
+      return [
+        {
+          extensionId: 'default',
+          stableKey: undefined,
+          browser: fallbackData.browser,
+          profile: fallbackData.profile,
+          activeTargets: fallbackData.activeTargets,
+          playwriterVersion: fallbackData.playwriterVersion || null,
+        },
+      ]
+    }
+
+    const data = (await response.json()) as {
+      extensions: ExtensionStatus[]
+    }
+
+    return data.extensions || []
+  } catch {
+    return []
+  }
+}
+
 /**
- * Wait for the extension to connect to the relay server.
- * Returns true if connected within timeout, false otherwise.
+ * Wait for at least one extension to appear in extensions status.
+ * Returns connected extension entries, or [] on timeout.
  */
-export async function waitForExtension(
+export async function waitForConnectedExtensions(
   options: {
     port?: number
     timeoutMs?: number
+    pollIntervalMs?: number
     logger?: { log: (...args: any[]) => void }
   } = {},
-): Promise<boolean> {
-  const { port = RELAY_PORT, timeoutMs = 5000, logger } = options
+): Promise<ExtensionStatus[]> {
+  const { port = RELAY_PORT, timeoutMs = 5000, pollIntervalMs = 200, logger } = options
   const startTime = Date.now()
 
   logger?.log(pc.dim('Waiting for extension to connect...'))
 
   while (Date.now() - startTime < timeoutMs) {
-    const status = await getExtensionStatus(port)
-    if (status?.connected) {
+    const extensions = await getExtensionsStatus(port)
+    if (extensions.length > 0) {
       logger?.log(pc.green('Extension connected'))
-      return true
+      return extensions
     }
-    await sleep(200)
+    await sleep(pollIntervalMs)
   }
 
   logger?.log(pc.yellow('Extension did not connect within timeout'))
-  return false
+  return []
 }
 
 async function killRelayServer(options: { port: number; waitForFreeMs?: number }): Promise<void> {

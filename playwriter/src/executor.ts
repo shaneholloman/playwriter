@@ -33,8 +33,10 @@ import { createGhostBrowserChrome, type GhostBrowserCommandResult } from './ghos
 export type { SnapshotFormat }
 import { getCleanHTML, type GetCleanHTMLOptions } from './clean-html.js'
 import { getPageMarkdown, type GetPageMarkdownOptions } from './page-markdown.js'
-import { startRecording, stopRecording, isRecording, cancelRecording } from './screen-recording.js'
+import { createRecordingApi } from './screen-recording.js'
 import { createDemoVideo } from './ffmpeg.js'
+import { type GhostCursorClientOptions } from './ghost-cursor.js'
+import { RecordingGhostCursorController } from './recording-ghost-cursor.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -948,18 +950,51 @@ export class PlaywrightExecutor {
       // Recording uses chrome.tabCapture which requires activeTab permission.
       // This permission is granted when the user clicks the Playwriter extension icon on a tab.
       const relayPort = this.cdpConfig.port || 19988
-      // Recording will work on any tab where the user has clicked the icon.
-      const withRecordingDefaults = <T extends { page?: Page; sessionId?: string }, R>(
-        fn: (opts: T & { relayPort: number; sessionId?: string }) => Promise<R>,
-      ) => {
-        return async (options: T = {} as T) => {
-          const targetPage = options.page || page
-          // Use Playwright's exposed tab session ID directly.
-          const sessionId = options.sessionId || targetPage.sessionId() || undefined
-          return fn({ page: targetPage, sessionId, relayPort, ...options })
-        }
-      }
       const self = this
+      const recordingGhostCursor = new RecordingGhostCursorController({
+        logger: {
+          error: (...args: unknown[]) => {
+            self.logger.error(...args)
+          },
+        },
+      })
+
+      const showGhostCursor = async (options?: ({ page?: Page } & GhostCursorClientOptions)) => {
+        const targetPage = options?.page || page
+        const cursorOptions: GhostCursorClientOptions | undefined = (() => {
+          if (!options) {
+            return undefined
+          }
+
+          const { page: _ignoredPage, ...rest } = options
+          return rest
+        })()
+
+        await recordingGhostCursor.show({ page: targetPage, cursorOptions })
+      }
+
+      const hideGhostCursor = async (options?: { page?: Page }) => {
+        const targetPage = options?.page || page
+        await recordingGhostCursor.hide({ page: targetPage })
+      }
+
+      const recordingApi = createRecordingApi({
+        context,
+        defaultPage: page,
+        relayPort,
+        ghostCursorController: recordingGhostCursor,
+        onStart: () => {
+          self.recordingStartedAt = Date.now()
+          self.executionTimestamps = []
+        },
+        onFinish: () => {
+          self.recordingStartedAt = null
+          self.executionTimestamps = []
+        },
+        getExecutionTimestamps: () => {
+          return self.executionTimestamps
+        },
+      })
 
       // Ghost Browser API - creates chrome object that mirrors Ghost Browser's APIs
       // See extension/src/ghost-browser-api.d.ts for full API documentation
@@ -994,26 +1029,21 @@ export class PlaywrightExecutor {
         formatStylesAsText,
         getReactSource: getReactSourceFn,
         screenshotWithAccessibilityLabels: screenshotWithAccessibilityLabelsFn,
-        startRecording: async (opts?: Parameters<typeof startRecording>[0]) => {
-          const result = await withRecordingDefaults(startRecording)(opts)
-          self.recordingStartedAt = Date.now()
-          self.executionTimestamps = []
-          return result
+        ghostCursor: {
+          show: showGhostCursor,
+          hide: hideGhostCursor,
         },
-        stopRecording: async (opts?: Parameters<typeof stopRecording>[0]) => {
-          const result = await withRecordingDefaults(stopRecording)(opts)
-          const executionTimestamps = [...self.executionTimestamps]
-          self.recordingStartedAt = null
-          self.executionTimestamps = []
-          return { ...result, executionTimestamps }
+        recording: {
+          start: recordingApi.start,
+          stop: recordingApi.stop,
+          isRecording: recordingApi.isRecording,
+          cancel: recordingApi.cancel,
         },
-        isRecording: withRecordingDefaults(isRecording),
-        cancelRecording: async (opts?: Parameters<typeof cancelRecording>[0]) => {
-          const result = await withRecordingDefaults(cancelRecording)(opts)
-          self.recordingStartedAt = null
-          self.executionTimestamps = []
-          return result
-        },
+        // Backward-compatible aliases
+        startRecording: recordingApi.start,
+        stopRecording: recordingApi.stop,
+        isRecording: recordingApi.isRecording,
+        cancelRecording: recordingApi.cancel,
         createDemoVideo,
         resetPlaywright: async () => {
           const { page: newPage, context: newContext } = await self.reset()

@@ -4,9 +4,10 @@
  * and locator-initiated actions like page.locator().click().
  */
 import { chromium } from '@xmorse/playwright-core'
-import type { MouseActionEvent } from '@xmorse/playwright-core'
+import type { MouseActionEvent, Page } from '@xmorse/playwright-core'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { getCdpUrl } from './utils.js'
+import { enableGhostCursor, applyGhostCursorMouseAction, disableGhostCursor } from './ghost-cursor.js'
 import {
   setupTestContext,
   cleanupTestContext,
@@ -111,6 +112,62 @@ describe('onMouseAction callback', () => {
     expect(moveEvent.y).toBeGreaterThan(0)
 
     await safeCloseCDPBrowser(directBrowser)
+  }, 30000)
+
+  it('should animate ghost cursor from onMouseAction callback', async () => {
+    const browserContext = testCtx!.browserContext
+
+    const directBrowser = await chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT }))
+    let targetPage: Page | null = null
+    try {
+      const contexts = directBrowser.contexts()
+      const pages = contexts[0].pages()
+      targetPage = pages.find((p) => p.url().startsWith('data:'))!
+      expect(targetPage).toBeDefined()
+      const pageForTest = targetPage
+
+      await enableGhostCursor({ page: pageForTest })
+      pageForTest.onMouseAction = async (event) => {
+        await applyGhostCursorMouseAction({ page: pageForTest, event })
+      }
+
+      await pageForTest.mouse.click(140, 120)
+
+      const cursorState = await pageForTest.evaluate(() => {
+        const cursorElement = document.getElementById('__playwriter_ghost_cursor__')
+        if (!cursorElement) {
+          return { exists: false, transform: '' }
+        }
+        return {
+          exists: true,
+          transform: cursorElement.getAttribute('style') || '',
+        }
+      })
+
+      expect(cursorState.exists).toBe(true)
+      const translateMatch = cursorState.transform.match(/translate3d\(([-\d.]+)px, ([-\d.]+)px, 0px\)/)
+      expect(translateMatch).toBeTruthy()
+      const translateX = Number(translateMatch![1])
+      const translateY = Number(translateMatch![2])
+      // Screen Studio cursor uses a hotspot offset, so CSS position is slightly above/left of click target.
+      expect(translateX).toBeLessThanOrEqual(140)
+      expect(translateY).toBeLessThanOrEqual(120)
+      expect(translateX).toBeGreaterThan(120)
+      expect(translateY).toBeGreaterThan(100)
+
+      await disableGhostCursor({ page: pageForTest })
+
+      const hasGhostCursor = await pageForTest.evaluate(() => {
+        return Boolean(document.getElementById('__playwriter_ghost_cursor__'))
+      })
+      expect(hasGhostCursor).toBe(false)
+    } finally {
+      if (targetPage) {
+        targetPage.onMouseAction = null
+        await disableGhostCursor({ page: targetPage })
+      }
+      await safeCloseCDPBrowser(directBrowser)
+    }
   }, 30000)
 
   it('should not fire when onMouseAction is set to null', async () => {

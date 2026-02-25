@@ -47,6 +47,11 @@ const BUNDLES: BundleConfig[] = [
     type: 'source',
     entry: 'a11y-client.ts',
   },
+  {
+    name: 'ghost-cursor-client',
+    type: 'source',
+    entry: 'ghost-cursor-client.ts',
+  },
 
   // Wrapper bundles (npm packages → globalThis)
   {

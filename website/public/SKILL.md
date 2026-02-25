@@ -903,6 +903,9 @@ await recording.cancel({ page: state.page })
 // Show cursor in the center (or keep current position if already visible)
 await ghostCursor.show({ page: state.page })
 
+// Optional styles: 'minimal' (default triangular pointer), 'dot', 'screenstudio'
+await ghostCursor.show({ page: state.page, style: 'minimal' })
+
 // Hide cursor overlay
 await ghostCursor.hide({ page: state.page })
 ```

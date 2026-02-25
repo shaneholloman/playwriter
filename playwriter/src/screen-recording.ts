@@ -8,7 +8,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import type { Page } from '@xmorse/playwright-core'
+import type { BrowserContext, Page } from '@xmorse/playwright-core'
 import type {
   StartRecordingResult,
   StopRecordingResult,
@@ -16,6 +16,7 @@ import type {
   CancelRecordingResult,
 } from './protocol.js'
 import { EXTENSION_IDS } from './utils.js'
+import { RecordingGhostCursorController } from './recording-ghost-cursor.js'
 
 /**
  * Generate a shell command to quit and restart Chrome with flags that allow automatic tab capture.
@@ -84,6 +85,132 @@ export interface RecordingState {
   isRecording: boolean
   startedAt?: number
   tabId?: number
+}
+
+export interface ExecutionTimestamp {
+  start: number
+  end: number
+}
+
+interface RecordingTargetOptions {
+  page?: Page
+  sessionId?: string
+}
+
+interface CreateRecordingApiOptions {
+  context: BrowserContext
+  defaultPage: Page
+  relayPort: number
+  ghostCursorController: RecordingGhostCursorController
+  onStart: () => void
+  onFinish: () => void
+  getExecutionTimestamps: () => ExecutionTimestamp[]
+}
+
+interface StartRecordingWithDefaultsOptions extends Omit<StartRecordingOptions, 'relayPort'> {}
+interface StopRecordingWithDefaultsOptions extends Omit<StopRecordingOptions, 'relayPort'> {}
+interface IsRecordingWithDefaultsOptions {
+  page?: Page
+  sessionId?: string
+}
+interface CancelRecordingWithDefaultsOptions {
+  page?: Page
+  sessionId?: string
+}
+
+function resolveRecordingTargetPage(options: {
+  context: BrowserContext
+  defaultPage: Page
+  ghostCursorController: RecordingGhostCursorController
+  target?: RecordingTargetOptions
+}): Page {
+  return options.ghostCursorController.resolveRecordingTargetPage({
+    context: options.context,
+    defaultPage: options.defaultPage,
+    target: options.target,
+  })
+}
+
+function withRecordingDefaults<T extends { page?: Page; sessionId?: string }, R>(options: {
+  relayPort: number
+  defaultPage: Page
+  fn: (opts: T & { relayPort: number; sessionId?: string }) => Promise<R>
+}): (input?: T) => Promise<R> {
+  const { relayPort, defaultPage, fn } = options
+  return async (input: T = {} as T) => {
+    const targetPage = input.page || defaultPage
+    const sessionId = input.sessionId || targetPage.sessionId() || undefined
+    return fn({ page: targetPage, sessionId, relayPort, ...input })
+  }
+}
+
+export function createRecordingApi(options: CreateRecordingApiOptions): {
+  start: (opts?: StartRecordingWithDefaultsOptions) => Promise<RecordingState>
+  stop: (opts?: StopRecordingWithDefaultsOptions) => Promise<{ path: string; duration: number; size: number; executionTimestamps: ExecutionTimestamp[] }>
+  isRecording: (opts?: IsRecordingWithDefaultsOptions) => Promise<RecordingState>
+  cancel: (opts?: CancelRecordingWithDefaultsOptions) => Promise<void>
+} {
+  const { context, defaultPage, relayPort, ghostCursorController, onStart, onFinish, getExecutionTimestamps } = options
+
+  const startWithDefaults = withRecordingDefaults<StartRecordingWithDefaultsOptions, RecordingState>({
+    relayPort,
+    defaultPage,
+    fn: startRecording,
+  })
+  const stopWithDefaults = withRecordingDefaults<StopRecordingWithDefaultsOptions, { path: string; duration: number; size: number }>({
+    relayPort,
+    defaultPage,
+    fn: stopRecording,
+  })
+  const isRecordingWithDefaults = async (opts: IsRecordingWithDefaultsOptions = {}): Promise<RecordingState> => {
+    const targetPage = opts.page || defaultPage
+    const sessionId = opts.sessionId || targetPage.sessionId() || undefined
+    return isRecording({ page: targetPage, sessionId, relayPort })
+  }
+
+  const cancelWithDefaults = async (opts: CancelRecordingWithDefaultsOptions = {}): Promise<void> => {
+    const targetPage = opts.page || defaultPage
+    const sessionId = opts.sessionId || targetPage.sessionId() || undefined
+    await cancelRecording({ page: targetPage, sessionId, relayPort })
+  }
+
+  const start = async (opts?: StartRecordingWithDefaultsOptions): Promise<RecordingState> => {
+    const targetPage = resolveRecordingTargetPage({ context, defaultPage, ghostCursorController, target: opts })
+    const result = await startWithDefaults(opts)
+    onStart()
+    await ghostCursorController.enableForRecording({ page: targetPage })
+    return result
+  }
+
+  const stop = async (
+    opts?: StopRecordingWithDefaultsOptions,
+  ): Promise<{ path: string; duration: number; size: number; executionTimestamps: ExecutionTimestamp[] }> => {
+    const targetPage = resolveRecordingTargetPage({ context, defaultPage, ghostCursorController, target: opts })
+    try {
+      const result = await stopWithDefaults(opts)
+      return { ...result, executionTimestamps: [...getExecutionTimestamps()] }
+    } finally {
+      onFinish()
+      await ghostCursorController.disableForRecording({ page: targetPage })
+    }
+  }
+
+  const cancel = async (opts?: CancelRecordingWithDefaultsOptions): Promise<void> => {
+    const targetPage = resolveRecordingTargetPage({ context, defaultPage, ghostCursorController, target: opts })
+    try {
+      await cancelWithDefaults(opts)
+    } finally {
+      onFinish()
+      await ghostCursorController.disableForRecording({ page: targetPage })
+    }
+  }
+
+  return {
+    start,
+    stop,
+    isRecording: isRecordingWithDefaults,
+    cancel,
+  }
 }
 
 /**

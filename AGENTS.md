@@ -53,13 +53,18 @@ to test CLI changes without publishing:
 
 ```bash
  # mac/linux: kill any existing relay on 19988
- lsof -ti :19988 | xargs kill
+ PIDS=($(lsof -ti :19988))
+ if [ ${#PIDS[@]} -gt 0 ]; then kill "${PIDS[@]}"; fi
+ # verify port is free (must print nothing)
+ lsof -ti :19988
 
  # windows (powershell): kill any existing relay on 19988
  Get-NetTCPConnection -LocalPort 19988 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+ # verify port is free (must print nothing)
+ Get-NetTCPConnection -LocalPort 19988 -ErrorAction SilentlyContinue
 
  tsx playwriter/src/cli.ts -s 1 -e "await page.goto('https://example.com')"
- tsx playwriter/src/cli.ts -s 1 -e "console.log(await accessibilitySnapshot({ page }))"
+ tsx playwriter/src/cli.ts -s 1 -e "console.log(await snapshot({ page }))"
  tsx playwriter/src/cli.ts session new
  tsx playwriter/src/cli.ts -s 1 -e "await page.click('button')"
 ```
@@ -365,36 +370,35 @@ you can open files when i ask me "open in zed the line where ..." using the comm
 - if you encounter typescript lint errors for an npm package, read the node_modules/package/\*.d.ts files to understand the typescript types of the package. if you cannot understand them, ask me to help you with it.
 
 - NEVER silently suppress errors in catch {} blocks if they contain more than one function call
-
 ```ts
 // BAD. DO NOT DO THIS
-let favicon: string | undefined
+let favicon: string | undefined;
 if (docsConfig?.favicon) {
-  if (typeof docsConfig.favicon === 'string') {
-    favicon = docsConfig.favicon
+  if (typeof docsConfig.favicon === "string") {
+    favicon = docsConfig.favicon;
   } else if (docsConfig.favicon?.light) {
     // Use light favicon as default, could be enhanced with theme detection
-    favicon = docsConfig.favicon.light
+    favicon = docsConfig.favicon.light;
   }
 }
 // DO THIS. use an iife. Immediately Invoked Function Expression
 const favicon: string = (() => {
   if (!docsConfig?.favicon) {
-    return ''
+    return "";
   }
-  if (typeof docsConfig.favicon === 'string') {
-    return docsConfig.favicon
+  if (typeof docsConfig.favicon === "string") {
+    return docsConfig.favicon;
   }
   if (docsConfig.favicon?.light) {
     // Use light favicon as default, could be enhanced with theme detection
-    return docsConfig.favicon.light
+    return docsConfig.favicon.light;
   }
-  return ''
-})()
+  return "";
+})();
 // if you already know the type use it:
 const favicon: string = () => {
   // ...
-}
+};
 ```
 
 - when a package has to import files from another packages in the workspace never add a new tsconfig path, instead add that package as a workspace dependency using `pnpm i "package@workspace:*"`
@@ -411,12 +415,12 @@ always specify the type when creating arrays, especially for empty arrays. if yo
 
 ```ts
 // BAD: Type will be never[]
-const items = []
+const items = [];
 
 // GOOD: Specify the expected type
-const items: string[] = []
-const numbers: number[] = []
-const users: User[] = []
+const items: string[] = [];
+const numbers: number[] = [];
+const users: User[] = [];
 ```
 
 remember to always add the explicit type to avoid unexpected type inference.
@@ -574,7 +578,7 @@ to understand how the code you are writing works, you should add inline snapshot
 
 - for very long snapshots you should use `toMatchFileSnapshot(filename)` instead of `toMatchInlineSnapshot()`. put the snapshot files in a snapshots/ directory and use the appropriate extension for the file based on the content
 
-never test client react components. only React and browser independent code.
+never test client react components. only React and browser independent code. 
 
 most tests should be simple calls to functions with some expect calls, no mocks. test files should be called the same as the file where the tested function is being exported from.
 
@@ -591,12 +595,11 @@ sometimes tests work directly on database data, using prisma. to run these tests
 never write tests yourself that call prisma or interact with database or emails. for these, ask the user to write them for you.
 
 changelogs.md
-
 # writing docs
 
 when generating a .md or .mdx file to document things, always add a frontmatter with title and description. also add a prompt field with the exact prompt used to generate the doc. use @ to reference files and urls and provide any context necessary to be able to recreate this file from scratch using a model. if you used urls also reference them. reference all files you had to read to create the doc. use yaml | syntax to add this prompt and never go over the column width of 80
-
 # github
+
 
 you can use the `gh` cli to do operations on github for the current repository. For example: open issues, open PRs, check actions status, read workflow logs, etc.
 
@@ -680,7 +683,6 @@ This will download the source code in ./opensrc. which should be put in .gitigno
 you can control the browser using the playwright mcp tools. these tools let you control the browser to get information or accomplish actions
 
 if i ask you to test something in the browser, know that the website dev server is already running at http://localhost:7664 for website and :7777 for docs-website (but docs-website needs to use the website domain specifically, for example name-hash.localhost:7777)
-
 # zod
 
 when you need to create a complex type that comes from a prisma table, do not create a new schema that tries to recreate the prisma table structure. instead just use `z.any() as ZodType<PrismaTable>)` to get type safety but leave any in the schema. this gets most of the benefits of zod without having to define a new zod schema that can easily go out of sync.
@@ -690,40 +692,17 @@ when you need to create a complex type that comes from a prisma table, do not cr
 you MUST use the built in zod v4 toJSONSchema and not the npm package `zod-to-json-schema` which is outdated and does not support zod v4.
 
 ```ts
-import { toJSONSchema } from 'zod'
+import { toJSONSchema } from "zod";
 
 const mySchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(3).max(100),
   age: z.number().min(0).optional(),
-})
+});
 
 const jsonSchema = toJSONSchema(mySchema, {
-  removeAdditionalStrategy: 'strict',
-})
+  removeAdditionalStrategy: "strict",
+});
 ```
 
 github.md
-
-<!-- opensrc:start -->
-
-## Source Code Reference
-
-Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
-
-See `opensrc/sources.json` for the list of available packages and their versions.
-
-Use this source code when you need to understand how a package works internally, not just its types/interface.
-
-### Fetching Additional Source Code
-
-To fetch source code for a package or repository you need to understand, run:
-
-```bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
-```
-
-<!-- opensrc:end -->

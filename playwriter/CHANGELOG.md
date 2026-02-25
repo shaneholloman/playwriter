@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.0.75
+
+### Improvements
+
+- **Switch minimal cursor to triangular pointer icon**: Updated the `minimal` ghost cursor style to use a stylized triangular SVG pointer (with subtle drop shadow) instead of the circular indicator, while keeping `dot` and `screenstudio` styles available.
+
+## 0.0.74
+
+### Improvements
+
+- **Switch default ghost cursor to a stylized minimal look**: Updated cursor rendering defaults to a cleaner minimal style while preserving `dot` and `screenstudio` options for explicit overrides.
+
+## 0.0.73
+
+### Improvements
+
+- **Simplify recording integration in executor**: Moved ghost-cursor-aware recording wrappers out of `executor.ts` into `screen-recording.ts` via `createRecordingApi(...)`, reducing executor complexity while preserving existing `recording.*` and backward-compatible top-level recording helpers.
+
+## 0.0.72
+
+### Improvements
+
+- **Reduce false "extension disconnected" on relay restarts**: `playwriter session new` now waits longer for extension reconnect and adds a short polling grace window before failing, preventing transient post-restart races from surfacing as hard disconnect errors.
+
+## 0.0.71
+
+### Features
+
+- **Add `recording` and `ghostCursor` namespaces in execute context**: New `recording.start/stop/isRecording/cancel` and `ghostCursor.show/hide` APIs are now exposed for cleaner scripting while keeping `startRecording`, `stopRecording`, `isRecording`, and `cancelRecording` as backward-compatible aliases.
+- **Manual cursor overlay controls**: Cursor overlay can now be shown/hidden explicitly outside recording flows for screenshot and demo generation.
+
+## 0.0.70
+
+### Features
+
+- **Ghost cursor overlay during recording**: Playwriter now auto-enables a smooth in-page ghost cursor when `startRecording()` is called, driven by `page.onMouseAction` callbacks from the Playwright fork so both `page.mouse.*` and `locator.click()` actions are visualized.
+
+### Tests
+
+- **Add ghost-cursor integration coverage**: Extended `on-mouse-action.test.ts` to verify callback-driven cursor animation and teardown in real extension-connected runs.
+
 ## 0.0.69
 
 ### Bug Fixes

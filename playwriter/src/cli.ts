@@ -5,6 +5,7 @@ import path from 'node:path'
 import util from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { cac } from '@xmorse/cac'
+import pc from 'picocolors'
 
 // Prevent Buffers from dumping hex bytes in util.inspect output.
 Buffer.prototype[util.inspect.custom] = function () {
@@ -15,9 +16,10 @@ import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH, parseRelayHost } from './uti
 import {
   ensureRelayServer,
   RELAY_PORT,
-  waitForExtension,
+  waitForConnectedExtensions,
   getExtensionOutdatedWarning,
   getExtensionStatus,
+  type ExtensionStatus,
 } from './relay-client.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -25,15 +27,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const cliRelayEnv = { PLAYWRITER_AUTO_ENABLE: '1' }
 
 const cli = cac('playwriter')
-
-type ExtensionStatus = {
-  extensionId: string
-  stableKey?: string
-  browser: string | null
-  profile: { email: string; id: string } | null
-  activeTargets: number
-  playwriterVersion?: string | null
-}
 
 cli
   .command('', 'Start the MCP server or controls the browser with -e')
@@ -136,8 +129,12 @@ async function executeCode(options: {
   if (!host && !process.env.PLAYWRITER_HOST) {
     const restarted = await ensureRelayServer({ logger: console, env: cliRelayEnv })
     if (restarted) {
-      const connected = await waitForExtension({ logger: console, timeoutMs: 10000 })
-      if (!connected) {
+      const connectedExtensions = await waitForConnectedExtensions({
+        logger: console,
+        timeoutMs: 10000,
+        pollIntervalMs: 250,
+      })
+      if (connectedExtensions.length === 0) {
         console.error('Warning: Extension not connected. Commands may fail.')
       }
     }
@@ -212,15 +209,30 @@ cli
   .option('--host <host>', 'Remote relay server host')
   .option('--browser <stableKey>', 'Stable browser key when multiple browsers are connected')
   .action(async (options: { host?: string; browser?: string }) => {
-    if (!options.host && !process.env.PLAYWRITER_HOST) {
+    const isLocal = !options.host && !process.env.PLAYWRITER_HOST
+
+    let extensions: ExtensionStatus[] = []
+
+    if (isLocal) {
       await ensureRelayServer({ logger: console, env: cliRelayEnv })
-      await waitForExtension({
-        timeoutMs: 3000,
+      extensions = await waitForConnectedExtensions({
+        timeoutMs: 12000,
+        pollIntervalMs: 250,
         logger: console,
       })
+
+      if (extensions.length === 0) {
+        console.log(pc.dim('Waiting briefly for extension to reconnect...'))
+        extensions = await waitForConnectedExtensions({
+          timeoutMs: 10000,
+          pollIntervalMs: 250,
+          logger: console,
+        })
+      }
+    } else {
+      extensions = await fetchExtensionsStatus(options.host)
     }
 
-    const extensions = await fetchExtensionsStatus(options.host)
     if (extensions.length === 0) {
       console.error('No connected browsers detected. Click the Playwriter extension icon.')
       process.exit(1)
