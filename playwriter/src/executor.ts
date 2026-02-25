@@ -1035,18 +1035,25 @@ export class PlaywrightExecutor {
 
       // Track execution timestamps relative to recording start (seconds).
       // Used to identify idle gaps that can be sped up in demo videos.
-      const execStartSec = this.recordingStartedAt !== null
-        ? (Date.now() - this.recordingStartedAt) / 1000
+      // Captured before try so we can record timing even if execution throws.
+      const recordingStartSnapshot = this.recordingStartedAt
+      const execStartSec = recordingStartSnapshot !== null
+        ? (Date.now() - recordingStartSnapshot) / 1000
         : -1
 
-      const result = await Promise.race([
-        vm.runInContext(wrappedCode, vmContext, { timeout, displayErrors: true }),
-        new Promise((_, reject) => setTimeout(() => reject(new CodeExecutionTimeoutError(timeout)), timeout)),
-      ])
-
-      if (this.recordingStartedAt !== null && execStartSec >= 0) {
-        const execEndSec = (Date.now() - this.recordingStartedAt) / 1000
-        this.executionTimestamps.push({ start: execStartSec, end: execEndSec })
+      let result: unknown
+      try {
+        result = await Promise.race([
+          vm.runInContext(wrappedCode, vmContext, { timeout, displayErrors: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new CodeExecutionTimeoutError(timeout)), timeout)),
+        ])
+      } finally {
+        // Record timestamp even on error — the execution still occupied real time
+        // that should not be sped up in the demo video.
+        if (recordingStartSnapshot !== null && execStartSec >= 0 && this.recordingStartedAt !== null) {
+          const execEndSec = (Date.now() - recordingStartSnapshot) / 1000
+          this.executionTimestamps.push({ start: execStartSec, end: execEndSec })
+        }
       }
 
       let responseText = formatConsoleLogs(consoleLogs)

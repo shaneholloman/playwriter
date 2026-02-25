@@ -6,7 +6,7 @@
  * No intermediate files, no multi-pass.
  */
 
-import { exec } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 
 // ---------------------------------------------------------------------------
@@ -67,16 +67,17 @@ export interface VideoInfo {
 
 /** Probe input video for dimensions and frame rate via ffprobe. */
 export async function probeVideo(filePath: string): Promise<VideoInfo> {
-    const command = [
-        'ffprobe',
-        '-v error',
-        '-select_streams v:0',
-        '-show_entries stream=width,height,r_frame_rate',
-        '-of json',
-        `"${filePath}"`,
-    ].join(' ')
+    const stdout = await runCommand({
+        bin: 'ffprobe',
+        args: [
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height,r_frame_rate',
+            '-of', 'json',
+            filePath,
+        ],
+    })
 
-    const stdout = await runCommand({ command })
     const parsed = JSON.parse(stdout)
     const stream = parsed.streams?.[0]
     if (!stream) {
@@ -93,28 +94,48 @@ export async function probeVideo(filePath: string): Promise<VideoInfo> {
     }
 }
 
-/** Run a shell command, optionally abortable. Returns stdout. */
+/**
+ * Run a process with argv (no shell). Returns stdout as string.
+ * Avoids shell injection by never passing through a shell interpreter.
+ */
 function runCommand({
-    command,
+    bin,
+    args,
     signal,
 }: {
-    command: string
+    bin: string
+    args: string[]
     signal?: AbortSignal
 }): Promise<string> {
     return new Promise((resolve, reject) => {
-        const childProcess = exec(command, (error, stdout, stderr) => {
-            if (error) {
-                reject(new Error(`FFmpeg error: ${stderr}`, { cause: error }))
-            } else {
+        const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString()
+        })
+        child.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString()
+        })
+
+        child.on('close', (code) => {
+            if (code === 0) {
                 resolve(stdout)
+            } else {
+                reject(new Error(`FFmpeg error (exit ${code}): ${stderr}`))
             }
+        })
+
+        child.on('error', (err) => {
+            reject(new Error(`Failed to start ${bin}`, { cause: err }))
         })
 
         if (signal) {
             signal.addEventListener(
                 'abort',
                 () => {
-                    childProcess.kill()
+                    child.kill()
                     reject(
                         signal.reason instanceof Error
                             ? signal.reason
@@ -235,12 +256,13 @@ export async function concatenateVideos(
         throw new Error('Missing required parameters')
     }
 
-    const timerId = `concat-${inputFiles.length}-videos-${outputFile.split('/').pop()}`
+    const timerId = `concat-${inputFiles.length}-videos-${path.basename(outputFile)}`
     console.time(timerId)
 
-    const inputArgs = inputFiles.map((file) => {
-        return `-i "${file.path}"`
-    }).join(' ')
+    // Build argv: -i file1 -i file2 ... -filter_complex "..." -map "[v_out]" output
+    const inputArgs = inputFiles.flatMap((file) => {
+        return ['-i', file.path]
+    })
 
     const filterComplexParts: string[] = []
     const videoStreamParts: string[] = []
@@ -266,13 +288,12 @@ export async function concatenateVideos(
     )
 
     const filterComplex = filterComplexParts.join('; ')
-    const command =
-        `ffmpeg ${inputArgs} -filter_complex "${filterComplex}" -map "[v_out]" "${outputFile}"`
+    const args = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v_out]', outputFile]
 
-    console.log('Running FFmpeg command:', command)
+    console.log('Running FFmpeg concat:', args.join(' '))
 
     try {
-        await runCommand({ command, signal })
+        await runCommand({ bin: 'ffmpeg', args, signal })
     } finally {
         console.timeEnd(timerId)
     }
@@ -328,7 +349,7 @@ export async function speedUpSections(
     const height = dims?.height ?? probed!.height
     const frameRate = fps ?? probed!.frameRate
 
-    const timerId = `speedup-${sections.length}-sections-${outputFile.split('/').pop()}`
+    const timerId = `speedup-${sections.length}-sections-${path.basename(outputFile)}`
     console.time(timerId)
 
     const segments = buildSegments(sections)
@@ -352,13 +373,12 @@ export async function speedUpSections(
     )
 
     const filterComplex = filterParts.join('; ')
-    const command =
-        `ffmpeg -i "${inputFile}" -filter_complex "${filterComplex}" -map "[v_out]" "${outputFile}"`
+    const args = ['-i', inputFile, '-filter_complex', filterComplex, '-map', '[v_out]', outputFile]
 
-    console.log('Running FFmpeg command:', command)
+    console.log('Running FFmpeg speedup:', args.join(' '))
 
     try {
-        await runCommand({ command, signal })
+        await runCommand({ bin: 'ffmpeg', args, signal })
     } finally {
         console.timeEnd(timerId)
     }
@@ -422,12 +442,16 @@ export function computeIdleSections({
     }
 
     // Apply buffer: expand each execution range by bufferSeconds on each side,
-    // then merge overlapping ranges into consolidated "active" intervals.
+    // clamp to video bounds, then filter out any ranges that become invalid
+    // (e.g. timestamps that exceed the video duration).
     const buffered = executionTimestamps
         .map((t) => ({
             start: Math.max(0, t.start - bufferSeconds),
             end: Math.min(totalDuration, t.end + bufferSeconds),
         }))
+        .filter((r) => {
+            return Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start
+        })
         .sort((a, b) => {
             return a.start - b.start
         })
