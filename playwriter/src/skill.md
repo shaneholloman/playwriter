@@ -897,6 +897,39 @@ await cancelRecording({ page: state.page })
 
 **Key difference from getDisplayMedia**: This approach uses `chrome.tabCapture` which runs in the extension context, not the page. The recording persists across navigations because the extension holds the `MediaRecorder`, not the page's JavaScript context.
 
+**createDemoVideo** - create a polished demo video from a recording by automatically speeding up idle sections (time between execute() calls) while keeping interactions at normal speed. Useful for creating demo videos of agent workflows without long pauses.
+
+While recording is active, playwriter tracks when each `execute()` call starts and ends. `stopRecording()` returns these timestamps alongside the video file. `createDemoVideo` uses this data to identify idle gaps and speed them up with ffmpeg in a single pass.
+
+A 1-second buffer is preserved around each interaction so viewers see context before and after each action.
+
+Requires `ffmpeg` and `ffprobe` installed on the system.
+
+```js
+// Start recording
+await startRecording({ page: state.page, outputPath: './recording.mp4' })
+```
+
+```js
+// ... multiple execute() calls with browser interactions ...
+// Each call's timing is tracked automatically while recording is active
+```
+
+```js
+// Stop recording — executionTimestamps is included in the result
+const recording = await stopRecording({ page: state.page })
+
+// Create demo video — idle gaps are sped up 4x (default)
+const demoPath = await createDemoVideo({
+  recordingPath: recording.path,
+  durationMs: recording.duration,
+  executionTimestamps: recording.executionTimestamps,
+  speed: 4, // optional, default 4x for idle sections
+  // outputFile: './demo.mp4', // optional, defaults to recording-demo.mp4
+})
+console.log('Demo video:', demoPath)
+```
+
 ## pinned elements
 
 Users can right-click → "Copy Playwriter Element Reference" to store elements in `globalThis.playwriterPinnedElem1` (increments for each pin). The reference is copied to clipboard:

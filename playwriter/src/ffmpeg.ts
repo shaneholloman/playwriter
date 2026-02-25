@@ -1,0 +1,531 @@
+/**
+ * FFmpeg utilities for video concatenation and section-based speed manipulation.
+ *
+ * Both functions use a single ffmpeg filter_complex pass: trim segments from
+ * the input, apply setpts for speed, normalize fps/scale, then concat.
+ * No intermediate files, no multi-pass.
+ */
+
+import { exec } from 'node:child_process'
+import path from 'node:path'
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Seconds of normal-speed buffer kept before and after each execution */
+export const INTERACTION_BUFFER_SECONDS = 1
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface InputFile {
+    path: string
+    start?: number
+    end?: number
+}
+
+export interface ConcatenateOptions {
+    inputFiles: InputFile[]
+    outputFile: string
+    outputDimensions: { width: number; height: number }
+    frameRate: number
+    signal?: AbortSignal
+}
+
+export interface SpeedSection {
+    /** Start time in seconds */
+    start: number
+    /** End time in seconds */
+    end: number
+    /** Speed multiplier, e.g. 2 = 2x faster, 0.5 = 2x slower */
+    speed: number
+}
+
+export interface SpeedUpSectionsOptions {
+    inputFile: string
+    /** Defaults to inputFile with `-fast` suffix before extension */
+    outputFile?: string
+    sections: SpeedSection[]
+    /** Defaults to input video dimensions (probed via ffprobe) */
+    outputDimensions?: { width: number; height: number }
+    /** Defaults to input video frame rate (probed via ffprobe) */
+    frameRate?: number
+    signal?: AbortSignal
+}
+
+export interface VideoInfo {
+    width: number
+    height: number
+    frameRate: number
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Probe input video for dimensions and frame rate via ffprobe. */
+export async function probeVideo(filePath: string): Promise<VideoInfo> {
+    const command = [
+        'ffprobe',
+        '-v error',
+        '-select_streams v:0',
+        '-show_entries stream=width,height,r_frame_rate',
+        '-of json',
+        `"${filePath}"`,
+    ].join(' ')
+
+    const stdout = await runCommand({ command })
+    const parsed = JSON.parse(stdout)
+    const stream = parsed.streams?.[0]
+    if (!stream) {
+        throw new Error(`No video stream found in ${filePath}`)
+    }
+
+    // r_frame_rate is a fraction like "30/1" or "30000/1001"
+    const [num, den] = (stream.r_frame_rate as string).split('/').map(Number)
+
+    return {
+        width: stream.width as number,
+        height: stream.height as number,
+        frameRate: Math.round(num / den),
+    }
+}
+
+/** Run a shell command, optionally abortable. Returns stdout. */
+function runCommand({
+    command,
+    signal,
+}: {
+    command: string
+    signal?: AbortSignal
+}): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const childProcess = exec(command, (error, stdout, stderr) => {
+            if (error) {
+                reject(new Error(`FFmpeg error: ${stderr}`, { cause: error }))
+            } else {
+                resolve(stdout)
+            }
+        })
+
+        if (signal) {
+            signal.addEventListener(
+                'abort',
+                () => {
+                    childProcess.kill()
+                    reject(
+                        signal.reason instanceof Error
+                            ? signal.reason
+                            : new Error('Operation aborted'),
+                    )
+                },
+                { once: true },
+            )
+        }
+    })
+}
+
+/** Build default output path: `/dir/name-fast.ext` */
+function defaultOutputPath(inputFile: string): string {
+    const ext = path.extname(inputFile)
+    const base = path.basename(inputFile, ext)
+    const dir = path.dirname(inputFile)
+    return path.join(dir, `${base}-fast${ext}`)
+}
+
+// ---------------------------------------------------------------------------
+// Internal segment types
+// ---------------------------------------------------------------------------
+
+interface Segment {
+    start: number
+    /** undefined = until end of video */
+    end: number | undefined
+    /** 1 = normal speed */
+    speed: number
+}
+
+/**
+ * Given sorted, non-overlapping SpeedSections, fill gaps with normal-speed
+ * segments so the entire video is covered.
+ */
+function buildSegments(sections: SpeedSection[]): Segment[] {
+    const sorted = [...sections].sort((a, b) => {
+        return a.start - b.start
+    })
+
+    // Validate: no overlaps
+    for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].start < sorted[i - 1].end) {
+            throw new Error(
+                `Sections overlap: [${sorted[i - 1].start}-${sorted[i - 1].end}] and [${sorted[i].start}-${sorted[i].end}]`,
+            )
+        }
+    }
+
+    const segments: Segment[] = []
+    let cursor = 0
+
+    for (const section of sorted) {
+        // Gap before this section → normal speed
+        if (section.start > cursor) {
+            segments.push({ start: cursor, end: section.start, speed: 1 })
+        }
+        // The speed section itself
+        segments.push({
+            start: section.start,
+            end: section.end,
+            speed: section.speed,
+        })
+        cursor = section.end
+    }
+
+    // Trailing normal-speed segment (no end bound → until EOF)
+    segments.push({ start: cursor, end: undefined, speed: 1 })
+
+    return segments
+}
+
+/**
+ * Build the filter string for a single segment.
+ * Returns `[0:v]trim=...,setpts=...,fps=...,scale=...[vN]`
+ */
+function buildSegmentFilter({
+    segment,
+    index,
+    frameRate,
+    width,
+    height,
+}: {
+    segment: Segment
+    index: number
+    frameRate: number
+    width: number
+    height: number
+}): string {
+    const trimParts = [`start=${segment.start}`]
+    if (segment.end !== undefined) {
+        trimParts.push(`end=${segment.end}`)
+    }
+    const trim = `trim=${trimParts.join(':')}`
+
+    // setpts=PTS-STARTPTS resets timestamps after trim.
+    // Dividing by speed makes it faster (speed>1) or slower (speed<1).
+    const setpts =
+        segment.speed === 1
+            ? 'setpts=PTS-STARTPTS'
+            : `setpts=(PTS-STARTPTS)/${segment.speed}`
+
+    return `[0:v]${trim},${setpts},fps=${frameRate},scale=${width}:${height}[v${index}]`
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export async function concatenateVideos(
+    options: ConcatenateOptions,
+): Promise<void> {
+    const { outputDimensions, frameRate, inputFiles, outputFile, signal } =
+        options
+
+    if (!outputDimensions || !frameRate || !inputFiles || !outputFile) {
+        throw new Error('Missing required parameters')
+    }
+
+    const timerId = `concat-${inputFiles.length}-videos-${outputFile.split('/').pop()}`
+    console.time(timerId)
+
+    const inputArgs = inputFiles.map((file) => {
+        return `-i "${file.path}"`
+    }).join(' ')
+
+    const filterComplexParts: string[] = []
+    const videoStreamParts: string[] = []
+
+    inputFiles.forEach((file, index) => {
+        const videoStream = `[${index}:v:0]`
+        let trimmedVideo = videoStream
+
+        if (file.start !== undefined || file.end !== undefined) {
+            const start = file.start ?? 0
+            const end = file.end ? `end=${file.end}` : ''
+            trimmedVideo = `${videoStream}trim=start=${start}:${end},setpts=PTS-STARTPTS`
+        }
+
+        filterComplexParts.push(
+            `${trimmedVideo},fps=${frameRate},scale=${outputDimensions.width}:${outputDimensions.height}[v${index}]`,
+        )
+        videoStreamParts.push(`[v${index}]`)
+    })
+
+    filterComplexParts.push(
+        `${videoStreamParts.join('')}concat=n=${inputFiles.length}:v=1:a=0[v_out]`,
+    )
+
+    const filterComplex = filterComplexParts.join('; ')
+    const command =
+        `ffmpeg ${inputArgs} -filter_complex "${filterComplex}" -map "[v_out]" "${outputFile}"`
+
+    console.log('Running FFmpeg command:', command)
+
+    try {
+        await runCommand({ command, signal })
+    } finally {
+        console.timeEnd(timerId)
+    }
+}
+
+/**
+ * Speed up (or slow down) sections of a video by timestamp ranges.
+ *
+ * Sections not covered by any SpeedSection play at normal speed.
+ * Uses a single ffmpeg filter_complex: trim each segment, apply setpts
+ * speed, normalize fps/scale, then concat — no intermediate files.
+ *
+ * @example
+ * ```ts
+ * await speedUpSections({
+ *   inputFile: 'recording.mp4',
+ *   sections: [
+ *     { start: 10, end: 20, speed: 4 },  // 4x between 10s-20s
+ *     { start: 30, end: 40, speed: 2 },  // 2x between 30s-40s
+ *   ],
+ * })
+ * // → outputs recording-fast.mp4
+ * ```
+ */
+export async function speedUpSections(
+    options: SpeedUpSectionsOptions,
+): Promise<string> {
+    const { inputFile, sections, signal } = options
+
+    if (sections.length === 0) {
+        throw new Error('At least one speed section is required')
+    }
+    for (const s of sections) {
+        if (s.speed <= 0) {
+            throw new Error(`Speed must be > 0, got ${s.speed}`)
+        }
+        if (s.end <= s.start) {
+            throw new Error(
+                `Section end (${s.end}) must be greater than start (${s.start})`,
+            )
+        }
+    }
+
+    const outputFile = options.outputFile ?? defaultOutputPath(inputFile)
+
+    // Probe input for defaults
+    const dims = options.outputDimensions
+    const fps = options.frameRate
+    const needsProbe = !dims || !fps
+    const probed = needsProbe ? await probeVideo(inputFile) : undefined
+
+    const width = dims?.width ?? probed!.width
+    const height = dims?.height ?? probed!.height
+    const frameRate = fps ?? probed!.frameRate
+
+    const timerId = `speedup-${sections.length}-sections-${outputFile.split('/').pop()}`
+    console.time(timerId)
+
+    const segments = buildSegments(sections)
+
+    const filterParts = segments.map((segment, index) => {
+        return buildSegmentFilter({
+            segment,
+            index,
+            frameRate,
+            width,
+            height,
+        })
+    })
+
+    const streamLabels = segments.map((_, i) => {
+        return `[v${i}]`
+    }).join('')
+
+    filterParts.push(
+        `${streamLabels}concat=n=${segments.length}:v=1:a=0[v_out]`,
+    )
+
+    const filterComplex = filterParts.join('; ')
+    const command =
+        `ffmpeg -i "${inputFile}" -filter_complex "${filterComplex}" -map "[v_out]" "${outputFile}"`
+
+    console.log('Running FFmpeg command:', command)
+
+    try {
+        await runCommand({ command, signal })
+    } finally {
+        console.timeEnd(timerId)
+    }
+
+    return outputFile
+}
+
+// ---------------------------------------------------------------------------
+// Idle section computation
+// ---------------------------------------------------------------------------
+
+export interface ExecutionTimestamp {
+    /** Start time in seconds relative to recording start */
+    start: number
+    /** End time in seconds relative to recording start */
+    end: number
+}
+
+/**
+ * Compute which parts of a recording are "idle" (no execute() calls)
+ * and return them as SpeedSections that can be passed to speedUpSections().
+ *
+ * A buffer of INTERACTION_BUFFER_SECONDS is kept around each execution
+ * at normal speed so the viewer sees context before/after each action.
+ *
+ * @example
+ * ```ts
+ * const { executionTimestamps, duration } = await stopRecording()
+ * const idleSections = computeIdleSections({
+ *   executionTimestamps,
+ *   totalDurationMs: duration,
+ * })
+ * await speedUpSections({
+ *   inputFile: recordingPath,
+ *   sections: idleSections,
+ * })
+ * ```
+ */
+export function computeIdleSections({
+    executionTimestamps,
+    totalDurationMs,
+    speed = 4,
+    bufferSeconds = INTERACTION_BUFFER_SECONDS,
+}: {
+    executionTimestamps: ExecutionTimestamp[]
+    /** Total recording duration in milliseconds (from stopRecording result) */
+    totalDurationMs: number
+    /** Speed multiplier for idle sections (default 4) */
+    speed?: number
+    /** Override the default buffer around each execution (seconds) */
+    bufferSeconds?: number
+}): SpeedSection[] {
+    const totalDuration = totalDurationMs / 1000
+
+    if (executionTimestamps.length === 0) {
+        // Entire video is idle
+        if (totalDuration <= 0) {
+            return []
+        }
+        return [{ start: 0, end: totalDuration, speed }]
+    }
+
+    // Apply buffer: expand each execution range by bufferSeconds on each side,
+    // then merge overlapping ranges into consolidated "active" intervals.
+    const buffered = executionTimestamps
+        .map((t) => ({
+            start: Math.max(0, t.start - bufferSeconds),
+            end: Math.min(totalDuration, t.end + bufferSeconds),
+        }))
+        .sort((a, b) => {
+            return a.start - b.start
+        })
+
+    // Merge overlapping/adjacent buffered ranges
+    const merged: Array<{ start: number; end: number }> = []
+    for (const range of buffered) {
+        const last = merged[merged.length - 1]
+        if (last && range.start <= last.end) {
+            last.end = Math.max(last.end, range.end)
+        } else {
+            merged.push({ ...range })
+        }
+    }
+
+    // Gaps between merged active ranges are idle sections to speed up
+    const idle: SpeedSection[] = []
+    let cursor = 0
+
+    for (const active of merged) {
+        if (active.start > cursor) {
+            idle.push({ start: cursor, end: active.start, speed })
+        }
+        cursor = active.end
+    }
+
+    // Trailing idle after last execution
+    if (cursor < totalDuration) {
+        idle.push({ start: cursor, end: totalDuration, speed })
+    }
+
+    return idle
+}
+
+// ---------------------------------------------------------------------------
+// High-level demo video creation
+// ---------------------------------------------------------------------------
+
+export interface CreateDemoVideoOptions {
+    /** Path to the raw recording file */
+    recordingPath: string
+    /** Total recording duration in milliseconds (from stopRecording result) */
+    durationMs: number
+    /** Execution timestamps (from stopRecording result) */
+    executionTimestamps: ExecutionTimestamp[]
+    /** Speed multiplier for idle sections (default 4) */
+    speed?: number
+    /** Output file path (defaults to recordingPath with `-demo` suffix) */
+    outputFile?: string
+    signal?: AbortSignal
+}
+
+/**
+ * Create a demo video from a recording by speeding up idle sections
+ * (gaps between execute() calls) while keeping interactions at normal speed.
+ *
+ * A 1-second buffer (INTERACTION_BUFFER_SECONDS) is preserved around each
+ * interaction so viewers see context before and after each action.
+ *
+ * Requires `ffmpeg` and `ffprobe` installed on the system.
+ *
+ * @returns The output file path
+ */
+export async function createDemoVideo(
+    options: CreateDemoVideoOptions,
+): Promise<string> {
+    const {
+        recordingPath,
+        durationMs,
+        executionTimestamps,
+        speed = 4,
+        signal,
+    } = options
+
+    const outputFile = options.outputFile ?? (() => {
+        const ext = path.extname(recordingPath)
+        const base = path.basename(recordingPath, ext)
+        const dir = path.dirname(recordingPath)
+        return path.join(dir, `${base}-demo${ext}`)
+    })()
+
+    const idleSections = computeIdleSections({
+        executionTimestamps,
+        totalDurationMs: durationMs,
+        speed,
+    })
+
+    if (idleSections.length === 0) {
+        // No idle sections, nothing to speed up — copy as-is
+        const { copyFile } = await import('node:fs/promises')
+        await copyFile(recordingPath, outputFile)
+        return outputFile
+    }
+
+    return speedUpSections({
+        inputFile: recordingPath,
+        outputFile,
+        sections: idleSections,
+        signal,
+    })
+}

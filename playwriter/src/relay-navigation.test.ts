@@ -599,7 +599,30 @@ describe('Relay Navigation Tests', () => {
     expect(stopResult.size).toBeGreaterThan(10000)
     expect(fs.existsSync(outputPath)).toBe(true)
 
+    // Create a sped-up demo video from the recording.
+    // We fake executionTimestamps since this test calls screen-recording
+    // directly (not via executor sandbox which tracks them automatically).
+    const { createDemoVideo } = await import('./ffmpeg.js')
+    const demoPath = await createDemoVideo({
+      recordingPath: outputPath,
+      durationMs: stopResult.duration,
+      executionTimestamps: [
+        // Simulate two interactions with an idle gap between them
+        { start: 0.5, end: 1.5 },
+        { start: 3, end: 4 },
+      ],
+      speed: 4,
+    })
+    expect(fs.existsSync(demoPath)).toBe(true)
+    expect(demoPath).toContain('-demo')
+
+    // Verify the demo video is smaller (idle sections were sped up)
+    const demoSize = fs.statSync(demoPath).size
+    expect(demoSize).toBeGreaterThan(0)
+    console.log(`Recording: ${stopResult.size} bytes, Demo: ${demoSize} bytes`)
+
     await recordingPage.close()
     fs.unlinkSync(outputPath)
+    fs.unlinkSync(demoPath)
   }, 60000)
 })

@@ -34,6 +34,7 @@ export type { SnapshotFormat }
 import { getCleanHTML, type GetCleanHTMLOptions } from './clean-html.js'
 import { getPageMarkdown, type GetPageMarkdownOptions } from './page-markdown.js'
 import { startRecording, stopRecording, isRecording, cancelRecording } from './screen-recording.js'
+import { createDemoVideo } from './ffmpeg.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -231,6 +232,12 @@ export class PlaywrightExecutor {
   private warningEvents: WarningEvent[] = []
   private nextWarningEventId = 0
   private lastDeliveredWarningEventId = 0
+
+  // Recording timestamp tracking: when recording is active, each execute()
+  // call pushes {start, end} (seconds relative to recordingStartedAt).
+  // Returned by stopRecording() so the model can speed up idle sections.
+  private recordingStartedAt: number | null = null
+  private executionTimestamps: Array<{ start: number; end: number }> = []
   private activeWarningScopes = new Set<WarningScope>()
   private pagesWithListeners = new WeakSet<Page>()
   private suppressPageCloseWarnings = false
@@ -987,10 +994,27 @@ export class PlaywrightExecutor {
         formatStylesAsText,
         getReactSource: getReactSourceFn,
         screenshotWithAccessibilityLabels: screenshotWithAccessibilityLabelsFn,
-        startRecording: withRecordingDefaults(startRecording),
-        stopRecording: withRecordingDefaults(stopRecording),
+        startRecording: async (opts?: Parameters<typeof startRecording>[0]) => {
+          const result = await withRecordingDefaults(startRecording)(opts)
+          self.recordingStartedAt = Date.now()
+          self.executionTimestamps = []
+          return result
+        },
+        stopRecording: async (opts?: Parameters<typeof stopRecording>[0]) => {
+          const result = await withRecordingDefaults(stopRecording)(opts)
+          const executionTimestamps = [...self.executionTimestamps]
+          self.recordingStartedAt = null
+          self.executionTimestamps = []
+          return { ...result, executionTimestamps }
+        },
         isRecording: withRecordingDefaults(isRecording),
-        cancelRecording: withRecordingDefaults(cancelRecording),
+        cancelRecording: async (opts?: Parameters<typeof cancelRecording>[0]) => {
+          const result = await withRecordingDefaults(cancelRecording)(opts)
+          self.recordingStartedAt = null
+          self.executionTimestamps = []
+          return result
+        },
+        createDemoVideo,
         resetPlaywright: async () => {
           const { page: newPage, context: newContext } = await self.reset()
           vmContextObj.page = newPage
@@ -1009,10 +1033,21 @@ export class PlaywrightExecutor {
       const wrappedCode = autoReturn ? `(async () => { return await (${code}) })()` : `(async () => { ${code} })()`
       const hasExplicitReturn = autoReturn || /\breturn\b/.test(code)
 
+      // Track execution timestamps relative to recording start (seconds).
+      // Used to identify idle gaps that can be sped up in demo videos.
+      const execStartSec = this.recordingStartedAt !== null
+        ? (Date.now() - this.recordingStartedAt) / 1000
+        : -1
+
       const result = await Promise.race([
         vm.runInContext(wrappedCode, vmContext, { timeout, displayErrors: true }),
         new Promise((_, reject) => setTimeout(() => reject(new CodeExecutionTimeoutError(timeout)), timeout)),
       ])
+
+      if (this.recordingStartedAt !== null && execStartSec >= 0) {
+        const execEndSec = (Date.now() - this.recordingStartedAt) / 1000
+        this.executionTimestamps.push({ start: execStartSec, end: execEndSec })
+      }
 
       let responseText = formatConsoleLogs(consoleLogs)
 
