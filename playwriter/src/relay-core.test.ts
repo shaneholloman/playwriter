@@ -1039,15 +1039,35 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#hidden-btn', { timeout: 5000 });
+          await state.errorTestPage.click('#hidden-btn', { timeout: 100 });
         `,
       },
     })
-    const text = (result as any).content[0].text
-    // Strip stack traces and call logs to only match the descriptive error line
-    const errorLine = text.split('\n').find((l: string) => l.includes('Timeout') || l.includes('not visible') || l.includes('not stable'))
-    expect(errorLine).toMatchInlineSnapshot(`"Error executing code: page.click: Timeout 5000ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks"`)
-    expect((result as any).isError).toBe(true)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "content": [
+          {
+            "text": "
+      Error executing code: page.click: Timeout 100ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
+      Call log:
+      [2m  - waiting for locator('#hidden-btn')[22m
+      [2m    - locator resolved to <button id="hidden-btn">Hidden Button</button>[22m
+      [2m  - attempting click action[22m
+      [2m    2 × waiting for element to be visible, enabled and stable[22m
+      [2m      - element is not visible[22m
+      [2m    - retrying click action[22m
+      [2m    - waiting 20ms[22m
+      [2m    - waiting for element to be visible, enabled and stable[22m
+      [2m    - element is not visible[22m
+      [2m  - retrying click action[22m
+      [2m    - waiting 100ms[22m
+      ",
+            "type": "text",
+          },
+        ],
+        "isError": true,
+      }
+    `)
     // Cleanup
     await client.callTool({ name: 'execute', arguments: { code: js`await state.errorTestPage.close(); delete state.errorTestPage;` } })
   }, 30000)
@@ -1071,14 +1091,41 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#covered-btn', { timeout: 5000 });
+          await state.errorTestPage.click('#covered-btn', { timeout: 100 });
         `,
       },
     })
-    const text = (result as any).content[0].text
-    const errorLine = text.split('\n').find((l: string) => l.includes('Timeout') || l.includes('intercepts'))
-    expect(errorLine).toMatchInlineSnapshot(`"Error executing code: page.click: Timeout 5000ms exceeded. <div id=\"overlay\">Overlay</div> intercepts pointer events"`)
-    expect((result as any).isError).toBe(true)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "content": [
+          {
+            "text": "
+      Error executing code: page.click: Timeout 100ms exceeded. <div id="overlay">Overlay</div> intercepts pointer events
+      Call log:
+      [2m  - waiting for locator('#covered-btn')[22m
+      [2m    - locator resolved to <button id="covered-btn">Covered</button>[22m
+      [2m  - attempting click action[22m
+      [2m    2 × waiting for element to be visible, enabled and stable[22m
+      [2m      - element is visible, enabled and stable[22m
+      [2m      - scrolling into view if needed[22m
+      [2m      - done scrolling[22m
+      [2m      - <div id="overlay">Overlay</div> intercepts pointer events[22m
+      [2m    - retrying click action[22m
+      [2m    - waiting 20ms[22m
+      [2m    - waiting for element to be visible, enabled and stable[22m
+      [2m    - element is visible, enabled and stable[22m
+      [2m    - scrolling into view if needed[22m
+      [2m    - done scrolling[22m
+      [2m    - <div id="overlay">Overlay</div> intercepts pointer events[22m
+      [2m  - retrying click action[22m
+      [2m    - waiting 100ms[22m
+      ",
+            "type": "text",
+          },
+        ],
+        "isError": true,
+      }
+    `)
     await client.callTool({ name: 'execute', arguments: { code: js`await state.errorTestPage.close(); delete state.errorTestPage;` } })
   }, 30000)
 
@@ -1096,14 +1143,35 @@ describe('Relay Core Tests', () => {
       name: 'execute',
       arguments: {
         code: js`
-          await state.errorTestPage.click('#invisible', { timeout: 5000 });
+          await state.errorTestPage.click('#invisible', { timeout: 100 });
         `,
       },
     })
-    const text = (result as any).content[0].text
-    const errorLine = text.split('\n').find((l: string) => l.includes('Timeout') || l.includes('not visible'))
-    expect(errorLine).toMatchInlineSnapshot(`"Error executing code: page.click: Timeout 5000ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks"`)
-    expect((result as any).isError).toBe(true)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "content": [
+          {
+            "text": "
+      Error executing code: page.click: Timeout 100ms exceeded. Element is not visible — it may be hidden by CSS, inside a collapsed <details>, inactive tab, or closed accordion. Try: interact with the page to reveal it first, or use { force: true } to skip visibility checks
+      Call log:
+      [2m  - waiting for locator('#invisible')[22m
+      [2m    - locator resolved to <button id="invisible">Invisible</button>[22m
+      [2m  - attempting click action[22m
+      [2m    2 × waiting for element to be visible, enabled and stable[22m
+      [2m      - element is not visible[22m
+      [2m    - retrying click action[22m
+      [2m    - waiting 20ms[22m
+      [2m    - waiting for element to be visible, enabled and stable[22m
+      [2m    - element is not visible[22m
+      [2m  - retrying click action[22m
+      [2m    - waiting 100ms[22m
+      ",
+            "type": "text",
+          },
+        ],
+        "isError": true,
+      }
+    `)
     await client.callTool({ name: 'execute', arguments: { code: js`await state.errorTestPage.close(); delete state.errorTestPage;` } })
   }, 30000)
 
