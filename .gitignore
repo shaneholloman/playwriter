@@ -28,3 +28,4 @@ playwriter/src/snapshots/
 playwriter/src/__snapshots__/ax-debug/
 gmail-oauth/
 .ck
+dist-release

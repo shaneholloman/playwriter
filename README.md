@@ -13,16 +13,6 @@
 
 Other browser MCPs spawn a fresh Chrome — no logins, no extensions, instantly flagged by bot detectors, double the memory. Playwriter connects to **your running browser** instead. One Chrome extension, full Playwright API, everything you're already logged into.
 
-> **Note:** Playwriter video recording is **100x more efficient than Playwright video recording**, which sends **base64 images for every frame**.
-
-|               | Playwright MCP    | Playwriter                        |
-| ------------- | ----------------- | --------------------------------- |
-| Browser       | Spawns new Chrome | **Uses your Chrome**              |
-| Extensions    | None              | Your existing ones                |
-| Login state   | Fresh             | Already logged in                 |
-| Bot detection | Always detected   | Can bypass (disconnect extension) |
-| Collaboration | Separate window   | Same browser as user              |
-
 ## Installation
 
 1. [**Install Extension**](https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe) from Chrome Web Store
@@ -141,18 +131,28 @@ Color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=
 
 ## Comparison
 
-### vs Playwright CLI
+### vs Playwright MCP
 
-|                | Playwright CLI       | Playwriter                        |
-| -------------- | -------------------- | --------------------------------- |
-| Browser        | Spawns new browser   | **Uses your Chrome**              |
-| Login state    | Fresh                | Already logged in                 |
-| Extensions     | None                 | Your existing ones                |
-| Captchas       | Always blocked       | Bypass (disconnect extension)     |
-| Collaboration  | Separate window      | Same browser as user              |
-| Capabilities   | Limited command set   | Anything Playwright can do        |
-| Raw CDP access | No                   | Yes                               |
-| Video recording| File-based tracing   | Native tab capture (30–60fps)     |
+|               | Playwright MCP    | Playwriter                        |
+| ------------- | ----------------- | --------------------------------- |
+| Browser       | Spawns new Chrome | **Uses your Chrome**              |
+| Extensions    | None              | Your existing ones                |
+| Login state   | Fresh             | Already logged in                 |
+| Bot detection | Always detected   | Can bypass (disconnect extension) |
+| Collaboration | Separate window   | Same browser as user              |
+
+> **Note:** Playwriter video recording is **100x more efficient than Playwright video recording**, which sends **base64 images for every frame**.
+
+|                 | Playwright CLI      | Playwriter                    |
+| --------------- | ------------------- | ----------------------------- |
+| Browser         | Spawns new browser  | **Uses your Chrome**          |
+| Login state     | Fresh               | Already logged in             |
+| Extensions      | None                | Your existing ones            |
+| Captchas        | Always blocked      | Bypass (disconnect extension) |
+| Collaboration   | Separate window     | Same browser as user          |
+| Capabilities    | Limited command set | Anything Playwright can do    |
+| Raw CDP access  | No                  | Yes                           |
+| Video recording | File-based tracing  | Native tab capture (30–60fps) |
 
 ### vs BrowserMCP
 
