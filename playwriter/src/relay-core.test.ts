@@ -312,6 +312,116 @@ describe('Relay Core Tests', () => {
     expect(result.content).toBeDefined()
   }, 30000)
 
+  // Repro test for https://github.com/remorses/playwriter/issues/66.
+  // Current limitation: extension-mode routing does not support root-session
+  // Storage.getCookies in playwriter. MUST use Network.getCookies via page CDP
+  // session instead (see test below), so this repro stays skipped.
+  it.skip('should reproduce page.route failure in MCP execute path (issue #66)', async () => {
+    const server = await createSimpleServer({
+      routes: {
+        '/': '<!doctype html><html><body>route issue repro</body></html>',
+        '/api/data': '{"ok":true}',
+      },
+    })
+
+    try {
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: js`
+            const newPage = await context.newPage();
+            state.issue66Page = newPage;
+            await newPage.goto('${server.baseUrl}', { waitUntil: 'domcontentloaded' });
+
+            let routeFetchError = null;
+            await newPage.route('**/api/**', async (route) => {
+              try {
+                const response = await route.fetch();
+                await route.fulfill({ response });
+              } catch (error) {
+                routeFetchError = error instanceof Error ? error.message : String(error);
+                await route.abort();
+              }
+            });
+
+            await newPage.evaluate(async () => {
+              await fetch('/api/data').catch(() => null);
+            });
+
+            return { routeFetchError };
+          `,
+        },
+      })
+
+      const resultWithContent = result as { content?: unknown }
+      const content = Array.isArray(resultWithContent.content) ? resultWithContent.content : []
+      const firstContent = content[0]
+      const output =
+        typeof firstContent === 'object' && firstContent !== null && 'text' in firstContent
+          ? String((firstContent as { text?: unknown }).text ?? '')
+          : ''
+      expect(output).toContain('routeFetchError')
+      expect(output).toContain('Storage.getCookies')
+      expect(output).toContain('No tab found for method Storage.getCookies')
+    } finally {
+      try {
+        await client.callTool({
+          name: 'execute',
+          arguments: {
+            code: js`
+              if (state.issue66Page && !state.issue66Page.isClosed()) {
+                await state.issue66Page.close();
+              }
+              delete state.issue66Page;
+            `,
+          },
+        })
+      } catch {
+        // Ignore cleanup failure if MCP disconnected due to the repro.
+      }
+      await server.close()
+    }
+  }, 30000)
+
+  it('should read cookies via Network.getCookies through page CDP session', async () => {
+    const browserContext = getBrowserContext()
+    const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+    const server = await createSimpleServer({
+      routes: {
+        '/': '<!doctype html><html><body>cookies test</body></html>',
+      },
+    })
+
+    const page = await browserContext.newPage()
+    try {
+      await page.goto(server.baseUrl, { waitUntil: 'domcontentloaded' })
+      await page.bringToFront()
+
+      await serviceWorker.evaluate(async () => {
+        await globalThis.toggleExtensionForActiveTab()
+      })
+
+      await new Promise((r) => {
+        setTimeout(r, 200)
+      })
+
+      await page.evaluate(() => {
+        document.cookie = 'issue66=ok; path=/'
+      })
+
+      const cdpSession = await getCDPSessionForPage({ page })
+      const cookiesResult = await cdpSession.send('Network.getCookies', { urls: [page.url()] })
+      const cookie = cookiesResult.cookies.find((value) => {
+        return value.name === 'issue66'
+      })
+      expect(cookie?.value).toBe('ok')
+    } finally {
+      await page.close()
+      await server.close()
+    }
+  }, 30000)
+
   it('should show extension as connected for pages created via newPage()', async () => {
     const browserContext = getBrowserContext()
     const serviceWorker = await getExtensionServiceWorker(browserContext)

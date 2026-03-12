@@ -533,6 +533,16 @@ const data = await state.page.evaluate(async (url) => {
 }, 'https://example.com/protected/resource')
 ```
 
+**Read page cookies via CDP** - use `Network.getCookies` on the page CDP session:
+
+```js
+const cdp = await getCDPSession({ page: state.page })
+const { cookies } = await cdp.send('Network.getCookies', { urls: [state.page.url()] })
+console.log(cookies)
+```
+
+MUST use this for page-scoped cookies in extension mode. `Storage.getCookies` is a root-session command and will fail in playwriter.
+
 **Downloading large data** - console output truncates large strings. Trigger a browser download instead:
 
 ```js
