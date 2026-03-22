@@ -264,11 +264,11 @@ describe('Relay Core Tests', () => {
 
     expect(summary).toMatchInlineSnapshot(`
       {
-        "hasBrowserDownloadProgress": false,
-        "hasBrowserDownloadWillBegin": false,
+        "hasBrowserDownloadProgress": true,
+        "hasBrowserDownloadWillBegin": true,
         "hasBrowserSetDownloadBehavior": true,
-        "hasPageDownloadProgress": false,
-        "hasPageDownloadWillBegin": false,
+        "hasPageDownloadProgress": true,
+        "hasPageDownloadWillBegin": true,
         "hasPageSetDownloadBehavior": true,
       }
     `)
@@ -475,11 +475,18 @@ describe('Relay Core Tests', () => {
       name: 'hacker-news',
       url: 'https://news.ycombinator.com/item?id=1',
       expectedContent: ['role=link', 'Hacker News'],
+      waitForCode: js`
+        await state.page.locator('a[href="news"]').first().waitFor({ timeout: 10000 });
+        await state.page.locator('a.hnuser').first().waitFor({ timeout: 10000 });
+      `,
     },
     {
       name: 'shadcn-ui',
       url: 'https://ui.shadcn.com/',
       expectedContent: ['shadcn'],
+      waitForCode: js`
+        await state.page.locator('text=shadcn/ui').first().waitFor({ timeout: 10000 });
+      `,
     },
   ]
 
@@ -502,7 +509,10 @@ describe('Relay Core Tests', () => {
         name: 'execute',
         arguments: {
           code: js`
+              // External pages can expose a partial AX tree right after domcontentloaded,
+              // so wait for stable page-specific content before snapshotting.
               await state.page.goto('${testCase.url}', { waitUntil: 'domcontentloaded' });
+              ${testCase.waitForCode}
               const snap = await snapshot({ page: state.page, showDiffSinceLastCall: false, interactiveOnly: true });
               return snap;
             `,

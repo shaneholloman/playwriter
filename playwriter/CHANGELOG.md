@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.91
+
+1. **Stabilize external accessibility snapshot coverage** — Hacker News and shadcn snapshot regression tests now wait for stable page content before capturing the AX tree, avoiding flaky empty interactive snapshots from live pages.
+2. **Refresh extension download event expectations** — relay-core coverage now matches the current extension-mode behavior where both `Browser.download*` and `Page.download*` events are observed during downloads.
+
 ## 0.0.90
 
 1. **Show session cwd in `playwriter session list`** — the CLI session table now includes the working directory each session was created with, making it easier to tell similar sessions apart.
