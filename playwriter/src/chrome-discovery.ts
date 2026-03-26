@@ -310,7 +310,7 @@ export async function discoverChromeInstances({
 } = {}): Promise<DiscoveredInstance[]> {
   const instances = new Map<number, DiscoveredInstance>()
 
-  // Strategy 1: DevToolsActivePort files
+  // Strategy 1: DevToolsActivePort files (finds browsers on any port)
   const activePortFiles = findDevToolsActivePortFiles({ platform, homeDir })
   for (const { dataDir, parsed } of activePortFiles) {
     const browser = deriveBrowserName(dataDir)
@@ -319,39 +319,49 @@ export async function discoverChromeInstances({
     instances.set(parsed.port, { browser, port: parsed.port, wsUrl, profiles, dataDir })
   }
 
-  // Strategy 2: Port scan 9222-9229
-  const portProbes = Array.from({ length: 8 }, (_, i) => {
-    return i + 9222
-  })
+  // Collect all unique ports to probe: DevToolsActivePort ports + standard range 9222-9229.
+  // Probing verifies liveness AND gives us the authoritative webSocketDebuggerUrl.
+  const portsToProbe = new Set<number>()
+  for (const { parsed } of activePortFiles) {
+    portsToProbe.add(parsed.port)
+  }
+  for (let port = 9222; port <= 9229; port++) {
+    portsToProbe.add(port)
+  }
+
   const probeResults = await Promise.all(
-    portProbes.map(async (port) => {
+    Array.from(portsToProbe).map(async (port) => {
       const result = await probePort(port)
-      return result ? { port, ...result } : null
+      return result ? { port, ...result } : { port, wsUrl: null, browser: null }
     }),
   )
 
   for (const result of probeResults) {
-    if (!result) {
-      continue
-    }
-    if (instances.has(result.port)) {
-      // Already found via DevToolsActivePort — prefer the probed wsUrl
-      // because DevToolsActivePort can be stale (old GUID) while
-      // /json/version always returns the live webSocketDebuggerUrl.
-      const existing = instances.get(result.port)!
-      existing.wsUrl = result.wsUrl
-      if (result.browser !== 'Unknown') {
-        existing.browser = parseBrowserVersion(result.browser)
+    if (result.wsUrl) {
+      // Probe succeeded — instance is live
+      if (instances.has(result.port)) {
+        // Already found via DevToolsActivePort — update with live wsUrl
+        // (file can have stale GUID, probed URL is always current)
+        const existing = instances.get(result.port)!
+        existing.wsUrl = result.wsUrl
+        if (result.browser && result.browser !== 'Unknown') {
+          existing.browser = parseBrowserVersion(result.browser)
+        }
+      } else {
+        // Found only via port scan
+        instances.set(result.port, {
+          browser: parseBrowserVersion(result.browser!),
+          port: result.port,
+          wsUrl: result.wsUrl,
+          profiles: [],
+          dataDir: null,
+        })
       }
-      continue
+    } else if (instances.has(result.port)) {
+      // Probe failed — DevToolsActivePort file exists but nothing is listening.
+      // Remove stale entry so we don't return dead instances.
+      instances.delete(result.port)
     }
-    instances.set(result.port, {
-      browser: parseBrowserVersion(result.browser),
-      port: result.port,
-      wsUrl: result.wsUrl,
-      profiles: [],
-      dataDir: null,
-    })
   }
 
   // For port-scan-only instances, try to find their DevToolsActivePort
@@ -360,7 +370,6 @@ export async function discoverChromeInstances({
     if (instance.dataDir) {
       continue
     }
-    // Try to match by checking all known data dirs for a matching port
     for (const { dataDir, parsed } of activePortFiles) {
       if (parsed.port === port) {
         instance.dataDir = dataDir
