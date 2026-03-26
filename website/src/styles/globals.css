@@ -60,7 +60,7 @@
 
   /* Bleed: code blocks & images extend beyond prose column. */
   --bleed: 44px;
-  --bleed-image: 48px;
+  --bleed-image: 28px;
 
   /* TOC sidebar left offset — shared with tab bar for alignment */
   --toc-left: max(1rem, calc((100vw - 550px) / 2 - 280px));
@@ -448,7 +448,6 @@
     grid-column: 3; /* third subgrid column = parent column 5 (210px) */
     position: sticky;
     top: var(--sticky-top);
-    padding-top: 24px;
     align-self: start;
     max-height: calc(100vh - 100px);
     overflow-y: auto;
