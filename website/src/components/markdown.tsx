@@ -228,23 +228,7 @@ function TocLink({
         {item.prefix}
       </span>
       <span style={{ overflowWrap: 'anywhere', fontFamily: 'var(--font-primary)', flex: 1 }}>{item.label}</span>
-      {chevron && (
-        <span
-          aria-hidden='true'
-          style={{
-            color: defaultPrefixColor,
-            fontSize: '10px',
-            marginLeft: '4px',
-            marginTop: '2px',
-            transition: 'transform 0.2s ease',
-            transform: chevron.expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-            display: 'inline-block',
-            flexShrink: 0,
-          }}
-        >
-          ▸
-        </span>
-      )}
+
     </a>
   )
 }
@@ -515,6 +499,8 @@ export function Bleed({ children }: { children: React.ReactNode }) {
         marginRight: 'calc(-1 * var(--bleed-image))',
         display: 'flex',
         justifyContent: 'center',
+        maxWidth: 'calc(100% + 2 * var(--bleed-image))',
+        overflow: 'hidden',
       }}
     >
       {children}
@@ -742,7 +728,7 @@ export function PixelatedImage({
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: `${width}px`,
+        maxWidth: `min(${width}px, 100%)`,
         aspectRatio: `${width} / ${height}`,
         overflow: 'hidden',
         ...style,
@@ -1294,18 +1280,8 @@ export function EditorialPage({
         }}
       >
         {/* Top row: logo + right links */}
-        <div
-          style={{
-              maxWidth: '1040px',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              height: '44px',
-              paddingTop: '12px',
-          }}
-        >
+        <div className='editorial-header-inner' style={{ paddingTop: '12px' }}>
+
           <a
             href='/'
             className='no-underline'
@@ -1386,17 +1362,7 @@ export function EditorialPage({
             className='editorial-tab-bar'
             style={{ borderBottom: '1px solid var(--page-border)' }}
           >
-            <div
-              style={{
-                maxWidth: '1040px',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                display: 'flex',
-                alignItems: 'stretch',
-                gap: '24px',
-                height: '36px',
-              }}
-            >
+            <div className='editorial-tab-inner'>
               {tabs.map((tab) => {
                 return <TabLink key={tab.href} tab={tab} isActive={tab.href === (activeTab ?? tabs[0].href)} />
               })}
@@ -1405,61 +1371,38 @@ export function EditorialPage({
         )}
       </div>
 
-      {/* 3-column grid centered via max-width + margin auto.
-          Columns: TOC (240px) | gap (60px) | content (550px). */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '210px 50px 520px 50px 210px',
-          maxWidth: '1040px',
-          marginLeft: 'auto',
-          marginRight: 'auto',
-        }}
-      >
-
-      {/* TOC sidebar: sticky within its grid cell */}
-      <div
-        className='hidden lg:block'
-        style={{ gridColumn: '1', paddingTop: '56px' }}
-      >
-        <div
-          style={{
-            position: 'sticky',
-            top: hasTabBar ? '81px' : '0px',
-            paddingTop: '24px',
-          }}
-        >
-          <TableOfContents items={toc} logo={logo} />
+      <div className='editorial-grid'>
+        {/* TOC sidebar: sticky within its grid cell */}
+        <div className='editorial-grid-toc' style={{ paddingTop: '56px' }}>
+          <div
+            style={{
+              position: 'sticky',
+              top: hasTabBar ? '81px' : '0px',
+              paddingTop: '24px',
+            }}
+          >
+            <TableOfContents items={toc} logo={logo} />
+          </div>
         </div>
-      </div>
 
-      {/* Content column */}
-      <div
-        style={{
-          gridColumn: '3',
-          padding: '0 0 6rem',
-          maxWidth: '100%',
-        }}
-      >
-        <div style={{ height: '80px' }} />
-        <article className='editorial-article flex flex-col gap-[20px]'>{children}</article>
-      </div>
-
-      {/* Right sidebar: CTA banner, sticky */}
-      <div
-        className='hidden lg:block'
-        style={{ gridColumn: '5' }}
-      >
-        <div
-          style={{
-            position: 'sticky',
-            top: hasTabBar ? '56px' : '12px',
-            paddingTop: '68px',
-          }}
-        >
-          {sidebar}
+        {/* Content column */}
+        <div className='editorial-grid-content'>
+          <div style={{ height: '80px' }} />
+          <article className='editorial-article flex flex-col gap-[20px]'>{children}</article>
         </div>
-      </div>
+
+        {/* Right sidebar: CTA banner, sticky */}
+        <div className='editorial-grid-sidebar'>
+          <div
+            style={{
+              position: 'sticky',
+              top: hasTabBar ? '56px' : '12px',
+              paddingTop: '68px',
+            }}
+          >
+            {sidebar}
+          </div>
+        </div>
       </div>
     </div>
   )

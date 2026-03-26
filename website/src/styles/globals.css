@@ -304,6 +304,97 @@
   }
 }
 
+/* Editorial grid layout — responsive.
+   Mobile: single centered column with padding.
+   Desktop (lg): 5-column grid with TOC + content + sidebar. */
+.editorial-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 1.25rem;
+  overflow: hidden;
+}
+
+.editorial-grid-toc {
+  display: none;
+}
+
+.editorial-grid-sidebar {
+  display: none;
+}
+
+.editorial-grid-content {
+  grid-column: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 0 6rem;
+}
+
+.editorial-header-inner {
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 1.25rem;
+}
+
+.editorial-tab-inner {
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  height: 36px;
+  padding: 0 1.25rem;
+  overflow-x: auto;
+}
+
+/* Zero out bleed on narrow screens so content doesn't overflow */
+@media (max-width: 1079px) {
+  :root {
+    --bleed: 0px;
+    --bleed-image: 0px;
+  }
+}
+
+@media (min-width: 1080px) {
+  .editorial-grid {
+    grid-template-columns: 210px 50px 520px 50px 210px;
+    max-width: 1040px;
+    padding: 0;
+  }
+
+  .editorial-grid-toc {
+    display: block;
+    grid-column: 1;
+  }
+
+  .editorial-grid-sidebar {
+    display: block;
+    grid-column: 5;
+  }
+
+  .editorial-grid-content {
+    grid-column: 3;
+  }
+
+  .editorial-header-inner {
+    max-width: 1040px;
+    padding: 0;
+  }
+
+  .editorial-tab-inner {
+    max-width: 1040px;
+    padding: 0;
+  }
+}
+
 /* TOC collapsible children — View Transition API animations.
    Each children group has view-transition-name: toc-section-N and
    class toc-children-container with view-transition-class for shared CSS. */

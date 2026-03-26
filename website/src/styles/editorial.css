@@ -85,6 +85,21 @@
 .editorial-article > :nth-child(n + 9) { animation-delay: 0.4s; }
 */
 
+/* Images and their wrappers must never overflow the content column */
+.editorial-article img {
+  max-width: 100% !important;
+  height: auto;
+}
+
+/* Force all children of bleed to respect container width */
+.editorial-article .bleed > * {
+  max-width: 100% !important;
+}
+
+.editorial-article .bleed {
+  overflow: hidden;
+}
+
 /* ========================================================================
    Bleed — code blocks and images extend beyond the prose column so that
    the code text (after line numbers) aligns with the prose left edge.
