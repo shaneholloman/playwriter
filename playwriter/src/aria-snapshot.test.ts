@@ -95,6 +95,7 @@ describe('aria-snapshot', () => {
   const sites = [
     { name: 'hackernews', url: 'https://news.ycombinator.com' },
     { name: 'github', url: 'https://github.com' },
+    { name: 'prosemirror', url: 'https://prosemirror.net/' },
   ]
 
   for (const site of sites) {
@@ -138,6 +139,107 @@ describe('aria-snapshot', () => {
       fs.writeFileSync(path.join(SNAPSHOTS_DIR, `${site.name}-interactive.txt`), interactiveSnapshot)
     }, 30000)
   }
+
+  it('prosemirror editor - contenteditable appears in snapshot and is interactable', async () => {
+    await page.goto('https://prosemirror.net/', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2000)
+
+    const { snapshot: interactiveSnapshot } = await getAriaSnapshot({ page, interactiveOnly: true })
+
+    fs.writeFileSync(path.join(SNAPSHOTS_DIR, 'prosemirror-interactive.txt'), interactiveSnapshot)
+    console.log('\n--- PROSEMIRROR INTERACTIVE SNAPSHOT ---')
+    console.log(interactiveSnapshot)
+
+    // The ProseMirror editor uses a bare <div contenteditable="true"> without role="textbox".
+    // After the contenteditable promotion fix, it should appear as a textbox.
+    expect(interactiveSnapshot).toContain('textbox')
+    expect(interactiveSnapshot).toContain('[contenteditable="true"]')
+
+    // The generated locator should actually work in Playwright
+    const editor = page.locator('[contenteditable="true"]')
+    const editorCount = await editor.count()
+    expect(editorCount).toBe(1)
+
+    // Click on the editor and type content
+    await editor.click()
+    // Select all existing content and replace it
+    await page.keyboard.press('Meta+A')
+    await page.keyboard.type('Hello from playwriter test!')
+
+    const content = await editor.innerText()
+    expect(content).toContain('Hello from playwriter test!')
+
+    // Take full snapshot again and verify the new content is visible
+    const { snapshot: afterSnapshot } = await getAriaSnapshot({ page })
+    expect(afterSnapshot).toContain('Hello from playwriter test')
+  }, 30000)
+
+  it('bare contenteditable without role=textbox shows in snapshot', async () => {
+    // Reproduces the core issue: bare contenteditable divs (like ProseMirror uses)
+    // have no explicit role="textbox", so Chrome's AX tree reports them as "generic".
+    // Our fix promotes them to textbox.
+    const htmlServer = await createHtmlServer({
+      htmlByPath: {
+        '/': `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ContentEditable Test</title></head>
+<body>
+  <h1>Rich Text Editor Test</h1>
+  <div id="editor-with-id" contenteditable="true"
+       style="border: 1px solid #ccc; padding: 8px; min-height: 60px;">
+    <p>Editor with id, no role attribute.</p>
+  </div>
+  <div class="ProseMirror" contenteditable="true"
+       style="border: 1px solid #ccc; padding: 8px; min-height: 60px;">
+    <p>Bare ProseMirror-style editor, no role, no id.</p>
+  </div>
+  <div contenteditable="true" role="textbox" aria-label="Labeled editor"
+       style="border: 1px solid #ccc; padding: 8px; min-height: 60px;">
+    <p>Editor with explicit role=textbox.</p>
+  </div>
+  <input type="text" placeholder="Normal input" />
+</body>
+</html>`,
+      },
+    })
+
+    try {
+      await page.goto(htmlServer.baseUrl, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(500)
+
+      const { snapshot: interactiveSnapshot } = await getAriaSnapshot({ page, interactiveOnly: true })
+      console.log('\n--- CONTENTEDITABLE INTERACTIVE SNAPSHOT ---')
+      console.log(interactiveSnapshot)
+
+      // All three contenteditable divs should appear as textbox
+      const textboxLines = interactiveSnapshot.split('\n').filter((line) => {
+        return line.includes('textbox')
+      })
+      // 3 contenteditable + 1 input = 4 textboxes
+      expect(textboxLines.length).toBeGreaterThanOrEqual(4)
+
+      // The editor with id should use [id="editor-with-id"] as locator
+      expect(interactiveSnapshot).toContain('[id="editor-with-id"]')
+
+      // The bare contenteditable without id/role should use [contenteditable="true"]
+      expect(interactiveSnapshot).toContain('[contenteditable="true"]')
+
+      // Try clicking and typing in the bare contenteditable (no role, no id)
+      const bareEditors = page.locator('[contenteditable="true"]')
+      const bareCount = await bareEditors.count()
+      expect(bareCount).toBeGreaterThanOrEqual(2) // at least the 2 bare ones
+
+      // Click the first bare contenteditable and type
+      await bareEditors.first().click()
+      await page.keyboard.press('Meta+A')
+      await page.keyboard.type('Typed via locator!')
+
+      const content = await bareEditors.first().innerText()
+      expect(content).toContain('Typed via locator!')
+    } finally {
+      await htmlServer.close()
+    }
+  }, 30000)
 
   it('scopes snapshot to cross-origin iframe locator', async () => {
     const iframeServer = await createHtmlServer({

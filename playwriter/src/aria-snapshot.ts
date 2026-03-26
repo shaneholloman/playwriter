@@ -338,13 +338,23 @@ function buildBaseLocator({
   role,
   name,
   stable,
+  isPromotedContentEditable,
 }: {
   role: string
   name: string
   stable: { value: string; attr: string } | null
+  isPromotedContentEditable?: boolean
 }): string {
   if (stable) {
     return buildLocatorFromStable(stable)
+  }
+  // For promoted contenteditable elements (bare <div contenteditable="true"> without
+  // role="textbox"), use CSS attribute selector. Playwright's role=textbox selector
+  // won't match these because Chrome doesn't assign an implicit textbox role to
+  // contenteditable divs. Elements that already had role="textbox" use the normal
+  // role-based locator since Playwright matches those correctly.
+  if (isPromotedContentEditable) {
+    return `[contenteditable="true"]`
   }
   const trimmedName = name.trim()
   if (trimmedName.length > 0) {
@@ -486,6 +496,7 @@ export function filterInteractiveSnapshotTree(options: {
   labelContext: boolean
   refFilter?: (entry: { role: string; name: string }) => boolean
   domByBackendId: Map<Protocol.DOM.BackendNodeId, DomNodeInfo>
+  promotedContentEditableIds?: Set<Protocol.DOM.BackendNodeId>
   createRefForNode: (options: {
     backendNodeId?: Protocol.DOM.BackendNodeId
     role: string
@@ -507,6 +518,7 @@ export function filterInteractiveSnapshotTree(options: {
       labelContext: nextLabelContext,
       refFilter: options.refFilter,
       domByBackendId: options.domByBackendId,
+      promotedContentEditableIds: options.promotedContentEditableIds,
       createRefForNode: options.createRefForNode,
     })
   })
@@ -575,7 +587,8 @@ export function filterInteractiveSnapshotTree(options: {
   if (includeInteractive) {
     const domInfo = options.node.backendNodeId ? options.domByBackendId.get(options.node.backendNodeId) : undefined
     const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
-    baseLocator = buildBaseLocator({ role, name, stable })
+    const isPromoted = options.node.backendNodeId != null && (options.promotedContentEditableIds?.has(options.node.backendNodeId) ?? false)
+    baseLocator = buildBaseLocator({ role, name, stable, isPromotedContentEditable: isPromoted })
     ref = options.createRefForNode({ backendNodeId: options.node.backendNodeId, role, name })
   }
 
@@ -599,6 +612,7 @@ export function filterFullSnapshotTree(options: {
   ancestorNames: string[]
   refFilter?: (entry: { role: string; name: string }) => boolean
   domByBackendId: Map<Protocol.DOM.BackendNodeId, DomNodeInfo>
+  promotedContentEditableIds?: Set<Protocol.DOM.BackendNodeId>
   createRefForNode: (options: {
     backendNodeId?: Protocol.DOM.BackendNodeId
     role: string
@@ -616,6 +630,7 @@ export function filterFullSnapshotTree(options: {
       ancestorNames: nextAncestors,
       refFilter: options.refFilter,
       domByBackendId: options.domByBackendId,
+      promotedContentEditableIds: options.promotedContentEditableIds,
       createRefForNode: options.createRefForNode,
     })
   })
@@ -673,7 +688,8 @@ export function filterFullSnapshotTree(options: {
   if (includeInteractive) {
     const domInfo = options.node.backendNodeId ? options.domByBackendId.get(options.node.backendNodeId) : undefined
     const stable = domInfo ? getStableRefFromAttributes(domInfo.attributes) : null
-    baseLocator = buildBaseLocator({ role, name, stable })
+    const isPromoted = options.node.backendNodeId != null && (options.promotedContentEditableIds?.has(options.node.backendNodeId) ?? false)
+    baseLocator = buildBaseLocator({ role, name, stable, isPromotedContentEditable: isPromoted })
     ref = options.createRefForNode({ backendNodeId: options.node.backendNodeId, role, name })
   }
 
@@ -1017,6 +1033,31 @@ export async function getAriaSnapshot({
       axById.set(node.nodeId, node)
     }
 
+    // Promote contenteditable elements that Chrome's AX tree doesn't classify as
+    // interactive. Rich text editors (ProseMirror, Tiptap, Slate, Lexical, etc.) use
+    // bare <div contenteditable="true"> without role="textbox", so Chrome reports
+    // them as "generic" and they become invisible in the snapshot. We detect these
+    // via the DOM tree and override the AX role to "textbox" so they appear as
+    // interactive elements the AI can target.
+    const promotedContentEditableIds = new Set<Protocol.DOM.BackendNodeId>()
+    for (const [, domInfo] of domByBackendId) {
+      if (domInfo.attributes.get('contenteditable') !== 'true') {
+        continue
+      }
+      const axNode = axNodes.find((n) => {
+        return n.backendDOMNodeId === domInfo.backendNodeId
+      })
+      if (!axNode) {
+        continue
+      }
+      const currentRole = getAxRole(axNode)
+      if (INTERACTIVE_ROLES.has(currentRole)) {
+        continue
+      }
+      axNode.role = { type: 'role', value: 'textbox' }
+      promotedContentEditableIds.add(domInfo.backendNodeId)
+    }
+
     const findRootAxNodeId = (): Protocol.Accessibility.AXNodeId | null => {
       if (scopeRootBackendId) {
         const scoped = axNodes.find((node) => {
@@ -1111,6 +1152,7 @@ export async function getAriaSnapshot({
             labelContext: false,
             refFilter,
             domByBackendId,
+            promotedContentEditableIds,
             createRefForNode,
           }).nodes
         }
@@ -1119,6 +1161,7 @@ export async function getAriaSnapshot({
           ancestorNames: [],
           refFilter,
           domByBackendId,
+          promotedContentEditableIds,
           createRefForNode,
         }).nodes
       })
