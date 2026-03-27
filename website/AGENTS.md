@@ -64,3 +64,40 @@ Use `sips -g pixelWidth -g pixelHeight <file>` to get dimensions on macOS.
 ## No localStorage dark mode toggle
 
 There is no JS-based `.dark` class toggle. Do not add inline scripts to toggle `.dark` on `<html>`. The site follows the OS preference only via `prefers-color-scheme`.
+
+## Editorial layout slots
+
+Use only high-level slot classes for the page layout. Inner wrappers should use
+Tailwind utilities in JSX instead of creating new semantic `*-inner` classes.
+
+```text
+Desktop (lg >= 1080)
+
+slot-page
+┌────────────────────────────────────────────────────────────────────────────┐
+│ slot-navbar                                                                │
+│  ┌──────────────────────────────┬────────────────────────────────────────┐ │
+│  │ slot-logo                    │ header links (Tailwind utilities)      │ │
+│  └──────────────────────────────┴────────────────────────────────────────┘ │
+│ slot-tabbar                                                          tabs  │
+├────────────────────────────────────────────────────────────────────────────┤
+│ slot-sidebar-left   gap   slot-main                       gap  slot-       │
+│ (TOC sticky)              (article + section rows)            sidebar-     │
+│                                                               right        │
+└────────────────────────────────────────────────────────────────────────────┘
+
+Mobile (< lg)
+slot-page -> slot-navbar -> slot-tabbar -> slot-main
+slot-sidebar-left/right hidden or rendered inline when needed.
+```
+
+Allowed layout classes:
+
+- `slot-page`
+- `slot-navbar`
+- `slot-logo`
+- `slot-tabbar`
+- `slot-tab`
+- `slot-sidebar-left`
+- `slot-main`
+- `slot-sidebar-right`

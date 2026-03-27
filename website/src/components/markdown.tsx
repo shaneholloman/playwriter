@@ -1088,9 +1088,8 @@ export type TabItem = {
    ========================================================================= */
 
 /** Aside is a marker component for MDX. On desktop, its children are extracted
- *  by the section grouping logic and rendered in the sidebar column via SectionRow
- *  (which adds .editorial-section-aside). On mobile, SectionRow renders it inline.
- *  The component itself is just a transparent pass-through. */
+ *  by the section grouping logic and rendered in the right sidebar slot.
+ *  On mobile, SectionRow renders it inline. The component itself is a pass-through. */
 export function Aside({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
@@ -1108,9 +1107,13 @@ export function SectionRow({
   aside?: React.ReactNode
 }) {
   return (
-    <div className='editorial-section-row'>
-      <div className='editorial-section-content'>{content}</div>
-      {aside && <div className='editorial-section-aside'>{aside}</div>}
+    <div className='contents lg:grid lg:grid-cols-subgrid lg:col-[3/-1]'>
+      <div className='slot-main flex flex-col gap-5 lg:col-[1] lg:overflow-visible'>{content}</div>
+      {aside && (
+        <div className='flex flex-col gap-3 my-2 p-3 rounded-(--border-radius-md) bg-(--code-bg) text-(length:--type-toc-size) leading-[1.5] text-(color:--text-tree-label) lg:col-[3] lg:sticky lg:top-(--sticky-top) lg:self-start lg:max-h-[calc(100vh-var(--header-height))] lg:overflow-y-auto lg:my-0'>
+          {aside}
+        </div>
+      )}
     </div>
   )
 }
@@ -1202,20 +1205,10 @@ function TabLink({ tab, isActive }: { tab: TabItem; isActive: boolean }) {
     <a
       href={tab.href}
       {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className='no-underline'
+      className='slot-tab no-underline text-(length:--type-toc-size) font-[475] [font-family:var(--font-primary)] lowercase transition-colors duration-150'
       style={{
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        fontSize: 'var(--type-toc-size)',
-        fontWeight: WEIGHT.prose,
-        fontFamily: 'var(--font-primary)',
         color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
         textShadow: isActive ? '-0.2px 0 0 currentColor, 0.2px 0 0 currentColor' : 'none',
-        textDecoration: 'none',
-        textTransform: 'lowercase',
-        transition: 'color 0.15s ease',
-        whiteSpace: 'nowrap',
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
@@ -1303,38 +1296,19 @@ export function EditorialPage({
 
   return (
     <div
-      className='editorial-page'
+      className='slot-page min-h-screen bg-(--bg) text-(color:--text-primary) [font-family:var(--font-primary)] antialiased [text-rendering:optimizeLegibility]'
       style={{
-        background: 'var(--bg)',
-        color: 'var(--text-primary)',
-        fontFamily: 'var(--font-primary)',
         WebkitFontSmoothing: 'antialiased',
-        textRendering: 'optimizeLegibility',
-        minHeight: '100vh',
       }}
     >
       {/* Header + Tab bar: full-width, sticky at top */}
-      <div
-        className='editorial-header'
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          background: 'var(--bg)',
-        }}
-      >
+      <div className='slot-navbar'>
         {/* Top row: logo + right links */}
-        <div className='editorial-header-inner' style={{ paddingTop: 'var(--header-padding-y)', paddingBottom: 'var(--header-padding-y)' }}>
+        <div className='mx-auto flex items-center justify-between px-(--mobile-padding) py-(--header-padding-y) lg:max-w-(--grid-max-width) lg:px-0'>
 
           <a
             href='/'
-            className='no-underline'
-            style={{
-              color: 'var(--text-primary)',
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-            }}
+            className='slot-logo no-underline flex items-center'
           >
             {logo ? (
               <div
@@ -1354,21 +1328,15 @@ export function EditorialPage({
                 }}
               />
             ) : (
-              <span style={{
-                fontSize: '15px',
-                fontWeight: WEIGHT.bold,
-                fontFamily: 'var(--font-code)',
-                textTransform: 'lowercase',
-                letterSpacing: '-0.01em',
-              }}>
+              <span className='text-[15px] font-bold [font-family:var(--font-code)] lowercase tracking-[-0.01em]'>
                 index
               </span>
             )}
           </a>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className='flex items-center gap-4'>
             {/* Icon links */}
           {headerLinks && headerLinks.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className='flex items-center gap-3'>
               {headerLinks.map((link) => {
                 return (
                   <a
@@ -1377,19 +1345,7 @@ export function EditorialPage({
                     target='_blank'
                     rel='noopener noreferrer'
                     aria-label={link.label}
-                    className='no-underline'
-                    style={{
-                      color: 'var(--text-secondary)',
-                      transition: 'color 0.15s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = 'var(--text-primary)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = 'var(--text-secondary)'
-                    }}
+                    className='no-underline flex items-center text-(color:--text-secondary) transition-colors duration-150 hover:text-(color:--text-primary)'
                   >
                     {link.icon}
                   </a>
@@ -1402,11 +1358,8 @@ export function EditorialPage({
 
         {/* Tab row */}
         {hasTabBar && (
-          <div
-            className='editorial-tab-bar'
-            style={{ borderBottom: '1px solid var(--page-border)' }}
-          >
-            <div className='editorial-tab-inner'>
+          <div className='slot-tabbar'>
+            <div className='mx-auto flex h-(--tab-bar-height) max-w-full items-stretch gap-6 overflow-x-auto px-(--mobile-padding) lg:max-w-(--grid-max-width) lg:px-0'>
               {tabs.map((tab) => {
                 return <TabLink key={tab.href} tab={tab} isActive={tab.href === (activeTab ?? tabs[0].href)} />
               })}
@@ -1415,9 +1368,9 @@ export function EditorialPage({
         )}
       </div>
 
-      <div className='editorial-grid'>
+      <div className='grid grid-cols-1 max-w-full mx-auto px-(--mobile-padding) lg:grid-cols-[var(--grid-toc-width)_var(--grid-gap)_var(--grid-content-width)_var(--grid-gap)_var(--grid-sidebar-width)] lg:max-w-(--grid-max-width) lg:px-0'>
         {/* TOC sidebar: sticky within its grid cell */}
-        <div className='editorial-grid-toc' style={{ paddingTop: 'var(--content-top-gap)' }}>
+        <div className='slot-sidebar-left'>
           <div
             style={{
               position: 'sticky',
@@ -1432,9 +1385,8 @@ export function EditorialPage({
           <>
             {/* Section-based layout: each section is a subgrid row with
                 content in column 3 and optional aside in column 5 (sticky). */}
-            {/* Top spacer row — mirrors the 80px spacer from flat layout */}
-            <div className='editorial-section-row'>
-              <div className='editorial-section-content'>
+            <div className='contents lg:grid lg:grid-cols-subgrid lg:col-[3/-1]'>
+              <div className='slot-main flex flex-col gap-5 lg:col-[1] lg:overflow-visible'>
                 <div style={{ height: 'var(--content-top-gap)' }} />
               </div>
             </div>
@@ -1445,12 +1397,12 @@ export function EditorialPage({
         ) : (
           <>
             {/* Flat layout: single article column + optional static sidebar */}
-            <div className='editorial-grid-content'>
+            <div className='slot-main pb-24 lg:col-[3]'>
               <div style={{ height: 'var(--content-top-gap)' }} />
-              <article className='editorial-article flex flex-col gap-[20px]'>{children}</article>
+              <article className='flex flex-col gap-[20px]'>{children}</article>
             </div>
 
-            <div className='editorial-grid-sidebar'>
+            <div className='slot-sidebar-right'>
               <div
                 style={{
                   position: 'sticky',

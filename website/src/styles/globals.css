@@ -346,25 +346,35 @@
   }
 }
 
-/* Editorial grid layout — responsive.
-   Mobile: single centered column with padding.
-   Desktop (lg): 5-column grid with TOC + content + sidebar. */
-.editorial-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  max-width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  padding: 0 var(--mobile-padding);
-  @variant lg {
-    grid-template-columns: var(--grid-toc-width) var(--grid-gap) var(--grid-content-width) var(--grid-gap) var(--grid-sidebar-width);
-    max-width: var(--grid-max-width);
-    padding: 0;
-  }
+/* Layout slots — only important page entities use CSS classes.
+   Inner wrappers use Tailwind utilities directly in JSX. */
+
+.slot-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg);
 }
 
-.editorial-grid-toc {
+.slot-logo {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.slot-tabbar {
+  border-bottom: 1px solid var(--page-border);
+}
+
+.slot-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.slot-sidebar-left {
   display: none;
+  padding-top: var(--content-top-gap);
   @variant lg {
     display: block;
     grid-column: 1;
@@ -374,106 +384,17 @@
   }
 }
 
-.editorial-grid-sidebar {
+.slot-main {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.slot-sidebar-right {
   display: none;
   @variant lg {
     display: block;
     grid-column: 5;
-  }
-}
-
-.editorial-grid-content {
-  grid-column: 1;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 0 0 6rem;
-  @variant lg {
-    grid-column: 3;
-  }
-}
-
-.editorial-header-inner {
-  max-width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--mobile-padding);
-  @variant lg {
-    max-width: var(--grid-max-width);
-    padding: 0;
-  }
-}
-
-.editorial-tab-inner {
-  max-width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  display: flex;
-  align-items: stretch;
-  gap: 24px;
-  height: var(--tab-bar-height);
-  padding: 0 var(--mobile-padding);
-  overflow-x: auto;
-  @variant lg {
-    max-width: var(--grid-max-width);
-    padding: 0;
-  }
-}
-
-/* Section rows — each heading section becomes a subgrid row so that
-   aside content can live in column 5, sticky within its section height.
-   On mobile, asides render inline in the content flow. */
-
-.editorial-section-row {
-  display: contents;
-  @variant lg {
-    /* Section rows span columns 3-5 (content + gap + sidebar), leaving
-       column 1 free for the TOC which sits across all rows. Subgrid
-       inherits the parent track sizes so children map to the correct columns. */
-    display: grid;
-    grid-template-columns: subgrid;
-    grid-column: 3 / -1;
-  }
-}
-
-.editorial-section-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden; /* prevent content blowing out the grid on mobile */
-  @variant lg {
-    grid-column: 1; /* first subgrid column = parent column 3 (520px) */
-    overflow: visible; /* allow bleed (negative margins) on desktop */
-  }
-}
-
-/* Mobile: aside renders inline as a styled callout */
-.editorial-section-aside {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-  margin-bottom: 8px;
-  padding: 12px;
-  border-radius: var(--border-radius-md);
-  background: var(--code-bg);
-  font-size: var(--type-toc-size);
-  line-height: 1.5;
-  color: var(--text-tree-label);
-  @variant lg {
-    grid-column: 3; /* third subgrid column = parent column 5 (210px) */
-    position: sticky;
-    top: var(--sticky-top);
-    align-self: start;
-    max-height: calc(100vh - var(--header-height));
-    overflow-y: auto;
-    margin-top: 0;
-    margin-bottom: 0;
   }
 }
 

@@ -37,14 +37,14 @@
    Selection
    ======================================================================== */
 
-.editorial-page {
+.slot-page {
   font-optical-sizing: auto;
   font-feature-settings:
     'liga' 1,
     'calt' 1;
 }
 
-.editorial-page ::selection {
+.slot-page ::selection {
   background: var(--selection-bg);
 }
 
@@ -86,17 +86,17 @@
 */
 
 /* Images and their wrappers must never overflow the content column */
-.editorial-article img {
+.slot-main img {
   max-width: 100% !important;
   height: auto;
 }
 
 /* Force all children of bleed to respect container width */
-.editorial-article .bleed > * {
+.slot-main .bleed > * {
   max-width: 100% !important;
 }
 
-.editorial-article .bleed {
+.slot-main .bleed {
   overflow: hidden;
 }
 
@@ -154,7 +154,7 @@
    Header fade gradient
    ======================================================================== */
 
-.editorial-page::before {
+.slot-page::before {
   content: '';
   pointer-events: none;
   z-index: 9;
