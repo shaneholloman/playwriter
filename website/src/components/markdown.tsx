@@ -7,7 +7,7 @@
  * --link-accent, --page-border.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-jsx'
 import 'prismjs/components/prism-tsx'
@@ -147,57 +147,65 @@ function prepareTocItems({ items }: { items: TocItem[] }): PreparedTocItem[] {
   })
 }
 
+/** Single useSyncExternalStore that handles both initial hash and scroll-based
+ *  active heading tracking. A ref holds the current value, the IntersectionObserver
+ *  updates it and notifies React via the subscribe callback. Server snapshot
+ *  returns fallbackId to avoid hydration mismatch. */
 function useActiveTocId({ fallbackId }: { fallbackId: string }) {
-  const [activeId, setActiveId] = useState(() => {
-    if (typeof window === 'undefined') {
-      return fallbackId
-    }
-    const hash = window.location.hash.replace(/^#/, '')
-    return hash || fallbackId
-  })
+  const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
+  const activeRef = useRef(hash || fallbackId)
 
-  useEffect(() => {
-    const headings = document.querySelectorAll<HTMLElement>('[data-toc-heading="true"][id]')
-    if (headings.length === 0) {
-      return
-    }
+  const activeId = useSyncExternalStore(
+    (onStoreChange) => {
+      const headings = document.querySelectorAll<HTMLElement>('[data-toc-heading="true"][id]')
+      if (headings.length === 0) {
+        return () => {}
+      }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible: string[] = []
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.target.id) {
-            visible.push(entry.target.id)
-          }
-        })
-
-        if (visible.length > 0) {
-          const sorted = visible.sort((a, b) => {
-            const elA = document.getElementById(a)
-            const elB = document.getElementById(b)
-            if (!elA || !elB) {
-              return 0
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible: string[] = []
+          entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.target.id) {
+              visible.push(entry.target.id)
             }
-            return elA.getBoundingClientRect().top - elB.getBoundingClientRect().top
           })
-          setActiveId(sorted[sorted.length - 1])
-        }
-      },
-      {
-        /* -80px ≈ header-row-height; accounts for sticky header covering top of viewport */
-        rootMargin: '-80px 0px -75% 0px',
-        threshold: 0,
-      },
-    )
 
-    headings.forEach((heading) => {
-      observer.observe(heading)
-    })
+          if (visible.length > 0) {
+            const sorted = visible.sort((a, b) => {
+              const elA = document.getElementById(a)
+              const elB = document.getElementById(b)
+              if (!elA || !elB) {
+                return 0
+              }
+              return elA.getBoundingClientRect().top - elB.getBoundingClientRect().top
+            })
+            activeRef.current = sorted[sorted.length - 1]
+            onStoreChange()
+          }
+        },
+        {
+          /* -80px ≈ header-row-height; accounts for sticky header covering top of viewport */
+          rootMargin: '-80px 0px -75% 0px',
+          threshold: 0,
+        },
+      )
 
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
+      headings.forEach((heading) => {
+        observer.observe(heading)
+      })
+
+      return () => {
+        observer.disconnect()
+      }
+    },
+    () => {
+      return activeRef.current
+    },
+    () => {
+      return fallbackId
+    },
+  )
 
   return activeId
 }
