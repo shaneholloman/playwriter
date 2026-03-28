@@ -992,7 +992,7 @@ describe('Snapshot & Screenshot Tests', () => {
 
     const imageContent = content.find((c) => c.type === 'image')
     expect(imageContent).toBeDefined()
-    expect(imageContent.mimeType).toBe('image/jpeg')
+    expect(imageContent.mimeType).toBe('image/png')
     expect(imageContent.data).toBeDefined()
     expect(imageContent.data.length).toBeGreaterThan(100)
 

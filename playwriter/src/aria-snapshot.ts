@@ -79,7 +79,7 @@ export type AriaSnapshotNode = {
 export interface ScreenshotResult {
   path: string
   base64: string
-  mimeType: 'image/jpeg'
+  mimeType: 'image/png'
   snapshot: string
   labelCount: number
 }
@@ -108,13 +108,15 @@ export interface ResizeImageOptions {
   fit?: 'inside' | 'cover' | 'contain' | 'fill'
   /** JPEG quality 1-100. Default 80 */
   quality?: number
+  /** Output format. Default 'jpeg'. Use 'png' for lossless output (e.g. Kitty Graphics). */
+  format?: 'jpeg' | 'png'
   /** Output file path. Defaults to overwriting the input file (when input is a path) */
   output?: string
 }
 
 export interface ResizeImageResult {
   buffer: Buffer
-  mimeType: 'image/jpeg'
+  mimeType: 'image/png' | 'image/jpeg'
   /** Only set if output path was provided */
   path?: string
 }
@@ -128,7 +130,7 @@ export interface ResizeImageResult {
  *
  * Explicit width/height: resizes to those dimensions using the fit strategy.
  */
-export async function resizeImage(options: ResizeImageOptions): Promise<ResizeImageResult> {
+export async function resizeImageForAgent(options: ResizeImageOptions): Promise<ResizeImageResult> {
   const sharp = await sharpPromise
   if (!sharp) {
     throw new Error('sharp is not installed — install it with: pnpm add sharp')
@@ -163,10 +165,9 @@ export async function resizeImage(options: ResizeImageOptions): Promise<ResizeIm
     }
   })()
 
-  const buffer = await sharp(inputBuffer)
-    .resize(resizeOpts)
-    .jpeg({ quality })
-    .toBuffer()
+  const fmt = options.format ?? 'jpeg'
+  const pipeline = sharp(inputBuffer).resize(resizeOpts)
+  const buffer = await (fmt === 'png' ? pipeline.png() : pipeline.jpeg({ quality })).toBuffer()
 
   // Default: overwrite input file. When input is a Buffer, no file is written
   // unless output is explicitly set.
@@ -184,9 +185,10 @@ export async function resizeImage(options: ResizeImageOptions): Promise<ResizeIm
     fs.writeFileSync(outputPath, buffer)
   }
 
+  const mimeType: 'image/png' | 'image/jpeg' = fmt === 'png' ? 'image/png' : 'image/jpeg'
   return {
     buffer,
-    mimeType: 'image/jpeg',
+    mimeType,
     ...(outputPath ? { path: outputPath } : {}),
   }
 }
@@ -1603,7 +1605,7 @@ export async function screenshotWithAccessibilityLabels({
   // Generate unique filename with timestamp
   const timestamp = Date.now()
   const random = Math.random().toString(36).slice(2, 6)
-  const filename = `playwriter-screenshot-${timestamp}-${random}.jpg`
+  const filename = `playwriter-screenshot-${timestamp}-${random}.png`
 
   // Use ./tmp folder (gitignored) instead of system temp
   const tmpDir = path.join(process.cwd(), 'tmp')
@@ -1625,11 +1627,11 @@ export async function screenshotWithAccessibilityLabels({
   const clipWidth = sharp ? viewport.width : Math.min(viewport.width, LLM_MAX_DIMENSION)
   const clipHeight = sharp ? viewport.height : Math.min(viewport.height, LLM_MAX_DIMENSION)
 
-  // Take viewport screenshot with scale: 'css' to ignore device pixel ratio
+  // Take viewport screenshot as PNG for Kitty Graphics Protocol compatibility.
+  // PNG is lossless and the only format extracted by kitty-graphics-agent (f=100).
   const screenshotStart = Date.now()
   const rawBuffer = await page.screenshot({
-    type: 'jpeg',
-    quality: 80,
+    type: 'png',
     scale: 'css',
     clip: { x: 0, y: 0, width: clipWidth, height: clipHeight },
   })
@@ -1645,7 +1647,7 @@ export async function screenshotWithAccessibilityLabels({
       return rawBuffer
     }
     try {
-      const result = await resizeImage({ input: rawBuffer })
+      const result = await resizeImageForAgent({ input: rawBuffer, format: 'png' })
       return result.buffer
     } catch (err) {
       logger?.error?.('[playwriter] sharp resize failed, using raw buffer:', err)
@@ -1669,7 +1671,7 @@ export async function screenshotWithAccessibilityLabels({
   collector.push({
     path: screenshotPath,
     base64,
-    mimeType: 'image/jpeg',
+    mimeType: 'image/png',
     snapshot,
     labelCount,
   })

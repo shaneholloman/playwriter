@@ -800,7 +800,7 @@ await editor.edit({ url: matches[0].url, oldString: 'DEBUG = false', newString: 
 
 **screenshotWithAccessibilityLabels** - take a screenshot with Vimium-style visual labels overlaid on interactive elements. Shows labels, captures screenshot, then removes labels. The image and accessibility snapshot are automatically included in the response. Can be called multiple times to capture multiple screenshots. Use a timeout of **20 seconds** for complex pages.
 
-This is only for **finding interactive elements** on the page. To share a screenshot with the user or save an image, use `page.screenshot()` + `resizeImage()` instead (see "taking screenshots" section below).
+This is only for **finding interactive elements** on the page. To share a screenshot with the user or save an image, use `page.screenshot()` + `resizeImageForAgent()` instead (see "taking screenshots" section below).
 
 Prefer this for pages with grids, image galleries, maps, or complex visual layouts where spatial position matters. For simple text-heavy pages, `snapshot` with search is faster and uses fewer tokens.
 
@@ -819,7 +819,7 @@ await screenshotWithAccessibilityLabels({ page: state.page })
 
 Labels are color-coded: yellow=links, orange=buttons, coral=inputs, pink=checkboxes, peach=sliders, salmon=menus, amber=tabs.
 
-**resizeImage** - shrink an image in-place so it consumes fewer tokens when read back into context. `await resizeImage({ input: './screenshot.png' })`. Also accepts `width`, `height`, `maxDimension`, `quality`, `output`.
+**resizeImageForAgent** - shrink an image so it consumes fewer tokens when read back into context. The resized image is automatically included in the response (visible to the LLM). `await resizeImageForAgent({ input: './screenshot.png' })`. Also accepts `width`, `height`, `maxDimension`, `quality`, `format`, `output`. Alias: `resizeImage`.
 
 **recording.start / recording.stop** - record the page as a video at native FPS (30-60fps). Uses `chrome.tabCapture` so **recording survives page navigation**. Auto-overlays a ghost cursor that follows mouse actions. If the browser was launched with `playwriter browser start`, the required Chrome flags are already enabled so no manual extension click is needed. Otherwise, click the Playwriter extension icon once on the tab before recording. Auto-resizes viewport to 16:9 (override with `aspectRatio: null`). Auto-stops after 15 min (override with `maxDurationMs`).
 
@@ -888,7 +888,7 @@ await state.page.screenshot({ path: 'shot.png', scale: 'css' })
 If you want to read back the image file into context, resize it first so it consumes fewer tokens:
 
 ```js
-await resizeImage({ input: './shot.png' })
+await resizeImageForAgent({ input: './shot.png' })
 ```
 
 ## page.evaluate

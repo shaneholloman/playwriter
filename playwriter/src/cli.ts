@@ -20,6 +20,7 @@ Buffer.prototype[util.inspect.custom] = function () {
   return `<Buffer ${this.length} bytes>`
 }
 import { killPortProcess } from './kill-port.js'
+import { canEmitKittyGraphics, emitKittyImage } from './kitty-graphics.js'
 import { VERSION, LOG_FILE_PATH, LOG_CDP_FILE_PATH, parseRelayHost } from './utils.js'
 import {
   ensureRelayServer,
@@ -244,7 +245,7 @@ async function executeCode(options: {
     const result = (await response.json()) as {
       text: string
       images: Array<{ data: string; mimeType: string }>
-      screenshots: Array<{ path: string; snapshot: string; labelCount: number }>
+      screenshots: Array<{ path: string; base64: string; snapshot: string; labelCount: number }>
       isError: boolean
     }
 
@@ -257,12 +258,35 @@ async function executeCode(options: {
       }
     }
 
-    // CLI: show screenshot path + snapshot text (no inline image)
+    // Emit images via Kitty Graphics Protocol when AGENT_GRAPHICS=kitty.
+    // Agents with kitty-graphics-agent intercept these escape sequences and pass
+    // the PNG images to the LLM as media parts — no extra tool call needed.
+    const kittyEnabled = canEmitKittyGraphics()
+
+    // Track emitted base64 to avoid duplicates (screenshots appear in both
+    // result.screenshots and result.images from the same screenshotCollector)
+    const emittedImages = new Set<string>()
+
     if (result.screenshots && result.screenshots.length > 0) {
       for (const s of result.screenshots) {
+        if (kittyEnabled && s.base64) {
+          emitKittyImage({ base64: s.base64 })
+          emittedImages.add(s.base64)
+        }
         console.log(`\nScreenshot saved to: ${s.path}`)
         console.log(`Labels shown: ${s.labelCount}\n`)
         console.log(`Accessibility snapshot:\n${s.snapshot}`)
+      }
+    }
+
+    // Emit resized images from resizeImageForAgent() calls that aren't
+    // already emitted as part of labeled screenshots
+    if (kittyEnabled && result.images && result.images.length > 0) {
+      for (const img of result.images) {
+        if (img.data && !emittedImages.has(img.data)) {
+          emitKittyImage({ base64: img.data })
+          emittedImages.add(img.data)
+        }
       }
     }
 

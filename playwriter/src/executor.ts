@@ -26,7 +26,7 @@ import { ScopedFS } from './scoped-fs.js'
 import {
   screenshotWithAccessibilityLabels,
   getAriaSnapshot,
-  resizeImage,
+  resizeImageForAgent,
   type ScreenshotResult,
   type SnapshotFormat,
 } from './aria-snapshot.js'
@@ -195,7 +195,7 @@ const ALLOWED_MODULES = new Set([
 export interface ExecuteScreenshot {
   path: string
   base64: string
-  mimeType: 'image/jpeg'
+  mimeType: 'image/png'
   snapshot: string
   labelCount: number
 }
@@ -1010,6 +1010,15 @@ export class PlaywrightExecutor {
       }
 
       const screenshotCollector: ScreenshotResult[] = []
+      // Separate collector for images produced by resizeImageForAgent() calls.
+      // These get merged into result.images so the CLI can emit them via Kitty Graphics.
+      const resizedImageCollector: Array<{ data: string; mimeType: string }> = []
+
+      const resizeImageForAgentFn: typeof resizeImageForAgent = async (options) => {
+        const result = await resizeImageForAgent(options)
+        resizedImageCollector.push({ data: result.buffer.toString('base64'), mimeType: result.mimeType })
+        return result
+      }
 
       const screenshotWithAccessibilityLabelsFn = async (options: { page: Page; interactiveOnly?: boolean }) => {
         return screenshotWithAccessibilityLabels({
@@ -1109,7 +1118,9 @@ export class PlaywrightExecutor {
         formatStylesAsText,
         getReactSource: getReactSourceFn,
         screenshotWithAccessibilityLabels: screenshotWithAccessibilityLabelsFn,
-        resizeImage,
+        resizeImageForAgent: resizeImageForAgentFn,
+        // Backward-compatible alias for resizeImageForAgent
+        resizeImage: resizeImageForAgentFn,
         ghostCursor: {
           show: showGhostCursor,
           hide: hideGhostCursor,
@@ -1208,7 +1219,10 @@ export class PlaywrightExecutor {
           `\n\n[Truncated to ${MAX_LENGTH} characters. Use search to find specific content]`
       }
 
-      const images = screenshotCollector.map((s) => ({ data: s.base64, mimeType: s.mimeType }))
+      const images = [
+        ...screenshotCollector.map((s) => ({ data: s.base64, mimeType: s.mimeType })),
+        ...resizedImageCollector,
+      ]
       const screenshots: ExecuteScreenshot[] = screenshotCollector.map((s) => ({
         path: s.path,
         base64: s.base64,

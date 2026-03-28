@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.99
+
+1. **Kitty Graphics Protocol support in CLI** — when `AGENT_GRAPHICS=kitty` is set, the CLI now emits screenshots and resized images as Kitty Graphics Protocol escape sequences to stdout. Agents with `kitty-graphics-agent` (or compatible parsers) automatically extract the PNG images and pass them to the LLM as media parts — no extra tool call or file reading needed.
+2. **Screenshots now use PNG format** — `screenshotWithAccessibilityLabels()` now captures and returns PNG instead of JPEG. PNG is lossless and is the only format supported for extraction by the Kitty Graphics Protocol (`f=100`). The `resizeImage()` function now accepts a `format` option (`'jpeg' | 'png'`).
+3. **`resizeImageForAgent`** — renamed from `resizeImage`. Resized images are now automatically collected and included in the response (emitted via Kitty Graphics in CLI, included as image parts in MCP). The old `resizeImage` name still works as a backward-compatible alias.
+
 ## 0.0.98
 
 1. **Direct CDP connection mode** — new `--direct` flag on `session new` connects to Chrome's built-in debugging WebSocket without needing the Playwriter extension. Works with any Chromium-based browser (Chrome, Brave, Ghost Browser, Arc, Edge, etc.) that has debugging enabled via `chrome://inspect/#remote-debugging` or `--remote-debugging-port`. Auto-discovers instances via DevToolsActivePort files and port scanning (9222-9229). Recording is unavailable in this mode.
