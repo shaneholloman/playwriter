@@ -26,5 +26,15 @@
   "license": "",
   "dependencies": {
     "mcp-extension": "workspace:^"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "bufferutil",
+      "electron"
+    ]
   }
 }
