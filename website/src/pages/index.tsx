@@ -1,7 +1,7 @@
 'use client'
 /*
  * Playwriter editorial page — rendered from MDX via safe-mdx.
- * Content lives in website/src/content/index.md.
+ * Content lives in website/src/content/index.mdx.
  * Components imported from website/src/components/markdown.tsx.
  *
  * Section-based rendering: the mdast tree is split at ## headings into
@@ -10,7 +10,7 @@
  * (sticky). On mobile, asides render inline in normal flow.
  */
 
-import React, { type ReactNode } from 'react'
+import React, { type ReactNode, Fragment } from 'react'
 import type { Root, Heading, PhrasingContent, RootContent } from 'mdast'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
@@ -18,6 +18,7 @@ import type { MyRootContent } from 'safe-mdx'
 import {
   EditorialPage,
   Aside,
+  Hero,
   P,
   A,
   Code,
@@ -36,7 +37,7 @@ import {
   type HeadingLevel,
   type EditorialSection,
 } from '../components/markdown.js'
-import mdxContent from '../content/index.md?raw'
+import mdxContent from '../content/index.mdx?raw'
 
 const tabItems = [
   { label: 'Intro', href: '/' },
@@ -87,11 +88,11 @@ function generateToc(mdast: Root): TocItem[] {
 }
 
 function isAsideNode(node: RootContent): boolean {
-  return (
-    node.type === 'mdxJsxFlowElement' &&
-    'name' in node &&
-    (node as { name?: string }).name === 'Aside'
-  )
+  return node.type === 'mdxJsxFlowElement' && 'name' in node && (node as { name?: string }).name === 'Aside'
+}
+
+function isHeroNode(node: RootContent): boolean {
+  return node.type === 'mdxJsxFlowElement' && 'name' in node && (node as { name?: string }).name === 'Hero'
 }
 
 type MdastSection = {
@@ -131,8 +132,17 @@ function groupBySections(root: Root): MdastSection[] {
 }
 
 const mdast = mdxParse(mdxContent)
-const tocItems = generateToc(mdast as Root)
-const mdastSections = groupBySections(mdast as Root)
+
+/* Extract <Hero> nodes from the mdast before TOC/section processing.
+   Hero nodes are rendered above the 3-column grid in EditorialPage. */
+const heroNodes = (mdast as Root).children.filter(isHeroNode)
+const contentChildren = (mdast as Root).children.filter((node) => {
+  return !isHeroNode(node)
+})
+const contentMdast: Root = { type: 'root', children: contentChildren }
+
+const tocItems = generateToc(contentMdast)
+const mdastSections = groupBySections(contentMdast)
 
 const mdxComponents = {
   p: P,
@@ -146,6 +156,7 @@ const mdxComponents = {
   PixelatedImage,
   Bleed,
   Aside,
+  Hero,
 }
 
 function renderNode(node: MyRootContent, transform: (node: MyRootContent) => ReactNode): ReactNode | undefined {
@@ -159,7 +170,7 @@ function renderNode(node: MyRootContent, transform: (node: MyRootContent) => Rea
     return (
       <SectionHeading key={id} id={id} level={level}>
         {heading.children.map((child, i) => {
-          return <React.Fragment key={i}>{transform(child as MyRootContent)}</React.Fragment>
+          return <Fragment key={i}>{transform(child as MyRootContent)}</Fragment>
         })}
       </SectionHeading>
     )
@@ -171,11 +182,7 @@ function renderNode(node: MyRootContent, transform: (node: MyRootContent) => Rea
     const lang = codeNode.lang || 'bash'
     const isDiagram = lang === 'diagram'
     return (
-      <CodeBlock
-        lang={lang}
-        lineHeight={isDiagram ? '1.3' : '1.85'}
-        showLineNumbers={!isDiagram}
-      >
+      <CodeBlock lang={lang} lineHeight={isDiagram ? '1.3' : '1.85'} showLineNumbers={!isDiagram}>
         {codeNode.value}
       </CodeBlock>
     )
@@ -200,14 +207,14 @@ function RenderNodes({ nodes }: { nodes: RootContent[] }) {
 
 export function IndexPage() {
   const sections: EditorialSection[] = mdastSections.map((section) => {
-    const aside = section.asideNodes.length > 0
-      ? <RenderNodes nodes={section.asideNodes} />
-      : undefined
+    const aside = section.asideNodes.length > 0 ? <RenderNodes nodes={section.asideNodes} /> : undefined
     return {
       content: <RenderNodes nodes={section.contentNodes} />,
       aside,
     }
   })
+
+  const heroContent = heroNodes.length > 0 ? <RenderNodes nodes={heroNodes} /> : undefined
 
   return (
     <EditorialPage
@@ -216,6 +223,7 @@ export function IndexPage() {
       tabs={tabItems}
       activeTab='/'
       sections={sections}
+      hero={heroContent}
     />
   )
 }

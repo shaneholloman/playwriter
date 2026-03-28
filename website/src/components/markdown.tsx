@@ -19,7 +19,7 @@ import 'prismjs/components/prism-bash'
 Prism.languages.diagram = {
   'box-drawing': /[┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬╭╮╯╰┊┈╌┄╶╴╵╷]+/,
   'line-char': /[-_|<>]+/,
-  'label': /[^\s┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬╭╮╯╰┊┈╌┄╶╴╵╷\-_|<>]+/,
+  label: /[^\s┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬╭╮╯╰┊┈╌┄╶╴╵╷\-_|<>]+/,
 }
 
 /* =========================================================================
@@ -129,14 +129,15 @@ function prepareTocItems({ items }: { items: TocItem[] }): PreparedTocItem[] {
     const isLast = !hasNextTocSibling({ items, index, level })
 
     // Root items (level 1) get no tree prefix, only nested items do
-    const prefix = level === 1
-      ? ''
-      : `${ancestorContinuations
-          .slice(1, Math.max(level - 1, 0))
-          .map((shouldContinue) => {
-            return shouldContinue ? '│  ' : '   '
-          })
-          .join('')}${isLast ? '└─ ' : '├─ '}`
+    const prefix =
+      level === 1
+        ? ''
+        : `${ancestorContinuations
+            .slice(1, Math.max(level - 1, 0))
+            .map((shouldContinue) => {
+              return shouldContinue ? '│  ' : '   '
+            })
+            .join('')}${isLast ? '└─ ' : '├─ '}`
 
     ancestorContinuations[level - 1] = !isLast
 
@@ -153,7 +154,13 @@ function prepareTocItems({ items }: { items: TocItem[] }): PreparedTocItem[] {
  *  updates it and notifies React via the subscribe callback. Server snapshot
  *  returns fallbackId to avoid hydration mismatch. Hash is read inside subscribe
  *  (not during render) to keep render pure. All callbacks are stable via useCallback. */
-function useActiveTocId({ fallbackId, scrollLockRef }: { fallbackId: string; scrollLockRef: React.RefObject<boolean> }) {
+function useActiveTocId({
+  fallbackId,
+  scrollLockRef,
+}: {
+  fallbackId: string
+  scrollLockRef: React.RefObject<boolean>
+}) {
   const activeRef = useRef(fallbackId)
 
   const subscribe = useCallback((onStoreChange: () => void) => {
@@ -252,7 +259,11 @@ function TocLink({
   linkRef?: React.Ref<HTMLAnchorElement>
 }) {
   const effectiveActive = isActive && !dimmed
-  const defaultColor = effectiveActive ? 'var(--text-primary)' : dimmed ? 'var(--text-tertiary)' : 'var(--text-tree-label)'
+  const defaultColor = effectiveActive
+    ? 'var(--text-primary)'
+    : dimmed
+      ? 'var(--text-tertiary)'
+      : 'var(--text-tree-label)'
   const defaultPrefixColor = effectiveActive ? 'var(--text-secondary)' : 'var(--text-tertiary)'
   const bg = isHighlighted ? 'var(--code-bg)' : effectiveActive ? 'var(--code-bg)' : 'transparent'
   return (
@@ -288,14 +299,10 @@ function TocLink({
         e.currentTarget.style.background = bg
       }}
     >
-      <span
-        aria-hidden='true'
-        style={{ color: defaultPrefixColor, whiteSpace: 'pre', fontFamily: 'var(--font-code)' }}
-      >
+      <span aria-hidden='true' style={{ color: defaultPrefixColor, whiteSpace: 'pre', fontFamily: 'var(--font-code)' }}>
         {item.prefix}
       </span>
       <span style={{ overflowWrap: 'anywhere', fontFamily: 'var(--font-primary)', flex: 1 }}>{item.label}</span>
-
     </a>
   )
 }
@@ -384,17 +391,20 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
     focusableHrefs: null,
   })
 
-  const handleQueryChange = useCallback((value: string) => {
-    setQuery(value)
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current)
-    }
-    debounceRef.current = setTimeout(() => {
-      const state = searchToc({ db, query: value, entries })
-      setSearchState(state)
-      setHighlightedIndex(0)
-    }, 80)
-  }, [db, entries])
+  const handleQueryChange = useCallback(
+    (value: string) => {
+      setQuery(value)
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+      debounceRef.current = setTimeout(() => {
+        const state = searchToc({ db, query: value, entries })
+        setSearchState(state)
+        setHighlightedIndex(0)
+      }, 80)
+    },
+    [db, entries],
+  )
 
   // Scroll highlighted item into view (only when search is active)
   useEffect(() => {
@@ -417,48 +427,69 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
       }
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('keydown', onKeyDown) }
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [])
 
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      handleQueryChange('')
-      searchInputRef.current?.blur()
-      return
-    }
-    const focusable = searchState.focusableHrefs
-    if (!focusable || focusable.length === 0) {
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlightedIndex((prev) => { return Math.min(prev + 1, focusable.length - 1) })
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlightedIndex((prev) => { return Math.max(prev - 1, 0) })
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const href = focusable[highlightedIndex]
-      if (href) {
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
         handleQueryChange('')
         searchInputRef.current?.blur()
-        window.location.hash = href
+        return
       }
-    }
-  }, [searchState.focusableHrefs, highlightedIndex, handleQueryChange])
+      const focusable = searchState.focusableHrefs
+      if (!focusable || focusable.length === 0) {
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setHighlightedIndex((prev) => {
+          return Math.min(prev + 1, focusable.length - 1)
+        })
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setHighlightedIndex((prev) => {
+          return Math.max(prev - 1, 0)
+        })
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const href = focusable[highlightedIndex]
+        if (href) {
+          handleQueryChange('')
+          searchInputRef.current?.blur()
+          window.location.hash = href
+        }
+      }
+    },
+    [searchState.focusableHrefs, highlightedIndex, handleQueryChange],
+  )
 
   const isSearchActive = searchState.matchedHrefs !== null
 
   return (
-    <aside style={{ width: 'fit-content', maxWidth: 'var(--grid-toc-width)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <aside
+      style={{
+        width: 'fit-content',
+        maxWidth: 'var(--grid-toc-width)',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
       {/* Search input with F hotkey badge — stays pinned at top */}
-      <div style={{ paddingBottom: '12px', display: 'flex', alignItems: 'center', position: 'relative', flexShrink: 0 }}>
+      <div
+        style={{ paddingBottom: '12px', display: 'flex', alignItems: 'center', position: 'relative', flexShrink: 0 }}
+      >
         <input
           ref={searchInputRef}
           type='text'
           value={query}
-          onChange={(e) => { handleQueryChange(e.target.value) }}
+          onChange={(e) => {
+            handleQueryChange(e.target.value)
+          }}
           onKeyDown={handleSearchKeyDown}
           placeholder='search...'
           style={{
@@ -511,15 +542,22 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
 
       <nav aria-label='Table of contents' style={{ overflowY: 'auto', minHeight: 0, paddingRight: '4px' }}>
         {groups.map((group, groupIndex) => {
-          const isExpanded = expandedSections.has(group.parent.href)
-            || (isSearchActive && Boolean(searchState.expandOverride?.has(group.parent.href)))
+          const isExpanded =
+            expandedSections.has(group.parent.href) ||
+            (isSearchActive && Boolean(searchState.expandOverride?.has(group.parent.href)))
           const hasChildren = group.children.length > 0
           const parentDimmed = isSearchActive && searchState.dimmedHrefs?.has(group.parent.href)
           const parentHighlightedHref = isSearchActive ? searchState.focusableHrefs?.[highlightedIndex] : undefined
           return (
             <div key={group.parent.href}>
               <div
-                onClick={hasChildren ? () => { toggleSection(group.parent.href) } : undefined}
+                onClick={
+                  hasChildren
+                    ? () => {
+                        toggleSection(group.parent.href)
+                      }
+                    : undefined
+                }
                 style={{ cursor: hasChildren ? 'pointer' : undefined }}
               >
                 <TocLink
@@ -620,7 +658,8 @@ export function SectionHeading({
   level?: HeadingLevel
   children: React.ReactNode
 }) {
-  const Tag = headingTagByLevel[level]
+  level ||= 1
+  const Tag = headingTagByLevel[level] || 'h4'
 
   return (
     <Tag
@@ -822,10 +861,10 @@ export function CodeBlock({
           <div
             className='flex'
             style={{
-            padding: '12px 8px 8px',
-            fontFamily: 'var(--font-code)',
-            fontSize: 'var(--type-code-size)',
-            fontWeight: WEIGHT.regular,
+              padding: '12px 8px 8px',
+              fontFamily: 'var(--font-code)',
+              fontSize: 'var(--type-code-size)',
+              fontWeight: WEIGHT.regular,
               lineHeight,
               letterSpacing: 'normal',
               color: 'var(--text-primary)',
@@ -969,7 +1008,7 @@ export function PixelatedImage({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          opacity: (!placeholder || loaded) ? 1 : 0,
+          opacity: !placeholder || loaded ? 1 : 0,
           transition: 'opacity 0.4s ease',
           zIndex: 1,
         }}
@@ -1294,17 +1333,22 @@ export function Aside({ children }: { children: React.ReactNode }) {
 }
 
 /* =========================================================================
+   Hero — MDX component for page-level hero content (logo, heading, etc.).
+   Extracted at parse time (like <Aside>) and rendered above the 3-column
+   grid, aligned with the center content column. Shifts sidebars and main
+   content below it. Accepts arbitrary props from MDX for future extensibility.
+   ========================================================================= */
+
+export function Hero({ children, ...props }: { children: React.ReactNode } & React.ComponentPropsWithoutRef<'div'>) {
+  return <div {...props}>{children}</div>
+}
+
+/* =========================================================================
    SectionRow — renders one content section as a grid row.
    Content goes in column 3, aside in column 5 (sticky).
    ========================================================================= */
 
-export function SectionRow({
-  content,
-  aside,
-}: {
-  content: React.ReactNode
-  aside?: React.ReactNode
-}) {
+export function SectionRow({ content, aside }: { content: React.ReactNode; aside?: React.ReactNode }) {
   return (
     <div className='contents lg:grid lg:grid-cols-subgrid lg:col-[2/-1]'>
       <div className='slot-main flex flex-col gap-5 lg:col-[1] lg:overflow-visible'>{content}</div>
@@ -1480,6 +1524,7 @@ export function EditorialPage({
   headerLinks,
   children,
   sections,
+  hero,
 }: {
   toc: TocItem[]
   logo?: string
@@ -1490,12 +1535,14 @@ export function EditorialPage({
   children?: React.ReactNode
   /** When provided, renders section rows with aside support instead of flat children */
   sections?: EditorialSection[]
+  /** Page-level hero content rendered above the 3-column grid, aligned with center column. */
+  hero?: React.ReactNode
 }) {
   const hasTabBar = tabs && tabs.length > 0
 
   return (
     <div
-      className='slot-page min-h-screen bg-(--bg) text-(color:--text-primary) [font-family:var(--font-primary)] antialiased [text-rendering:optimizeLegibility]'
+      className='slot-page flex flex-col gap-(--layout-gap) min-h-screen bg-(--bg) text-(color:--text-primary) [font-family:var(--font-primary)] antialiased [text-rendering:optimizeLegibility]'
       style={{
         WebkitFontSmoothing: 'antialiased',
       }}
@@ -1504,11 +1551,7 @@ export function EditorialPage({
       <div className='slot-navbar'>
         {/* Top row: logo + right links */}
         <div className='mx-auto flex items-center justify-between px-(--mobile-padding) py-(--header-padding-y) lg:max-w-(--grid-max-width) lg:px-0'>
-
-          <a
-            href='/'
-            className='slot-logo no-underline flex items-center'
-          >
+          <a href='/' className='slot-logo no-underline flex items-center'>
             {logo ? (
               <div
                 role='img'
@@ -1534,24 +1577,24 @@ export function EditorialPage({
           </a>
           <div className='flex items-center gap-4'>
             {/* Icon links */}
-          {headerLinks && headerLinks.length > 0 && (
-            <div className='flex items-center gap-3'>
-              {headerLinks.map((link) => {
-                return (
-                  <a
-                    key={link.href}
-                    href={link.href}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    aria-label={link.label}
-                    className='no-underline flex items-center text-(color:--text-secondary) transition-colors duration-150 hover:text-(color:--text-primary)'
-                  >
-                    {link.icon}
-                  </a>
-                )
-              })}
-            </div>
-          )}
+            {headerLinks && headerLinks.length > 0 && (
+              <div className='flex items-center gap-3'>
+                {headerLinks.map((link) => {
+                  return (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      aria-label={link.label}
+                      className='no-underline flex items-center text-(color:--text-secondary) transition-colors duration-150 hover:text-(color:--text-primary)'
+                    >
+                      {link.icon}
+                    </a>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1566,6 +1609,14 @@ export function EditorialPage({
           </div>
         )}
       </div>
+
+      {/* Hero: rendered above the 3-column grid, using the same column widths
+          so hero content aligns with the center content column (col 2). */}
+      {hero && (
+        <div className='mx-auto max-w-full px-(--mobile-padding) lg:grid lg:grid-cols-[var(--grid-toc-width)_var(--grid-content-width)_var(--grid-sidebar-width)] lg:gap-x-(--grid-gap) lg:max-w-(--grid-max-width) lg:px-0'>
+          <div className='lg:col-start-2'>{hero}</div>
+        </div>
+      )}
 
       <div className='grid grid-cols-1 max-w-full mx-auto px-(--mobile-padding) lg:grid-cols-[var(--grid-toc-width)_var(--grid-content-width)_var(--grid-sidebar-width)] lg:gap-x-(--grid-gap) lg:max-w-(--grid-max-width) lg:px-0'>
         {/* TOC sidebar: sticky within its grid cell */}
@@ -1588,9 +1639,7 @@ export function EditorialPage({
             {/* Section-based layout: each section is a subgrid row with
                 content in column 3 and optional aside in column 5 (sticky). */}
             <div className='contents lg:grid lg:grid-cols-subgrid lg:col-[2/-1]'>
-              <div className='slot-main flex flex-col gap-5 lg:col-[1] lg:overflow-visible'>
-                <div style={{ height: 'var(--content-top-gap)' }} />
-              </div>
+              <div className='slot-main flex flex-col gap-5 lg:col-[1] lg:overflow-visible'></div>
             </div>
             {sections.map((section, i) => {
               return <SectionRow key={i} content={section.content} aside={section.aside} />
@@ -1600,7 +1649,6 @@ export function EditorialPage({
           <>
             {/* Flat layout: single article column + optional static sidebar */}
             <div className='slot-main pb-24 lg:col-[2]'>
-              <div style={{ height: 'var(--content-top-gap)' }} />
               <article className='flex flex-col gap-[20px]'>{children}</article>
             </div>
 
