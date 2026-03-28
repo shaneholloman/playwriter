@@ -11,7 +11,7 @@
  */
 
 import React, { type ReactNode, Fragment } from 'react'
-import type { Root, Heading, PhrasingContent, RootContent } from 'mdast'
+import type { Root, Heading, RootContent } from 'mdast'
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
 import type { MyRootContent } from 'safe-mdx'
@@ -31,12 +31,13 @@ import {
   List,
   OL,
   Li,
-  type TocItem,
+  flattenTocTree,
   type TabItem,
   type HeaderLink,
   type HeadingLevel,
   type EditorialSection,
 } from '../components/markdown.js'
+import { slugify, extractText, generateTocTree } from '../components/toc-tree.js'
 import mdxContent from '../content/index.mdx?raw'
 
 const tabItems = [
@@ -45,47 +46,7 @@ const tabItems = [
   { label: 'Changelog', href: 'https://github.com/remorses/playwriter/releases' },
 ] satisfies TabItem[]
 
-/** Slugify heading text for anchor IDs */
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .trim()
-}
-
-/** Extract plain text from mdast phrasing content */
-function extractText(children: PhrasingContent[]): string {
-  return children
-    .map((child) => {
-      if (child.type === 'text') {
-        return child.value
-      }
-      if ('children' in child) {
-        return extractText(child.children as PhrasingContent[])
-      }
-      return ''
-    })
-    .join('')
-}
-
-/** Generate TOC items from mdast headings */
-function generateToc(mdast: Root): TocItem[] {
-  return mdast.children
-    .filter((node): node is Heading => node.type === 'heading')
-    .map((heading) => {
-      const text = extractText(heading.children)
-      const id = slugify(text)
-      /* MDX ## = depth 2 → editorial level 1, ### = depth 3 → level 2, #### = depth 4 → level 3 */
-      const level = (heading.depth - 1) as HeadingLevel
-      return {
-        label: text,
-        href: `#${id}`,
-        ...(level > 1 ? { level } : {}),
-      }
-    })
-}
+/* slugify, extractText, generateTocTree imported from ../components/toc-tree.js */
 
 function isAsideNode(node: RootContent): boolean {
   return node.type === 'mdxJsxFlowElement' && 'name' in node && (node as { name?: string }).name === 'Aside'
@@ -141,7 +102,8 @@ const contentChildren = (mdast as Root).children.filter((node) => {
 })
 const contentMdast: Root = { type: 'root', children: contentChildren }
 
-const tocItems = generateToc(contentMdast)
+const tocTree = generateTocTree(contentMdast)
+const tocItems = flattenTocTree({ roots: tocTree })
 const mdastSections = groupBySections(contentMdast)
 
 const mdxComponents = {

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { buildSearchEntries, createTocDb, searchToc, type SearchState } from './search.js'
+import { createTocDb, searchToc, type SearchState } from './search.js'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-jsx'
 import 'prismjs/components/prism-tsx'
@@ -49,15 +49,35 @@ const proseStyle = {
 
 export type HeadingLevel = 1 | 2 | 3
 
-export type TocItem = {
+/* Multi-page TOC tree types. Pages are root nodes that contain headings or
+   nested sub-pages. The recursive tree is flattened to FlatTocItem[] before
+   rendering, clamping visual depth to 4 levels (0-3) so the sidebar never
+   gets too wide regardless of page nesting depth. */
+
+export type TocNodeType = 'page' | `h${1 | 2 | 3 | 4 | 5 | 6}`
+export type VisualLevel = 0 | 1 | 2 | 3
+
+/** Recursive tree node — the source-of-truth structure before flattening.
+ *  Heading depth is encoded in the type field (h2, h3, h4...) so skipped
+ *  markdown levels render at the correct visual depth. */
+export type TocTreeNode = {
   label: string
   href: string
-  level?: HeadingLevel
+  type: TocNodeType
+  children: TocTreeNode[]
 }
 
-type PreparedTocItem = TocItem & {
-  level: HeadingLevel
+/** Flat rendering item produced by flattenTocTree(). visualLevel is clamped
+ *  to 0-3 so deeply nested pages still render cleanly. */
+export type FlatTocItem = {
+  label: string
+  href: string
+  type: TocNodeType
+  visualLevel: VisualLevel
   prefix: string
+  parentHref: string | null
+  /** Nearest ancestor page's href — used for route-aware scroll tracking. */
+  pageHref: string
 }
 
 const headingTagByLevel: Record<HeadingLevel, 'h1' | 'h2' | 'h3'> = {
@@ -97,56 +117,102 @@ const headingStyleByLevel: Record<HeadingLevel, React.CSSProperties> = {
   },
 }
 
-const tocLineHeightByLevel: Record<HeadingLevel, number> = {
-  1: LINE_HEIGHT.prose,
-  2: LINE_HEIGHT.prose,
-  3: LINE_HEIGHT.prose,
-}
+/* ── flattenTocTree ──────────────────────────────────────────────────────
+   Walks a recursive TocTreeNode[] and produces a flat FlatTocItem[] with
+   visual levels clamped to 0-3 and ASCII tree prefixes. Handles arbitrary
+   page nesting: when pages eat the depth budget, headings flatten to a
+   single visual level (all become siblings at level 3). */
 
-function getTocLevel({ item }: { item: TocItem }): HeadingLevel {
-  return item.level ?? 1
-}
-
-function hasNextTocSibling({ items, index, level }: { items: TocItem[]; index: number; level: HeadingLevel }) {
-  const nextSiblingLevel = items
-    .slice(index + 1)
-    .map((item) => {
-      return getTocLevel({ item })
-    })
-    .find((nextLevel) => {
-      return nextLevel <= level
-    })
-
-  return nextSiblingLevel === level
-}
-
-function prepareTocItems({ items }: { items: TocItem[] }): PreparedTocItem[] {
-  const ancestorContinuations: boolean[] = []
-
-  return items.map((item, index) => {
-    const level = getTocLevel({ item })
-    ancestorContinuations.length = Math.max(level - 1, 0)
-    const isLast = !hasNextTocSibling({ items, index, level })
-
-    // Root items (level 1) get no tree prefix, only nested items do
-    const prefix =
-      level === 1
-        ? ''
-        : `${ancestorContinuations
-            .slice(1, Math.max(level - 1, 0))
-            .map((shouldContinue) => {
-              return shouldContinue ? '│  ' : '   '
-            })
-            .join('')}${isLast ? '└─ ' : '├─ '}`
-
-    ancestorContinuations[level - 1] = !isLast
-
-    return {
-      ...item,
-      level,
-      prefix,
+function hasNextSiblingAtLevel({ items, index, level }: { items: FlatTocItem[]; index: number; level: VisualLevel }): boolean {
+  for (let i = index + 1; i < items.length; i++) {
+    if (items[i].visualLevel < level) {
+      return false
     }
-  })
+    if (items[i].visualLevel === level) {
+      return true
+    }
+  }
+  return false
+}
+
+function addPrefixes({ items }: { items: FlatTocItem[] }) {
+  const continuations: boolean[] = []
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const level = item.visualLevel
+
+    continuations.length = Math.max(level, 0)
+    const isLast = !hasNextSiblingAtLevel({ items, index: i, level })
+
+    if (level === 0) {
+      item.prefix = ''
+    } else {
+      const lines = continuations
+        .slice(1, level)
+        .map((cont) => {
+          return cont ? '│  ' : '   '
+        })
+        .join('')
+      item.prefix = lines + (isLast ? '└─ ' : '├─ ')
+    }
+
+    continuations[level] = !isLast
+  }
+}
+
+/** Extract 0-based heading depth from type: h2 → 0, h3 → 1, h4 → 2, etc.
+ *  Pages return 0. This lets ## be the root heading level (no prefix). */
+function headingDepthFromType(type: TocNodeType): number {
+  if (type === 'page') {
+    return 0
+  }
+  return parseInt(type.slice(1)) - 2
+}
+
+export function flattenTocTree({ roots }: { roots: TocTreeNode[] }): FlatTocItem[] {
+  const result: FlatTocItem[] = []
+
+  function walk({ nodes, pageDepth, parentHref, pageHref }: {
+    nodes: TocTreeNode[]
+    /** Number of page ancestors above this level (used as base for heading depth). */
+    pageDepth: number
+    parentHref: string | null
+    pageHref: string
+  }) {
+    for (const node of nodes) {
+      /* Heading depth is derived from the type field (h2 → 0, h3 → 1, etc.).
+         Pages use pageDepth directly. Skipped heading levels (## → ####)
+         naturally produce the correct visual gap. */
+      const rawDepth = node.type === 'page'
+        ? pageDepth
+        : pageDepth + headingDepthFromType(node.type)
+      const visualLevel = Math.min(rawDepth, 3) as VisualLevel
+      const currentPageHref = node.type === 'page' ? node.href : pageHref
+
+      result.push({
+        label: node.label,
+        href: node.href,
+        type: node.type,
+        visualLevel,
+        prefix: '',
+        parentHref,
+        pageHref: currentPageHref,
+      })
+
+      const childPageDepth = node.type === 'page' ? pageDepth + 1 : pageDepth
+      walk({
+        nodes: node.children,
+        pageDepth: childPageDepth,
+        parentHref: node.href,
+        pageHref: currentPageHref,
+      })
+    }
+  }
+
+  walk({ nodes: roots, pageDepth: 0, parentHref: null, pageHref: '' })
+  addPrefixes({ items: result })
+  return result
 }
 
 /** Single useSyncExternalStore that handles both initial hash and scroll-based
@@ -234,23 +300,16 @@ function useActiveTocId({
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-type TocGroup = {
-  parent: PreparedTocItem
-  children: PreparedTocItem[]
-}
-
 function TocLink({
   item,
   isActive,
-  activeId,
   chevron,
   dimmed,
   isHighlighted,
   linkRef,
 }: {
-  item: PreparedTocItem
+  item: FlatTocItem
   isActive: boolean
-  activeId: string
   chevron?: { expanded: boolean }
   /** Search: dim non-matching items to opacity 0.3 */
   dimmed?: boolean
@@ -266,6 +325,8 @@ function TocLink({
       : 'var(--text-tree-label)'
   const defaultPrefixColor = effectiveActive ? 'var(--text-secondary)' : 'var(--text-tertiary)'
   const bg = isHighlighted ? 'var(--code-bg)' : effectiveActive ? 'var(--code-bg)' : 'transparent'
+  /* visualLevel 0 or page nodes get heading weight, everything else prose */
+  const fontWeight = item.visualLevel === 0 || item.type === 'page' ? WEIGHT.heading : WEIGHT.prose
   return (
     <a
       ref={linkRef}
@@ -276,8 +337,8 @@ function TocLink({
         display: 'flex',
         alignItems: 'flex-start',
         fontSize: 'var(--type-toc-size)',
-        fontWeight: item.level === 1 ? WEIGHT.heading : WEIGHT.prose,
-        lineHeight: tocLineHeightByLevel[item.level],
+        fontWeight,
+        lineHeight: LINE_HEIGHT.prose,
         letterSpacing: 'normal',
         padding: '2px 8px',
         color: defaultColor,
@@ -307,59 +368,51 @@ function TocLink({
   )
 }
 
-export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: string }) {
+export function TableOfContents({ items, logo }: { items: FlatTocItem[]; logo?: string }) {
   const firstHref = items[0]?.href ?? ''
   const fallbackId = firstHref.startsWith('#') ? firstHref.slice(1) : firstHref
   const scrollLockRef = useRef(false)
   const activeId = useActiveTocId({ fallbackId, scrollLockRef })
 
-  const preparedItems = useMemo(() => {
-    return prepareTocItems({ items })
+  /* Derive which items have children (are expandable) */
+  const expandableHrefs = useMemo(() => {
+    return new Set(items.map((i) => { return i.parentHref }).filter(Boolean) as string[])
   }, [items])
 
-  // Group items into { parent, children }[] for structured rendering
-  const groups = useMemo(() => {
-    const result: TocGroup[] = []
-    for (const item of preparedItems) {
-      if (item.level === 1) {
-        result.push({ parent: item, children: [] })
-      } else if (result.length > 0) {
-        result[result.length - 1].children.push(item)
-      }
-    }
-    return result
-  }, [preparedItems])
+  /* Lookup map for walking the parent chain */
+  const itemByHref = useMemo(() => {
+    return new Map(items.map((i) => { return [i.href, i] as const }))
+  }, [items])
 
-  // Track which sections are expanded. First section with children starts open.
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    const first = groups.find((g) => {
-      return g.children.length > 0
-    })
-    return first ? new Set([first.parent.href]) : new Set()
+  // Track which items are expanded. First expandable item starts open.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const first = items.find((i) => { return expandableHrefs.has(i.href) })
+    return first ? new Set([first.href]) : new Set()
   })
 
-  // Auto-expand the section containing the active heading on scroll
+  // Auto-expand ancestors of the active heading on scroll
   useEffect(() => {
     if (!activeId) {
       return
     }
     const activeHref = `#${activeId}`
-    let currentParent: string | null = null
-    for (const item of preparedItems) {
-      if (item.level === 1) {
-        currentParent = item.href
+    const toExpand: string[] = []
+    let current = itemByHref.get(activeHref)
+    while (current?.parentHref) {
+      if (!expanded.has(current.parentHref)) {
+        toExpand.push(current.parentHref)
       }
-      if (item.href === activeHref && currentParent && !expandedSections.has(currentParent)) {
-        setExpandedSections((prev) => {
-          return new Set([...prev, currentParent!])
-        })
-        break
-      }
+      current = itemByHref.get(current.parentHref)
     }
-  }, [activeId, preparedItems]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (toExpand.length > 0) {
+      setExpanded((prev) => {
+        return new Set([...prev, ...toExpand])
+      })
+    }
+  }, [activeId, itemByHref]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleSection = (href: string) => {
-    setExpandedSections((prev) => {
+  const toggle = (href: string) => {
+    setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(href)) {
         next.delete(href)
@@ -377,11 +430,9 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
   const highlightedRef = useRef<HTMLAnchorElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  // Build flat search entries and Orama DB once
-  const { entries, db } = useMemo(() => {
-    const entries = buildSearchEntries({ items })
-    const db = createTocDb({ entries })
-    return { entries, db }
+  // Build Orama search DB once
+  const db = useMemo(() => {
+    return createTocDb({ items })
   }, [items])
 
   const [searchState, setSearchState] = useState<SearchState>({
@@ -398,12 +449,12 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
         clearTimeout(debounceRef.current)
       }
       debounceRef.current = setTimeout(() => {
-        const state = searchToc({ db, query: value, entries })
+        const state = searchToc({ db, query: value, items })
         setSearchState(state)
         setHighlightedIndex(0)
       }, 80)
     },
-    [db, entries],
+    [db, items],
   )
 
   // Scroll highlighted item into view (only when search is active)
@@ -468,6 +519,33 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
   )
 
   const isSearchActive = searchState.matchedHrefs !== null
+
+  /* Merge search expand overrides into the expanded set so matched items
+     inside collapsed branches become visible during search. */
+  const effectiveExpanded = useMemo(() => {
+    if (!isSearchActive || !searchState.expandOverride) {
+      return expanded
+    }
+    return new Set([...expanded, ...searchState.expandOverride])
+  }, [expanded, isSearchActive, searchState.expandOverride])
+
+  /* Compute visible items: an item is visible if all its ancestors are
+     effectively expanded. Since items are in document order, parents
+     always come before children so a single forward pass works. */
+  const visibleItems = useMemo(() => {
+    const visible = new Set<string>()
+    return items.filter((item) => {
+      if (item.parentHref === null) {
+        visible.add(item.href)
+        return true
+      }
+      if (effectiveExpanded.has(item.parentHref) && visible.has(item.parentHref)) {
+        visible.add(item.href)
+        return true
+      }
+      return false
+    })
+  }, [items, effectiveExpanded])
 
   return (
     <aside
@@ -541,59 +619,30 @@ export function TableOfContents({ items, logo }: { items: TocItem[]; logo?: stri
       </div>
 
       <nav aria-label='Table of contents' style={{ overflowY: 'auto', minHeight: 0, paddingRight: '4px' }}>
-        {groups.map((group, groupIndex) => {
+        {visibleItems.map((item) => {
+          const isExpandable = expandableHrefs.has(item.href)
           const isExpanded =
-            expandedSections.has(group.parent.href) ||
-            (isSearchActive && Boolean(searchState.expandOverride?.has(group.parent.href)))
-          const hasChildren = group.children.length > 0
-          const parentDimmed = isSearchActive && searchState.dimmedHrefs?.has(group.parent.href)
-          const parentHighlightedHref = isSearchActive ? searchState.focusableHrefs?.[highlightedIndex] : undefined
+            expanded.has(item.href) ||
+            (isSearchActive && Boolean(searchState.expandOverride?.has(item.href)))
+          const isDimmed = isSearchActive && searchState.dimmedHrefs?.has(item.href)
+          const highlightedHref = isSearchActive ? searchState.focusableHrefs?.[highlightedIndex] : undefined
+          const isHighlighted = highlightedHref === item.href
+          /* Extract fragment for active heading comparison */
+          const fragment = item.href.includes('#') ? item.href.slice(item.href.indexOf('#')) : item.href
           return (
-            <div key={group.parent.href}>
-              <div
-                onClick={
-                  hasChildren
-                    ? () => {
-                        toggleSection(group.parent.href)
-                      }
-                    : undefined
-                }
-                style={{ cursor: hasChildren ? 'pointer' : undefined }}
-              >
-                <TocLink
-                  item={group.parent}
-                  isActive={`#${activeId}` === group.parent.href}
-                  activeId={activeId}
-                  chevron={hasChildren ? { expanded: isExpanded } : undefined}
-                  dimmed={parentDimmed || false}
-                  isHighlighted={parentHighlightedHref === group.parent.href}
-                  linkRef={parentHighlightedHref === group.parent.href ? highlightedRef : undefined}
-                />
-              </div>
-              {hasChildren && isExpanded && (
-                <div
-                  className='toc-children-container'
-                  style={{
-                    viewTransitionName: `toc-section-${groupIndex}`,
-                  }}
-                >
-                  {group.children.map((child) => {
-                    const childDimmed = isSearchActive && searchState.dimmedHrefs?.has(child.href)
-                    const childIsHighlighted = parentHighlightedHref === child.href
-                    return (
-                      <TocLink
-                        key={child.href}
-                        item={child}
-                        isActive={`#${activeId}` === child.href}
-                        activeId={activeId}
-                        dimmed={childDimmed || false}
-                        isHighlighted={childIsHighlighted}
-                        linkRef={childIsHighlighted ? highlightedRef : undefined}
-                      />
-                    )
-                  })}
-                </div>
-              )}
+            <div
+              key={item.href}
+              onClick={isExpandable ? () => { toggle(item.href) } : undefined}
+              style={{ cursor: isExpandable ? 'pointer' : undefined }}
+            >
+              <TocLink
+                item={item}
+                isActive={`#${activeId}` === fragment}
+                chevron={isExpandable ? { expanded: isExpanded } : undefined}
+                dimmed={isDimmed || false}
+                isHighlighted={isHighlighted}
+                linkRef={isHighlighted ? highlightedRef : undefined}
+              />
             </div>
           )
         })}
@@ -1526,7 +1575,7 @@ export function EditorialPage({
   sections,
   hero,
 }: {
-  toc: TocItem[]
+  toc: FlatTocItem[]
   logo?: string
   tabs?: TabItem[]
   activeTab?: string
