@@ -6,3 +6,4 @@ node_modules
 .DS_Store
 public/SKILL.md
 public/prompt.md
+.vercel
