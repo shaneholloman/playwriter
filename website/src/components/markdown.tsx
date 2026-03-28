@@ -7,7 +7,7 @@
  * --link-accent, --page-border.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import { createTocDb, searchToc, type SearchState } from './search.js'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-jsx'
@@ -424,11 +424,14 @@ export function TableOfContents({ items, logo }: { items: FlatTocItem[]; logo?: 
   }
 
   // --- Search state ---
+  // useTransition makes typing non-blocking: setQuery is urgent (input stays
+  // responsive), while the TOC re-render from setSearchState is deferred and
+  // interruptible — new keystrokes cancel in-progress renders automatically.
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const highlightedRef = useRef<HTMLAnchorElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [isPending, startTransition] = useTransition()
 
   // Build Orama search DB once
   const db = useMemo(() => {
@@ -445,14 +448,11 @@ export function TableOfContents({ items, logo }: { items: FlatTocItem[]; logo?: 
   const handleQueryChange = useCallback(
     (value: string) => {
       setQuery(value)
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current)
-      }
-      debounceRef.current = setTimeout(() => {
+      startTransition(() => {
         const state = searchToc({ db, query: value, items })
         setSearchState(state)
         setHighlightedIndex(0)
-      }, 80)
+      })
     },
     [db, items],
   )
@@ -584,8 +584,9 @@ export function TableOfContents({ items, logo }: { items: FlatTocItem[]; logo?: 
             textTransform: 'lowercase',
             letterSpacing: 'normal',
             lineHeight: LINE_HEIGHT.prose,
-            transition: 'border-color 0.15s ease',
+            transition: 'border-color 0.15s ease, opacity 0.1s ease',
             boxSizing: 'border-box',
+            opacity: isPending ? 0.5 : 1,
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = 'var(--text-tertiary)'
