@@ -7,7 +7,7 @@
  * --link-accent, --page-border.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-jsx'
 import 'prismjs/components/prism-tsx'
@@ -147,29 +147,12 @@ function prepareTocItems({ items }: { items: TocItem[] }): PreparedTocItem[] {
   })
 }
 
-/** Read location.hash without the leading '#'. Subscribes to hashchange so
- *  the TOC re-highlights when the user clicks an anchor link. Server snapshot
- *  returns '' since there's no location during SSR. */
-function useLocationHash(): string {
-  return useSyncExternalStore(
-    (callback) => {
-      window.addEventListener('hashchange', callback)
-      return () => {
-        window.removeEventListener('hashchange', callback)
-      }
-    },
-    () => {
-      return window.location.hash.replace(/^#/, '')
-    },
-    () => {
-      return ''
-    },
-  )
-}
-
 function useActiveTocId({ fallbackId }: { fallbackId: string }) {
-  const hash = useLocationHash()
   const [activeId, setActiveId] = useState(() => {
+    if (typeof window === 'undefined') {
+      return fallbackId
+    }
+    const hash = window.location.hash.replace(/^#/, '')
     return hash || fallbackId
   })
 
