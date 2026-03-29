@@ -40,6 +40,7 @@ const cli = goke('playwriter')
 
 cli
   .command('browser start [binaryPath]', 'Start Chromium or Chrome for Testing with the bundled Playwriter extension')
+  .hidden()
   .option('--user-data-dir <dir>', 'Persistent browser profile directory used for the managed browser')
   .option('--headless', 'Run the browser in headless mode')
   .option('--headed', 'Force headed mode even on Linux without DISPLAY/WAYLAND_DISPLAY')

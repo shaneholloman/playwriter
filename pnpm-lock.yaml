@@ -336,8 +336,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1
       goke:
-        specifier: ^6.3.1
-        version: 6.3.1
+        specifier: ^6.3.2
+        version: 6.3.2
       hono:
         specifier: ^4.10.6
         version: 4.10.6
@@ -3581,8 +3581,8 @@ packages:
   globrex@0.1.2:
     resolution: {integrity: sha512-uHJgbwAMwNFf5mLst7IWLNg14x1CkeqglJb/K3doi4dw6q2IvAAmM/Y81kevy83wP+Sst+nutFTYOGg3d1lsxg==}
 
-  goke@6.3.1:
-    resolution: {integrity: sha512-TE62s1HFbj0UlmrmsoefwU+bDU7yiaLT1vVN1LmYpTFguF6MynMT4T6jKboqS7wVkbTXKWPIBXQVEaPasGu41w==}
+  goke@6.3.2:
+    resolution: {integrity: sha512-0CSINX0HJiBPBphPvWhce/NkTgXogvLBxeeewT4L1Oh/P1RXxaC1qV1+IGvDN5jHjtjycr4mlGmxd7i14e1V5A==}
     engines: {node: '>=18'}
 
   google-auth-library@10.5.0:
@@ -8066,7 +8066,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.8(@types/debug@4.1.13)(@types/node@24.10.1)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@27.2.0(bufferutil@4.0.9))(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.6.0)
+      vitest: 4.0.8(@types/debug@4.1.13)(@types/node@25.2.0)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@27.2.0(bufferutil@4.0.9))(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.6.0)
 
   '@vitest/utils@4.0.16':
     dependencies:
@@ -9610,7 +9610,7 @@ snapshots:
 
   globrex@0.1.2: {}
 
-  goke@6.3.1:
+  goke@6.3.2:
     dependencies:
       picocolors: 1.1.1
 
