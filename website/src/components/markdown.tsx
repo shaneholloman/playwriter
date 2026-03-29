@@ -371,7 +371,7 @@ function TocLink({
         fontWeight,
         // marginLeft: item.prefix ? '-3px' : undefined,
         letterSpacing: 'normal',
-        padding: '2px 8px',
+        padding: item.visualLevel > 0 ? '4px 8px' : '2px 8px',
         color: defaultColor,
         fontFamily: 'var(--font-primary)',
         transition: 'color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease',
