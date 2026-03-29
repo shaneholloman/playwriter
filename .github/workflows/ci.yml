@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org/
-      - uses: pnpm/action-setup@master
+      - uses: pnpm/action-setup@v4
         with:
           version: 10.18.1
           run_install: false
@@ -28,10 +28,7 @@ jobs:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-store-
-      - run: |
-          pnpm --version
-          cat pnpm-workspace.yaml
-          pnpm install --allow-build=bufferutil --allow-build=esbuild --allow-build=sharp
+      - run: pnpm install
       # scripts
       # - run: pnpm build
       # - run: pnpm test
