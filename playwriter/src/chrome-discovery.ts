@@ -3,7 +3,12 @@
  *
  * Probes the default CDP port (9222) via GET /json/version.
  * If Chrome responds with a valid webSocketDebuggerUrl, the instance is usable.
- * Otherwise nothing is returned — the user should pass an explicit endpoint.
+ *
+ * Chrome 136+ with chrome://inspect debugging returns 404 on all HTTP endpoints
+ * but still accepts WebSocket connections on /devtools/browser/*. In that case
+ * (status 'blocked'), we return a synthetic wsUrl — the actual WS connection
+ * (which may trigger Chrome's approval dialog) only happens when the user
+ * explicitly runs a command, not during discovery.
  *
  * For non-default ports or remote hosts, pass an explicit endpoint with
  * --direct host:port or --direct ws://....
@@ -50,8 +55,10 @@ interface JsonVersionResponse {
 
 type PortProbeStatus =
   | { type: 'live'; wsUrl: string; browser: string }
-  /** HTTP response received but no CDP data (e.g. Chrome 136+ default profile returns 404) */
-  | { type: 'blocked' }
+  /** HTTP response received but no CDP data (Chrome 136+ returns 404 on all HTTP
+   *  endpoints but still accepts WS on /devtools/browser/*). We can't get browser
+   *  info without a WS connection which would trigger Chrome's approval dialog. */
+  | { type: 'blocked'; port: number; hostname: string }
   /** ECONNREFUSED or timeout — nothing is listening */
   | { type: 'dead' }
 
@@ -70,13 +77,13 @@ async function probePortStatus(port: number, hostname = '127.0.0.1'): Promise<Po
     })
     if (!response.ok) {
       await response.text() // consume body
-      return { type: 'blocked' }
+      return { type: 'blocked', port, hostname }
     }
     const data = (await response.json()) as JsonVersionResponse
     if (data.webSocketDebuggerUrl) {
       return { type: 'live', wsUrl: data.webSocketDebuggerUrl, browser: data.Browser || 'Unknown' }
     }
-    return { type: 'blocked' }
+    return { type: 'blocked', port, hostname }
   } catch {
     return { type: 'dead' }
   }
@@ -97,8 +104,10 @@ export async function probePort(port: number, hostname = '127.0.0.1'): Promise<{
 /**
  * Discover Chrome on the default CDP port (9222).
  *
- * Probes /json/version. Returns one instance if Chrome responds with a valid
- * webSocketDebuggerUrl, otherwise returns an empty array.
+ * Probes /json/version. If Chrome responds with valid CDP JSON, returns the
+ * instance with full browser info. If Chrome returns 404 (Chrome 136+ with
+ * chrome://inspect debugging), returns a synthetic instance — the browser
+ * version is unknown until an actual WS connection is made.
  */
 export async function discoverChromeInstances(): Promise<DiscoveredInstance[]> {
   const status = await probePortStatus(9222)
@@ -115,7 +124,36 @@ export async function discoverChromeInstances(): Promise<DiscoveredInstance[]> {
     ]
   }
 
+  if (status.type === 'blocked') {
+    return [
+      {
+        browser: 'Chrome',
+        port: status.port,
+        wsUrl: makeDirectWsUrl(status.hostname, status.port),
+        profiles: [],
+        dataDir: null,
+      },
+    ]
+  }
+
   return []
+}
+
+/** Build a ws:// URL for direct CDP. The path is left bare — Chrome 136+
+ *  accepts any value under /devtools/browser/. Call appendSessionToWsUrl()
+ *  before connecting to make the path unique per session. */
+function makeDirectWsUrl(hostname: string, port: number): string {
+  return `ws://${hostname}:${port}/devtools/browser/`
+}
+
+/** Append a session ID to a /devtools/browser/ ws URL to make it unique.
+ *  If the URL already has a full GUID path (e.g. from /json/version), return as-is. */
+export function appendSessionToWsUrl(wsUrl: string, sessionId: string): string {
+  // Only append if the path ends with / (our synthetic URLs from blocked probes)
+  if (wsUrl.endsWith('/')) {
+    return `${wsUrl}${sessionId}`
+  }
+  return wsUrl
 }
 
 /**
@@ -148,10 +186,8 @@ export async function resolveDirectInput(input: string): Promise<string> {
   }
 
   if (status.type === 'blocked') {
-    throw new Error(
-      `Chrome is listening on ${hostname}:${port} but /json/version is blocked. ` +
-        `Pass the full WebSocket URL instead: --direct ws://${hostname}:${port}/devtools/browser/<guid>`,
-    )
+    // Chrome 136+ returns 404 on HTTP but accepts WS on /devtools/browser/*
+    return makeDirectWsUrl(hostname, port)
   }
 
   throw new Error(

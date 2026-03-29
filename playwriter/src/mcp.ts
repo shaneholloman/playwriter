@@ -17,7 +17,8 @@ import dedent from 'string-dedent'
 import { LOG_FILE_PATH, VERSION, parseRelayHost } from './utils.js'
 import { ensureRelayServer, RELAY_PORT } from './relay-client.js'
 import { PlaywrightExecutor, CodeExecutionTimeoutError } from './executor.js'
-import { discoverChromeInstances, resolveDirectInput } from './chrome-discovery.js'
+import { discoverChromeInstances, resolveDirectInput, appendSessionToWsUrl } from './chrome-discovery.js'
+import crypto from 'node:crypto'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -109,12 +110,16 @@ async function getDirectCdpConfig(): Promise<{ directCdpUrl: string } | null> {
           'Enable debugging at chrome://inspect/#remote-debugging or launch with --remote-debugging-port=9222.',
       )
     }
+    const sessionId = crypto.randomUUID()
+    const wsUrl = appendSessionToWsUrl(instances[0].wsUrl, sessionId)
     mcpLog(`Direct CDP: using ${instances[0].browser} on port ${instances[0].port}`)
-    return { directCdpUrl: instances[0].wsUrl }
+    return { directCdpUrl: wsUrl }
   }
 
   // ws://, wss://, or host:port — resolveDirectInput handles all three
-  const directCdpUrl = await resolveDirectInput(directEnv)
+  const resolved = await resolveDirectInput(directEnv)
+  const sessionId = crypto.randomUUID()
+  const directCdpUrl = appendSessionToWsUrl(resolved, sessionId)
   mcpLog(`Direct CDP: resolved ${directEnv} → ${directCdpUrl}`)
   return { directCdpUrl }
 }
@@ -340,18 +345,15 @@ server.tool(
   },
 )
 
-export async function startMcp(options: { host?: string; token?: string; direct?: string } = {}) {
+export async function startMcp(options: { host?: string; token?: string } = {}) {
   if (options.host) {
     process.env.PLAYWRITER_HOST = options.host
   }
   if (options.token) {
     process.env.PLAYWRITER_TOKEN = options.token
   }
-  if (options.direct) {
-    process.env.PLAYWRITER_DIRECT = options.direct
-  }
 
-  // In direct CDP mode, no relay server or remote server needed
+  // In direct CDP mode (PLAYWRITER_DIRECT env var), no relay server needed
   if (process.env.PLAYWRITER_DIRECT) {
     mcpLog(`Using direct CDP connection: ${process.env.PLAYWRITER_DIRECT}`)
   } else {

@@ -101,7 +101,6 @@ cli
   .command('', 'Start the MCP server or controls the browser with -e')
   .option('--host <host>', 'Remote relay server host to connect to (or use PLAYWRITER_HOST env var)')
   .option('--token <token>', 'Authentication token (or use PLAYWRITER_TOKEN env var)')
-  .option('--direct [endpoint]', 'Use direct CDP connection without the extension. Enable debugging first at chrome://inspect/#remote-debugging or launch Chrome with --remote-debugging-port=9222. Auto-discovers instances or accepts an explicit ws:// endpoint (or use PLAYWRITER_DIRECT env var)')
   .option('-s, --session <name>', 'Session ID (required for -e, get one with `playwriter session new`)')
   .option('-e, --eval <code>', 'Execute JavaScript code and exit, read https://playwriter.dev/SKILL.md for usage')
   .option('--timeout [ms]', z.number().default(10000).describe('Execution timeout in milliseconds'))
@@ -118,15 +117,12 @@ cli
       return
     }
 
-    // Resolve --direct flag to env var value
-    const directValue = typeof options.direct === 'string' ? options.direct : options.direct === true ? 'auto' : undefined
-
     // Otherwise start the MCP server
+    // For direct CDP in MCP mode, use PLAYWRITER_DIRECT env var
     const { startMcp } = await import('./mcp.js')
     await startMcp({
       host: options.host,
       token: options.token,
-      direct: directValue,
     })
   })
 
@@ -907,7 +903,16 @@ cli
 
     printBrowserTable(allOptions)
     console.log('')
-    console.log(pc.dim('Use with: playwriter session new [--browser <key>]'))
+
+    const hasDirectInstances = allOptions.some((opt) => {
+      return opt.type === 'direct'
+    })
+    if (hasDirectInstances) {
+      console.log(pc.dim('Connect with: playwriter session new --direct'))
+      console.log(pc.dim('Chrome may ask to approve the debugging connection.'))
+    } else {
+      console.log(pc.dim('Use with: playwriter session new [--browser <key>]'))
+    }
   })
 
 cli.command('logfile', 'Print the path to the relay server log file').action(() => {

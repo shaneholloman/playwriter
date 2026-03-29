@@ -28,6 +28,7 @@ import { EventEmitter } from 'node:events'
 import { VERSION, EXTENSION_IDS } from './utils.js'
 import { createCdpLogger, type CdpLogEntry, type CdpLogger } from './cdp-log.js'
 import { RecordingRelay } from './recording-relay.js'
+import { appendSessionToWsUrl } from './chrome-discovery.js'
 import * as relayState from './relay-state.js'
 
 /**
@@ -1901,7 +1902,7 @@ export async function startPlayWriterCDPRelayServer({
       const executor = manager.getExecutor({
         sessionId,
         cwd,
-        cdpConfig: { directCdpUrl: body.cdpEndpoint },
+        cdpConfig: { directCdpUrl: appendSessionToWsUrl(body.cdpEndpoint, sessionId) },
         sessionMetadata: {
           extensionId: null,
           browser: body.browser || null,
