@@ -32,6 +32,9 @@
       "bufferutil",
       "esbuild",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "electron"
     ]
   }
 }
