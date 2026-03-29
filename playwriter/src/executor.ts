@@ -1100,6 +1100,7 @@ export class PlaywrightExecutor {
       let vmContextObj: any = {
         page,
         context,
+        browser: this.browser,
         state: this.userState,
         console: customConsole,
         snapshot,
@@ -1141,6 +1142,7 @@ export class PlaywrightExecutor {
           const { page: newPage, context: newContext } = await self.reset()
           vmContextObj.page = newPage
           vmContextObj.context = newContext
+          vmContextObj.browser = self.browser
           return { page: newPage, context: newContext }
         },
         require: this.sandboxedRequire,

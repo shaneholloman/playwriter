@@ -79,6 +79,14 @@ Then create a session:
 playwriter session new --direct
 ```
 
+By default, `context` is bound to the first Chrome profile. If the user has multiple profiles open, use `browser.contexts()` to access other profiles' pages and cookies:
+
+```js
+const contexts = browser.contexts()
+// contexts[0] = first profile, contexts[1] = second profile, etc.
+const otherProfilePage = contexts[1].pages()[0]
+```
+
 **Limitations:** screen recording (`recording.start/stop`) is unavailable in direct mode.
 
 ### Execute code
@@ -184,7 +192,8 @@ You can collaborate with the user - they can help with captchas, difficult eleme
 
 - `state` - object persisted between calls **within your session**. Each session has its own isolated state. Use to store pages, data, listeners (e.g., `state.page = await context.newPage()`)
 - `page` - a default page (may be shared with other agents). Prefer creating your own page and storing it in `state` (see "working with pages")
-- `context` - browser context, access all pages via `context.pages()`
+- `browser` - browser instance, access all contexts (profiles) via `browser.contexts()`
+- `context` - browser context (first profile), access all pages via `context.pages()`
 - `require` - load Node.js modules (e.g., `const fs = require('node:fs')`). ESM `import` is not available in the sandbox
 - Node.js globals: `setTimeout`, `setInterval`, `fetch`, `URL`, `Buffer`, `crypto`, etc.
 
