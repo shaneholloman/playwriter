@@ -27,14 +27,5 @@
   "dependencies": {
     "mcp-extension": "workspace:^"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "bufferutil",
-      "esbuild",
-      "sharp"
-    ],
-    "ignoredBuiltDependencies": [
-      "electron"
-    ]
-  }
+  "pnpm": {}
 }
