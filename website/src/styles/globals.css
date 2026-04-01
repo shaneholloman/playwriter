@@ -396,6 +396,7 @@
   }
 }
 
+
 /* TOC collapsible children — View Transition API animations.
    Each children group has view-transition-name: toc-section-N and
    class toc-children-container with view-transition-class for shared CSS. */
