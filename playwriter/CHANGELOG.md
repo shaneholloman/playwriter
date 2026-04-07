@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.105
+
+1. **Stabilize multi-browser extension connections**. The relay now keys fallback extension identities by a persisted per-install ID instead of collapsing every unsigned Chromium-family browser into `browser:Chromium`. This prevents Chrome/Vivaldi/Helium/Dia instances from replacing each other on the relay when `chrome.identity` returns no profile ID/email.
+2. **Stop reconnect handoff loops after replacement**. A replaced extension worker now waits until no replacement connection exists before reclaiming the relay slot, instead of treating `activeTargets: 0` as free. This closes the race where a fresh replacement briefly reports zero targets, gets stolen back, and drops the user's active Playwright tab.
+3. **Regression coverage for dual-browser relay stability**. Added an integration test that launches a second Chromium context against the same relay and verifies the original active page stays connected.
+
 ## 0.0.104
 
 1. **Executor logs new pages instead of unreachable popups**. Previously, when a page opened another via `window.open` or `target="_blank"`, the executor emitted `[WARNING] Popup window detected ... cannot be controlled by playwriter` and told the agent to retry. Paired with the extension 0.0.80 change (popups are auto-relocated to tabs in the source tab's window), the warning is now `[WARNING] New page opened from current page (index N, initial url: ...)` pointing the agent at the new tab to interact with it.

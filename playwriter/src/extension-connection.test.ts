@@ -1,8 +1,12 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { createMCPClient } from './mcp-client.js'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { chromium } from '@xmorse/playwright-core'
 import { getCdpUrl } from './utils.js'
 import { setupTestContext, cleanupTestContext, getExtensionServiceWorker, type TestContext, js } from './test-utils.js'
+import { getExtensionsStatus } from './relay-client.js'
 import './test-declarations.js'
 
 const TEST_PORT = 19990
@@ -659,6 +663,90 @@ describe('Extension Connection Tests', () => {
     // Clean up
     await page.goto('about:blank')
   })
+
+  it('should keep an active browser connected when another Chromium context starts', async () => {
+    const browserContext = getBrowserContext()
+    const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+    await serviceWorker.evaluate(async () => {
+      await globalThis.disconnectEverything()
+    })
+
+    const page = await browserContext.newPage()
+    const targetUrl = 'https://example.com/multi-context-stability'
+    await page.goto(targetUrl)
+    await page.waitForLoadState('domcontentloaded')
+    await page.bringToFront()
+
+    const enableResult = await serviceWorker.evaluate(async () => {
+      return await globalThis.toggleExtensionForActiveTab()
+    })
+    expect(enableResult.isConnected).toBe(true)
+
+    const secondUserDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-conn-second-'))
+    const extensionPath = path.resolve(process.cwd(), '../extension', `dist-${TEST_PORT}`)
+    const secondContext = await chromium.launchPersistentContext(secondUserDataDir, {
+      channel: 'chromium',
+      headless: !process.env.HEADFUL,
+      colorScheme: 'dark',
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    })
+
+    try {
+      await getExtensionServiceWorker(secondContext)
+
+      const statusSnapshots: Array<{ keys: string[]; activeTargets: number[] }> = []
+      for (let i = 0; i < 4; i++) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1000)
+        })
+        const statuses = await getExtensionsStatus(TEST_PORT)
+        statusSnapshots.push({
+          keys: statuses.map((status) => {
+            return status.stableKey || status.extensionId
+          }),
+          activeTargets: statuses.map((status) => {
+            return status.activeTargets
+          }),
+        })
+      }
+
+      expect(statusSnapshots.every((snapshot) => {
+        return snapshot.keys.length >= 2
+      })).toBe(true)
+      expect(statusSnapshots.every((snapshot) => {
+        return new Set(snapshot.keys).size === snapshot.keys.length
+      })).toBe(true)
+      expect(statusSnapshots.every((snapshot) => {
+        return snapshot.activeTargets.some((count) => count > 0)
+      })).toBe(true)
+
+      const executeResult = await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: js`
+            const pages = context.pages();
+            const testPage = pages.find((p) => p.url().includes('multi-context-stability'));
+            return { pagesCount: pages.length, found: !!testPage, url: testPage?.url() };
+          `,
+        },
+      })
+
+      const executeOutput = (executeResult as any).content[0].text
+      expect(executeOutput).toContain('found: true')
+      expect(executeOutput).toContain(targetUrl)
+      expect((executeResult as any).isError).not.toBe(true)
+    } finally {
+      await secondContext.close()
+      fs.rmSync(secondUserDataDir, { recursive: true, force: true })
+      if (!page.isClosed()) {
+        await page.close()
+      }
+      await serviceWorker.evaluate(async () => {
+        await globalThis.disconnectEverything()
+      })
+    }
+  }, 120000)
 
   it('should maintain correct page.url() with service worker pages', async () => {
     const browserContext = getBrowserContext()

@@ -28,6 +28,7 @@ export type ExtensionInfo = {
   browser?: string
   email?: string
   id?: string
+  installId?: string
   /** playwriter package version the extension was built with (sent as ?v= query param) */
   version?: string
 }
@@ -493,5 +494,4 @@ export function updateTargetUrl(
   newExtensions.set(extensionId, { ...ext, connectedTargets: newTargets })
   return { ...state, extensions: newExtensions }
 }
-
 

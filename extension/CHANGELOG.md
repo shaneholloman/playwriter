@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.81
+
+### Bug Fixes
+
+- **Stop cross-browser relay takeovers when Chrome identity is unavailable**: The extension now persists a per-install `installId` in `chrome.storage.local` and sends it to the relay. When Chromium/Vivaldi/other unsigned profiles report empty `chrome.identity` info, the relay uses `install:<browser>:<installId>` instead of the coarse `browser:<name>` fallback, so two idle Chromium-family browsers no longer replace each other's WebSocket connection.
+- **Do not reclaim a merely idle replacement connection**: after a `4001 Extension Replaced` disconnect, the service worker now waits for `/extension/status` to report `connected: false` before reconnecting. This avoids the handoff race where a fresh replacement temporarily reports `activeTargets: 0`, causing the old worker to steal the slot back and drop the live tab.
+- **Add `storage` permission**: required to persist the per-install relay identity above.
+
 ## 0.0.80
 
 ### Changes

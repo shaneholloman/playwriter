@@ -163,6 +163,9 @@ export async function startPlayWriterCDPRelayServer({
     if (info.email) {
       return `email:${info.email}`
     }
+    if (info.installId) {
+      return `install:${info.browser || 'unknown'}:${info.installId}`
+    }
     if (info.browser) {
       return `browser:${info.browser}`
     }
@@ -1264,11 +1267,13 @@ export async function startPlayWriterCDPRelayServer({
     const browser = c.req.query('browser')
     const email = c.req.query('email')
     const id = c.req.query('id')
+    const installId = c.req.query('installId')
     const version = c.req.query('v')
     return {
       browser: browser || undefined,
       email: email || undefined,
       id: id || undefined,
+      installId: installId || undefined,
       version: version || undefined,
     }
   }

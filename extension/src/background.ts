@@ -33,10 +33,21 @@ type ExtensionIdentity = {
   browser: string
   email: string
   id: string
+  installId: string
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function createInstallId(): string {
+  const values = new Uint32Array(2)
+  crypto.getRandomValues(values)
+  return Array.from(values)
+    .map((value) => {
+      return value.toString(36)
+    })
+    .join('')
 }
 
 async function detectBrowserName(): Promise<string> {
@@ -69,6 +80,7 @@ async function detectBrowserName(): Promise<string> {
 }
 
 let identityPromise: Promise<ExtensionIdentity> | null = null
+let installIdPromise: Promise<string> | null = null
 const tabSessionScope = (() => {
   const values = new Uint32Array(2)
   crypto.getRandomValues(values)
@@ -79,6 +91,29 @@ const tabSessionScope = (() => {
     .join('')
 })()
 
+async function getInstallId(): Promise<string> {
+  if (installIdPromise) {
+    return installIdPromise
+  }
+
+  installIdPromise = (async () => {
+    const existing = await chrome.storage.local.get('playwriterInstallId')
+    const storedInstallId = typeof existing.playwriterInstallId === 'string' ? existing.playwriterInstallId : ''
+    if (storedInstallId) {
+      return storedInstallId
+    }
+
+    const installId = createInstallId()
+    await chrome.storage.local.set({ playwriterInstallId: installId })
+    return installId
+  })().catch((error) => {
+    installIdPromise = null
+    throw error
+  })
+
+  return installIdPromise
+}
+
 async function getExtensionIdentity(): Promise<ExtensionIdentity> {
   if (identityPromise) {
     return identityPromise
@@ -86,18 +121,25 @@ async function getExtensionIdentity(): Promise<ExtensionIdentity> {
 
   identityPromise = (async () => {
     const browser = await detectBrowserName()
+    const installId = await getInstallId().catch(() => {
+      // Storage can be unavailable briefly during startup. Fall back to the runtime scope so
+      // we still avoid the coarse browser-only key that causes cross-browser relay takeovers.
+      return tabSessionScope
+    })
     try {
       const info = await chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' })
       return {
         browser,
         email: info.email || '',
         id: info.id || '',
+        installId,
       }
     } catch {
       return {
         browser,
         email: '',
         id: '',
+        installId,
       }
     }
   })()
@@ -224,6 +266,9 @@ class ConnectionManager {
     }
     if (identity.id) {
       relayUrl.searchParams.set('id', identity.id)
+    }
+    if (identity.installId) {
+      relayUrl.searchParams.set('installId', identity.installId)
     }
     if (typeof __PLAYWRITER_VERSION__ !== 'undefined') {
       relayUrl.searchParams.set('v', __PLAYWRITER_VERSION__)
@@ -498,8 +543,10 @@ class ConnectionManager {
         continue
       }
 
-      // When another Playwriter extension took over, poll until slot is free.
-      // Slot is free when: no extension connected, OR connected but no active tabs.
+      // When another Playwriter extension took over, poll until no same-key replacement is
+      // connected anymore. Reclaiming while another worker is merely idle is racy: a fresh
+      // replacement reports activeTargets=0 before it re-attaches tabs, so the old worker can
+      // steal the slot back and disconnect the live browser instance.
       if (store.getState().connectionState === 'extension-replaced') {
         try {
           const response = await fetch(`http://${RELAY_HOST}:${RELAY_PORT}/extension/status`, {
@@ -507,7 +554,7 @@ class ConnectionManager {
             signal: AbortSignal.timeout(2000),
           })
           const data = (await response.json()) as { connected: boolean; activeTargets: number }
-          const slotAvailable = !data.connected || data.activeTargets === 0
+          const slotAvailable = !data.connected
           if (slotAvailable) {
             store.setState({ connectionState: 'idle', errorText: undefined })
             logger.debug(
