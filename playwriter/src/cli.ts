@@ -7,13 +7,6 @@ import { fileURLToPath } from 'node:url'
 import { goke } from 'goke'
 import { z } from 'zod'
 import pc from 'picocolors'
-import {
-  getBrowserLaunchArgs,
-  getDefaultBrowserUserDataDir,
-  startBrowserProcess,
-} from './browser-launch.js'
-import { resolveBrowserExecutablePath, shouldUseHeadlessByDefault } from './browser-config.js'
-import { getBundledExtensionPath } from './package-paths.js'
 
 // Prevent Buffers from dumping hex bytes in util.inspect output.
 Buffer.prototype[util.inspect.custom] = function () {
@@ -52,6 +45,14 @@ cli
       }
 
       try {
+        // Avoid loading playwright-core during generic CLI startup/help. This command
+        // is the only path that needs browser discovery and bundled extension launch.
+        const [{ getBrowserLaunchArgs, getDefaultBrowserUserDataDir, startBrowserProcess }, { resolveBrowserExecutablePath, shouldUseHeadlessByDefault }, { getBundledExtensionPath }] = await Promise.all([
+          import('./browser-launch.js'),
+          import('./browser-config.js'),
+          import('./package-paths.js'),
+        ])
+
         await ensureRelayServer({ logger: console, env: cliRelayEnv })
 
         const browserPath = resolveBrowserExecutablePath({ browserPath: binaryPath })

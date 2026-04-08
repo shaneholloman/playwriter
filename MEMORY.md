@@ -168,3 +168,9 @@ e.g. `playwriter -s 1 -e 'await page.goto(url)'`.
 Fix: custom `[Symbol.for('nodejs.util.inspect.custom')]` on ChannelOwner
 prototype + on the channel proxy target. See
 `playwright/packages/playwright-core/src/client/channelOwner.ts`.
+
+## Vendored extract-zip needs get-stream 5 (Apr 2026)
+
+`playwright-core/src/zipBundle.ts` loads a vendored CommonJS `extract-zip.js`
+that still does `require('get-stream')`. Do not bump `playwright-core`
+to `get-stream@9+` unless the vendored unzip code is rewritten or replaced.

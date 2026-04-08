@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.106
+
+1. **Keep `playwriter --help` and `playwriter serve` decoupled from browser launch internals**. The CLI now lazy-loads the browser-start modules only when `playwriter browser start` is actually executed, so generic startup/help paths no longer pull `@xmorse/playwright-core` and fail early on unrelated browser-install dependencies.
+2. **Regression coverage for CLI help startup**. Added a black-box test that runs `playwriter --help` and `playwriter serve --help` through `vite-node` and verifies both commands render successfully.
+
 ## 0.0.105
 
 1. **Stabilize multi-browser extension connections**. The relay now keys fallback extension identities by a persisted per-install ID instead of collapsing every unsigned Chromium-family browser into `browser:Chromium`. This prevents Chrome/Vivaldi/Helium/Dia instances from replacing each other on the relay when `chrome.identity` returns no profile ID/email.
