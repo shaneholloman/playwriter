@@ -10,20 +10,20 @@
 // The function uses window.__playwriterPinCount as a shared MAIN-world counter so the
 // toolbar and the right-click context menu flow never assign conflicting element names.
 
-export function initPlaywriterToolbar(): void {
-  // Typed extension of Window for Playwriter's injected globals.
-  // Declared inside the function body because this function is serialized and injected
-  // into the page — interfaces are TypeScript-only and stripped at compile time.
-  interface PlaywriterWindow extends Window {
+// Augment the global Window interface with Playwriter's injected properties.
+// declare global is module-level and stripped at compile time — not serialized into the func.
+declare global {
+  interface Window {
     __playwriterToolbarInstalled?: boolean
     __playwriterToolbarDestroy?: () => void
     __playwriterPinCount?: number
   }
-  const pw = window as PlaywriterWindow
+}
 
+export function initPlaywriterToolbar(): void {
   // Guard: don't inject twice in the same page context (survives SPA route changes)
-  if (pw.__playwriterToolbarInstalled) return
-  pw.__playwriterToolbarInstalled = true
+  if (window.__playwriterToolbarInstalled) return
+  window.__playwriterToolbarInstalled = true
 
   // Only inject in the top-level frame — never in iframes
   try {
@@ -285,10 +285,10 @@ export function initPlaywriterToolbar(): void {
   function allocatePinName(): string {
     // Sync with the shared MAIN-world counter so right-click and toolbar
     // pins never produce conflicting globalThis.playwriterPinnedElemN names
-    const shared = pw.__playwriterPinCount
+    const shared = window.__playwriterPinCount
     if (typeof shared === 'number' && shared > pinCount) pinCount = shared
     pinCount++
-    pw.__playwriterPinCount = pinCount
+    window.__playwriterPinCount = pinCount
     return `playwriterPinnedElem${pinCount}`
   }
 
@@ -398,12 +398,12 @@ export function initPlaywriterToolbar(): void {
 
   // ── Cleanup hook called by background.ts on tab disconnect ─────────────────
 
-  pw.__playwriterToolbarDestroy = function (): void {
+  window.__playwriterToolbarDestroy = function (): void {
     setPinMode(false)
     removeOverlay()
     host.remove()
-    delete pw.__playwriterToolbarInstalled
-    delete pw.__playwriterToolbarDestroy
-    delete pw.__playwriterPinCount
+    delete window.__playwriterToolbarInstalled
+    delete window.__playwriterToolbarDestroy
+    delete window.__playwriterPinCount
   }
 }
