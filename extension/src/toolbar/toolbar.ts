@@ -17,6 +17,8 @@ declare global {
     __playwriterToolbarInstalled?: boolean
     __playwriterToolbarDestroy?: () => void
     __playwriterPinCount?: number
+    // Template literal index for pinned element globals (playwriterPinnedElem1, etc.)
+    [key: `playwriterPinnedElem${number}`]: Element | undefined
   }
 }
 
@@ -282,7 +284,7 @@ export function initPlaywriterToolbar(): void {
 
   // ── Pin mode: allocate the next reference name ─────────────────────────────
 
-  function allocatePinName(): string {
+  function allocatePinName(): `playwriterPinnedElem${number}` {
     // Sync with the shared MAIN-world counter so right-click and toolbar
     // pins never produce conflicting globalThis.playwriterPinnedElemN names
     const shared = window.__playwriterPinCount
@@ -313,9 +315,7 @@ export function initPlaywriterToolbar(): void {
     if (!target) return
 
     const name = allocatePinName()
-    // Dynamic property — typed as Record<string, Element> since name is always
-    // a 'playwriterPinnedElemN' string and value is always an Element
-    ;(pw as Record<string, Element>)[name] = target
+    window[name] = target
 
     flashElement(target)
 
