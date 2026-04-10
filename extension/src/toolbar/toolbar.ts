@@ -11,9 +11,19 @@
 // toolbar and the right-click context menu flow never assign conflicting element names.
 
 export function initPlaywriterToolbar(): void {
+  // Typed extension of Window for Playwriter's injected globals.
+  // Declared inside the function body because this function is serialized and injected
+  // into the page — interfaces are TypeScript-only and stripped at compile time.
+  interface PlaywriterWindow extends Window {
+    __playwriterToolbarInstalled?: boolean
+    __playwriterToolbarDestroy?: () => void
+    __playwriterPinCount?: number
+  }
+  const pw = window as PlaywriterWindow
+
   // Guard: don't inject twice in the same page context (survives SPA route changes)
-  if ((window as any).__playwriterToolbarInstalled) return
-  ;(window as any).__playwriterToolbarInstalled = true
+  if (pw.__playwriterToolbarInstalled) return
+  pw.__playwriterToolbarInstalled = true
 
   // Only inject in the top-level frame — never in iframes
   try {
@@ -275,10 +285,10 @@ export function initPlaywriterToolbar(): void {
   function allocatePinName(): string {
     // Sync with the shared MAIN-world counter so right-click and toolbar
     // pins never produce conflicting globalThis.playwriterPinnedElemN names
-    const shared = (window as any).__playwriterPinCount
+    const shared = pw.__playwriterPinCount
     if (typeof shared === 'number' && shared > pinCount) pinCount = shared
     pinCount++
-    ;(window as any).__playwriterPinCount = pinCount
+    pw.__playwriterPinCount = pinCount
     return `playwriterPinnedElem${pinCount}`
   }
 
@@ -303,7 +313,9 @@ export function initPlaywriterToolbar(): void {
     if (!target) return
 
     const name = allocatePinName()
-    ;(window as any)[name] = target
+    // Dynamic property — typed as Record<string, Element> since name is always
+    // a 'playwriterPinnedElemN' string and value is always an Element
+    ;(pw as Record<string, Element>)[name] = target
 
     flashElement(target)
 
@@ -386,12 +398,12 @@ export function initPlaywriterToolbar(): void {
 
   // ── Cleanup hook called by background.ts on tab disconnect ─────────────────
 
-  ;(window as any).__playwriterToolbarDestroy = function (): void {
+  pw.__playwriterToolbarDestroy = function (): void {
     setPinMode(false)
     removeOverlay()
     host.remove()
-    delete (window as any).__playwriterToolbarInstalled
-    delete (window as any).__playwriterToolbarDestroy
-    delete (window as any).__playwriterPinCount
+    delete pw.__playwriterToolbarInstalled
+    delete pw.__playwriterToolbarDestroy
+    delete pw.__playwriterPinCount
   }
 }
