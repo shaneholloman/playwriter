@@ -36,6 +36,16 @@ The build process (vite.config.mts) automatically removes this permission when T
 
 Required to detect when one tab opens a new tab/window via `window.open`, `target="_blank"`, or similar navigation-triggered tab creation. The extension listens for `chrome.webNavigation.onCreatedNavigationTarget` to build a `new tab id → source tab id` mapping. When a Chrome popup window is created by a Playwriter-connected tab, the extension uses this mapping to know whether to relocate the popup into the source tab's main window so Playwright automation can control it. No URL or page content is collected — only tab-ID correlations.
 
+### scripting (updated use)
+
+The `scripting` permission was originally added for iframe cleanup before debugger attachment. It is now also used to:
+
+1. **Inject the in-page toolbar** (`initPlaywriterToolbar`) into the MAIN world of every tab the user connects Playwriter to. The toolbar is a closed Shadow DOM element that floats in the top-right corner and provides quick AI-integration tools (e.g. pin-element copy mode).
+2. **Re-inject the toolbar** after page navigations via `chrome.webNavigation.onDOMContentLoaded`.
+3. **Destroy the toolbar** when the user disconnects Playwriter from a tab, so no extension UI is left behind on pages the user is actively browsing.
+
+All injections target only tabs that the user has explicitly connected (clicked the extension icon), and only the top-level frame (`allFrames: false`). No code is injected into tabs the user has not opted in to.
+
 ### host_permissions (<all_urls>)
 
 Required to attach the debugger to tabs on any domain the user chooses to automate. This permission does not allow the extension to modify page content or inject scripts - it only enables CDP debugger attachment for automation. Users need this flexibility to test and automate workflows across all websites.

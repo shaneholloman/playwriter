@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.82
+
+### New Features
+
+- **In-page floating toolbar**: A compact dark pill toolbar is now injected into the top-right corner of every tab that has Playwriter attached. The toolbar uses a closed Shadow DOM so it is completely isolated from page styles. It is removed automatically when the tab disconnects.
+- **Pin element mode**: The clipboard icon button in the toolbar toggles a "pin element" mode. While active, hovering over any element shows a blue highlight overlay. Clicking the element assigns it to `globalThis.playwriterPinnedElemN` and copies the reference string to the clipboard — the same format as the right-click context menu. Press `Esc` to exit pin mode. The `×` button hides the toolbar for the session.
+- **Shared pin counter**: Both the toolbar and the right-click context menu now use `window.__playwriterPinCount` (a MAIN-world counter) to allocate element names, so the two flows never produce conflicting `playwriterPinnedElemN` indices.
+- **Toolbar re-injection on navigation**: The toolbar is automatically re-injected after hard page navigations in connected tabs via `chrome.webNavigation.onDOMContentLoaded`. SPA route changes are handled transparently because the toolbar DOM persists across pushState navigations.
+
 ## 0.0.81
 
 ### Bug Fixes

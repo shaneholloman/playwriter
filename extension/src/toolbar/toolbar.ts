@@ -1,0 +1,397 @@
+// Toolbar injected into the page's MAIN world via chrome.scripting.executeScript({ func }).
+//
+// CRITICAL: This function must be entirely self-contained. It is serialized via
+// Function.prototype.toString() and executed in the page context, so:
+//   - No external imports or module-level variable references allowed inside the body
+//   - All helpers must be defined as inner functions
+//   - All constants (SVGs, CSS) must be defined inside the function body
+//   - TypeScript type annotations are stripped at compile time — they are safe to use
+//
+// The function uses window.__playwriterPinCount as a shared MAIN-world counter so the
+// toolbar and the right-click context menu flow never assign conflicting element names.
+
+export function initPlaywriterToolbar(): void {
+  // Guard: don't inject twice in the same page context (survives SPA route changes)
+  if ((window as any).__playwriterToolbarInstalled) return
+  ;(window as any).__playwriterToolbarInstalled = true
+
+  // Only inject in the top-level frame — never in iframes
+  try {
+    if (window !== window.top) return
+  } catch {
+    // Cross-origin window.top access throws — we're inside a cross-origin iframe, skip
+    return
+  }
+
+  // ── Declare all mutable state up front so inner functions can close over them ──
+
+  let pinModeActive = false
+  let pinCount = 0
+  let toastTimer: number | null = null
+  let overlayEl: HTMLDivElement | null = null
+  // pinBtn is assigned in the DOM-building section below; declared here so
+  // setPinMode (a hoisted function declaration) can reference it safely at call time
+  let pinBtn!: HTMLButtonElement
+
+  // ── Create shadow-DOM host ─────────────────────────────────────────────────
+
+  const host = document.createElement('div')
+  host.setAttribute('data-playwriter-toolbar', '1')
+  // pointer-events:none on the host so the shadow-DOM children (pointer-events:all)
+  // control interactivity without the host element itself blocking page events
+  host.style.cssText =
+    'position:fixed;top:12px;right:12px;z-index:2147483647;pointer-events:none;font-size:0;line-height:0;'
+
+  // Closed shadow root: page scripts cannot access our toolbar DOM
+  const shadow = host.attachShadow({ mode: 'closed' })
+
+  const styleEl = document.createElement('style')
+  // Toolbar styles mirror mesurer's toolbar.tsx:
+  //   - white bg, rounded-[12px], p-1
+  //   - shadow: 0px 0px .5px rgba(0,0,0,.18), 0px 3px 8px rgba(0,0,0,.1), 0px 1px 3px rgba(0,0,0,.1)
+  //   - active button: #0d99ff background, white text
+  //   - inactive hover: bg-black/4 (rgba(0,0,0,0.04))
+  styleEl.textContent = `
+    *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      background: #fff;
+      border-radius: 12px;
+      pointer-events: all;
+      user-select: none;
+      box-shadow: 0px 0px 0.5px rgba(0,0,0,0.18), 0px 3px 8px rgba(0,0,0,0.1), 0px 1px 3px rgba(0,0,0,0.1);
+    }
+    .divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(0, 0, 0, 0.08);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #000;
+      cursor: pointer;
+      transition: background 0.1s;
+      padding: 0;
+      flex-shrink: 0;
+      outline: none;
+    }
+    .btn:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    .btn.active {
+      background: #0d99ff;
+      color: #fff;
+    }
+    .btn.active:hover {
+      background: #0d99ff;
+      filter: brightness(1.05);
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 7px 13px;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      pointer-events: none;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      white-space: nowrap;
+      z-index: 1;
+      animation: fadein 0.15s ease;
+    }
+    @keyframes fadein {
+      from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+  `
+
+  const toolbarEl = document.createElement('div')
+  toolbarEl.className = 'toolbar'
+  toolbarEl.setAttribute('role', 'toolbar')
+  toolbarEl.setAttribute('aria-label', 'Playwriter tools')
+
+  shadow.appendChild(styleEl)
+  shadow.appendChild(toolbarEl)
+
+  // ── Helper: toast notification ─────────────────────────────────────────────
+
+  function showToast(msg: string): void {
+    shadow.querySelectorAll('.toast').forEach((el) => {
+      el.remove()
+    })
+    if (toastTimer !== null) clearTimeout(toastTimer)
+    const toastEl = document.createElement('div')
+    toastEl.className = 'toast'
+    toastEl.textContent = msg
+    shadow.appendChild(toastEl)
+    toastTimer = window.setTimeout(() => {
+      toastEl.remove()
+    }, 1900)
+  }
+
+  // ── Helper: hover overlay (shown under cursor in pin mode) ─────────────────
+  //
+  // Matches mesurer's rendering exactly: four 1px-thin edge divs as the border,
+  // plus a very subtle fill background. Colors from mesurer's measurement-box.tsx:
+  //   outlineColor = color-mix(in oklch, oklch(0.62 0.18 255) 80%, transparent)
+  //   fillColor    = color-mix(in oklch, oklch(0.62 0.18 255) 8%,  transparent)
+  // This is thinner and cleaner than a CSS outline/border.
+
+  function getOverlay(): HTMLDivElement {
+    if (!overlayEl) {
+      const EDGE = 'color-mix(in oklch, oklch(0.62 0.18 255) 80%, transparent)'
+      const FILL = 'color-mix(in oklch, oklch(0.62 0.18 255) 8%, transparent)'
+
+      const container = document.createElement('div')
+      container.setAttribute('data-playwriter-overlay', '1')
+      container.style.cssText = [
+        'position:fixed',
+        'pointer-events:none',
+        'z-index:2147483646',
+        `background:${FILL}`,
+        'display:none',
+      ].join(';')
+
+      // Four 1px edge divs — same technique as mesurer measurement-box
+      const edgeTop = document.createElement('div')
+      edgeTop.style.cssText = `position:absolute;top:0;left:0;width:100%;height:1px;background:${EDGE};`
+
+      const edgeRight = document.createElement('div')
+      edgeRight.style.cssText = `position:absolute;top:0;right:0;width:1px;height:100%;background:${EDGE};`
+
+      const edgeBottom = document.createElement('div')
+      edgeBottom.style.cssText = `position:absolute;bottom:0;left:0;width:100%;height:1px;background:${EDGE};`
+
+      const edgeLeft = document.createElement('div')
+      edgeLeft.style.cssText = `position:absolute;top:0;left:0;width:1px;height:100%;background:${EDGE};`
+
+      container.appendChild(edgeTop)
+      container.appendChild(edgeRight)
+      container.appendChild(edgeBottom)
+      container.appendChild(edgeLeft)
+
+      document.documentElement.appendChild(container)
+      overlayEl = container
+    }
+    return overlayEl
+  }
+
+  function positionOverlay(target: Element): void {
+    const rect = target.getBoundingClientRect()
+    if (!rect.width && !rect.height) return
+    const overlay = getOverlay()
+    overlay.style.display = 'block'
+    overlay.style.top = rect.top + 'px'
+    overlay.style.left = rect.left + 'px'
+    overlay.style.width = rect.width + 'px'
+    overlay.style.height = rect.height + 'px'
+  }
+
+  function hideOverlay(): void {
+    if (overlayEl) overlayEl.style.display = 'none'
+  }
+
+  function removeOverlay(): void {
+    if (overlayEl) {
+      overlayEl.remove()
+      overlayEl = null
+    }
+  }
+
+  // ── Helper: find element at point, skipping our own injected DOM ───────────
+
+  function getTargetAt(x: number, y: number): Element | null {
+    // pointer-events:none elements are excluded from elementsFromPoint per spec,
+    // so the overlay is already filtered. We still skip our toolbar host explicitly.
+    const els = document.elementsFromPoint(x, y)
+    return (
+      els.find(
+        (el) =>
+          !el.hasAttribute('data-playwriter-overlay') &&
+          !el.hasAttribute('data-playwriter-toolbar') &&
+          el !== document.documentElement &&
+          el !== document.body,
+      ) ?? null
+    )
+  }
+
+  // composedPath with a closed shadow root still includes the host element,
+  // so this correctly detects clicks/moves that land on our toolbar
+  function isOverToolbar(e: MouseEvent): boolean {
+    return e.composedPath().some((node) => node === host)
+  }
+
+  // ── Helper: flash green outline on a pinned element ────────────────────────
+
+  function flashElement(el: Element): void {
+    const s = (el as HTMLElement).style
+    if (!s) return
+    const prevOutline = s.outline
+    const prevOffset = s.outlineOffset
+    s.outline = '3px solid #22c55e'
+    s.outlineOffset = '2px'
+    window.setTimeout(() => {
+      s.outline = prevOutline
+      s.outlineOffset = prevOffset
+    }, 350)
+  }
+
+  // ── Helper: copy text to clipboard with execCommand fallback ───────────────
+
+  function copyText(text: string): void {
+    navigator.clipboard.writeText(text).catch(() => {
+      // Fallback for pages where the Clipboard API is blocked by Permissions-Policy
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;'
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+      } catch {}
+    })
+  }
+
+  // ── Pin mode: allocate the next reference name ─────────────────────────────
+
+  function allocatePinName(): string {
+    // Sync with the shared MAIN-world counter so right-click and toolbar
+    // pins never produce conflicting globalThis.playwriterPinnedElemN names
+    const shared = (window as any).__playwriterPinCount
+    if (typeof shared === 'number' && shared > pinCount) pinCount = shared
+    pinCount++
+    ;(window as any).__playwriterPinCount = pinCount
+    return `playwriterPinnedElem${pinCount}`
+  }
+
+  // ── Pin mode event handlers ────────────────────────────────────────────────
+
+  function onMouseMove(e: MouseEvent): void {
+    if (isOverToolbar(e)) {
+      hideOverlay()
+      return
+    }
+    const target = getTargetAt(e.clientX, e.clientY)
+    if (target) positionOverlay(target)
+    else hideOverlay()
+  }
+
+  function onClick(e: MouseEvent): void {
+    if (isOverToolbar(e)) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+
+    const target = getTargetAt(e.clientX, e.clientY)
+    if (!target) return
+
+    const name = allocatePinName()
+    ;(window as any)[name] = target
+
+    flashElement(target)
+
+    const ref = `globalThis.${name}`
+    copyText(ref)
+    showToast(`Copied: ${ref}`)
+  }
+
+  function onKeyDown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') setPinMode(false)
+  }
+
+  // ── Pin mode toggle ────────────────────────────────────────────────────────
+
+  function setPinMode(on: boolean): void {
+    pinModeActive = on
+    // pinBtn is declared above and assigned below; safe to reference here
+    // because setPinMode is only called from event listeners that fire after
+    // all setup code has run
+    pinBtn.classList.toggle('active', on)
+
+    if (on) {
+      document.documentElement.style.cursor = 'crosshair'
+      getOverlay() // ensure overlay element exists in DOM
+      document.addEventListener('mousemove', onMouseMove, { capture: true, passive: true })
+      document.addEventListener('click', onClick, true)
+      document.addEventListener('keydown', onKeyDown, true)
+    } else {
+      document.documentElement.style.cursor = ''
+      hideOverlay()
+      document.removeEventListener('mousemove', onMouseMove, true)
+      document.removeEventListener('click', onClick, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }
+
+  // ── SVG icon strings (defined inside function — required for func injection) ─
+
+  // Lucide clipboard icon
+  const CLIPBOARD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>`
+
+  // Lucide x icon
+  const CLOSE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+
+  // ── Build toolbar buttons ──────────────────────────────────────────────────
+
+  // Clipboard / pin element button
+  pinBtn = document.createElement('button')
+  pinBtn.className = 'btn'
+  pinBtn.setAttribute('aria-label', 'Pin element — click any element to copy its Playwriter reference')
+  pinBtn.setAttribute('title', 'Pin element (click to copy reference)')
+  pinBtn.innerHTML = CLIPBOARD_SVG
+  pinBtn.addEventListener('click', (e: MouseEvent) => {
+    e.stopPropagation()
+    setPinMode(!pinModeActive)
+  })
+
+  const dividerEl = document.createElement('div')
+  dividerEl.className = 'divider'
+  dividerEl.setAttribute('aria-hidden', 'true')
+
+  // Close button
+  const closeBtn = document.createElement('button')
+  closeBtn.className = 'btn'
+  closeBtn.setAttribute('aria-label', 'Close Playwriter toolbar')
+  closeBtn.setAttribute('title', 'Close toolbar')
+  closeBtn.innerHTML = CLOSE_SVG
+  closeBtn.addEventListener('click', (e: MouseEvent) => {
+    e.stopPropagation()
+    setPinMode(false)
+    host.style.display = 'none'
+  })
+
+  toolbarEl.appendChild(pinBtn)
+  toolbarEl.appendChild(dividerEl)
+  toolbarEl.appendChild(closeBtn)
+
+  // Attach host to the document (appended to <html> so it survives body rewrites)
+  document.documentElement.appendChild(host)
+
+  // ── Cleanup hook called by background.ts on tab disconnect ─────────────────
+
+  ;(window as any).__playwriterToolbarDestroy = function (): void {
+    setPinMode(false)
+    removeOverlay()
+    host.remove()
+    delete (window as any).__playwriterToolbarInstalled
+    delete (window as any).__playwriterToolbarDestroy
+    delete (window as any).__playwriterPinCount
+  }
+}

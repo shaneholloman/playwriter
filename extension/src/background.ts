@@ -8,6 +8,7 @@ declare const __PLAYWRITER_OPEN_WELCOME_PAGE__: boolean
 
 import { createStore } from 'zustand/vanilla'
 import type { ExtensionState, ConnectionState, TabState, TabInfo } from './types'
+import { initPlaywriterToolbar } from './toolbar/toolbar'
 import type { CDPEvent, Protocol } from 'playwriter/src/cdp-types'
 import type { ExtensionCommandMessage, ExtensionResponseMessage } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
@@ -1317,6 +1318,19 @@ async function attachTab(
       'skipAttachedEvent:',
       skipAttachedEvent,
     )
+
+    // Inject the in-page toolbar into the MAIN world (best-effort: silently
+    // fails on restricted pages like chrome:// or about:blank)
+    chrome.scripting
+      .executeScript({
+        target: { tabId, allFrames: false },
+        world: 'MAIN',
+        func: initPlaywriterToolbar,
+      })
+      .catch((err: Error) => {
+        logger.debug('Could not inject toolbar (restricted page):', err.message)
+      })
+
     return { targetInfo, sessionId }
   } catch (error) {
     // Clean up debugger if we attached but failed later
@@ -1337,6 +1351,17 @@ function detachTab(tabId: number, shouldDetachDebugger: boolean): void {
 
   // Clean up any active recording for this tab
   cleanupRecordingForTab(tabId)
+
+  // Destroy the in-page toolbar (best-effort: tab may already be closing or navigating)
+  void chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        ;(window as any).__playwriterToolbarDestroy?.()
+      },
+    })
+    .catch(() => {})
 
   logger.warn(`DISCONNECT: detachTab tabId=${tabId} shouldDetach=${shouldDetachDebugger} stack=${getCallStack()}`)
 
@@ -1942,18 +1967,6 @@ chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
   }
 
   const debuggee = { tabId: tab.id }
-  const count = (tabInfo.pinnedCount || 0) + 1
-
-  store.setState((state) => {
-    const newTabs = new Map(state.tabs)
-    const existing = newTabs.get(tab.id!)
-    if (existing) {
-      newTabs.set(tab.id!, { ...existing, pinnedCount: count })
-    }
-    return { tabs: newTabs }
-  })
-
-  const name = `playwriterPinnedElem${count}`
 
   const connectedTabs = Array.from(store.getState().tabs.entries())
     .filter(([_, t]) => t.state === 'connected')
@@ -1962,6 +1975,22 @@ chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
   const hasMultiplePages = connectedTabs.length > 1
 
   try {
+    // Allocate the next pin name by reading and incrementing the shared MAIN-world
+    // counter (window.__playwriterPinCount). This ensures right-click and toolbar
+    // pins never produce conflicting globalThis.playwriterPinnedElemN names.
+    const counterResult = (await chrome.debugger.sendCommand(debuggee, 'Runtime.evaluate', {
+      expression: `
+        (function() {
+          window.__playwriterPinCount = (window.__playwriterPinCount || 0) + 1;
+          return window.__playwriterPinCount;
+        })()
+      `,
+      returnByValue: true,
+    })) as { result?: { value?: number }; exceptionDetails?: { text: string } }
+
+    const count = counterResult.result?.value ?? 1
+    const name = `playwriterPinnedElem${count}`
+
     const result = (await chrome.debugger.sendCommand(debuggee, 'Runtime.evaluate', {
       expression: `
         if (window.__playwriter_lastRightClicked) {
@@ -2057,4 +2086,28 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
   }
 
   return false
+})
+
+// Re-inject the toolbar after hard navigations in connected tabs.
+// The MAIN-world script is destroyed on every full page load, so we re-run
+// initPlaywriterToolbar once the new document's DOM is ready.
+// onDOMContentLoaded is used instead of onCommitted because executeScript
+// with world:'MAIN' needs the document to exist before injecting.
+// Note: SPA route changes (pushState/replaceState) don't trigger this because
+// the document is not reset — the toolbar DOM persists across SPA navigations.
+chrome.webNavigation.onDOMContentLoaded.addListener((details) => {
+  if (details.frameId !== 0) return // top frame only
+  const { tabs } = store.getState()
+  const tabInfo = tabs.get(details.tabId)
+  if (!tabInfo || tabInfo.state !== 'connected') return
+
+  chrome.scripting
+    .executeScript({
+      target: { tabId: details.tabId, allFrames: false },
+      world: 'MAIN',
+      func: initPlaywriterToolbar,
+    })
+    .catch((err: Error) => {
+      logger.debug('Could not re-inject toolbar after navigation:', err.message)
+    })
 })
