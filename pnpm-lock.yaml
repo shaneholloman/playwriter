@@ -412,8 +412,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1
       goke:
-        specifier: ^6.5.2
-        version: 6.5.2
+        specifier: ^6.6.0
+        version: 6.6.0
       hono:
         specifier: ^4.10.6
         version: 4.10.6
@@ -3584,8 +3584,8 @@ packages:
   globrex@0.1.2:
     resolution: {integrity: sha512-uHJgbwAMwNFf5mLst7IWLNg14x1CkeqglJb/K3doi4dw6q2IvAAmM/Y81kevy83wP+Sst+nutFTYOGg3d1lsxg==}
 
-  goke@6.5.2:
-    resolution: {integrity: sha512-AJKTaBwSj9D9cAVQZOeMBG37Qf5YbCd37dHRUFecSHYYIAPlb8RHGGw7MiLD2aZS2d37gq0zD+B1nfe7xvB7xg==}
+  goke@6.6.0:
+    resolution: {integrity: sha512-4kwY8DG/9D5hfmAEsXvclYQvpkBTkvx7kbAkGGWA8IoIwi1+SjHGdtb0rW5fB4f6SNMVvc7YoCjOpl1UOxWszg==}
     engines: {node: '>=18'}
 
   google-auth-library@10.5.0:
@@ -9652,7 +9652,7 @@ snapshots:
 
   globrex@0.1.2: {}
 
-  goke@6.5.2: {}
+  goke@6.6.0: {}
 
   google-auth-library@10.5.0:
     dependencies:

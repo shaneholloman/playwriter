@@ -325,7 +325,11 @@ cli
   .option('--direct [endpoint]', 'Use direct CDP connection without the extension. Enable debugging first at chrome://inspect/#remote-debugging or launch Chrome with --remote-debugging-port=9222. Auto-discovers instances or accepts an explicit ws:// endpoint')
   .action(async (options) => {
     const isLocal = !options.host && !process.env.PLAYWRITER_HOST
-    const directEndpoint = typeof options.direct === 'string' ? options.direct : null
+    // goke 6.6: optional-value flags are string | undefined
+    //   `--direct ws://...` → 'ws://...' (explicit endpoint)
+    //   `--direct`          → ''          (bare flag, auto-discover)
+    //   (omitted)           → undefined   (don't use direct CDP)
+    const directEndpoint = options.direct || null
 
     // If --direct with explicit endpoint, resolve it (handles host:port → ws://) then skip discovery
     if (directEndpoint) {
@@ -345,7 +349,7 @@ cli
     }
 
     // If --direct with no endpoint, discover Chrome instances
-    if (options.direct === true) {
+    if (options.direct === '') {
       if (!isLocal) {
         console.error('Error: --direct auto-discovery only works locally.')
         console.error('For remote relay, pass an explicit endpoint reachable from the relay host:')
