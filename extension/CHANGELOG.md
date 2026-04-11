@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.83
+
+### Changes
+
+- **Toolbar pin-click now copies a full `playwriter -s <id> -e '…'` command** instead of a plain `globalThis.playwriterPinnedElemN` reference. When the agent pastes the command, it prints the pinned element's URL, metadata (tag, id, class, role, aria-label, href, type, text, bounding rect, visibility), and the current `outerHTML` of the element — all in one shot. The generated JS is deliberately tiny: two `;`-separated statements that pick the right page by URL, assign `state.page`, and `console.log` a pre-baked summary plus a live `page.evaluate(n => globalThis["playwriterPinnedElem" + n]?.outerHTML)` call. No Playwright sandbox helpers (`getCleanHTML`, `getLocatorStringForElement`) required, so the command always runs regardless of playwriter version.
+- **Element metadata pre-baked at pin time**: the toolbar runs synchronously in MAIN world and already has full DOM access, so it captures tag/id/class/role/aria/text/rect at click time and bakes the result as a string literal in the clipboard command via `JSON.stringify`. Eval time only fetches the current `outerHTML` — everything else is instant.
+- **`ToolbarConfig` passed at inject time**: the service worker now fetches `/extension/sessions` from the relay (new public endpoint) right before injecting the toolbar, and passes the result as `chrome.scripting.executeScript({ args })`. The toolbar caches the session list in a closure so pin-click builds the command without any runtime network calls. The session id is picked as `firstExistingId ?? nextSuggested ?? '1'`, keeping the agent in their current session when one exists.
+- **Toolbar tolerates a missing or old relay**: `fetchSessionSummary` returns a safe `{ sessions: [], nextSuggested: '1' }` fallback on fetch error, timeout, non-OK response, or malformed JSON. The extension stays backward-compatible with older relays that don't know about `/extension/sessions`.
+- **Re-inject on navigation refreshes cached sessions**: `webNavigation.onDOMContentLoaded` re-injection also re-fetches sessions and routes them through `window.__playwriterUpdateSessions`, so the guarded re-init path picks up new session ids without tearing down and rebuilding the toolbar DOM.
+
 ## 0.0.82
 
 ### New Features

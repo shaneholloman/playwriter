@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.107
+
+1. **New public relay endpoint `GET /extension/sessions`** returns the active CLI session list as `{ sessions: [{ id, stateKeys }], nextSuggested }`. Used by the extension service worker to pass session ids into the injected toolbar so pin-click can build a full `playwriter -s <id> -e '…'` command. Sits outside the `/cli/*` privileged middleware (which rejects cross-site `Sec-Fetch-Site`, blocking chrome-extension fetches to localhost). Read-only, already equivalent to what `playwriter session list` exposes, so there's no new attack surface.
+
 ## 0.0.106
 
 1. **Keep `playwriter --help` and `playwriter serve` decoupled from browser launch internals**. The CLI now lazy-loads the browser-start modules only when `playwriter browser start` is actually executed, so generic startup/help paths no longer pull `@xmorse/playwright-core` and fail early on unrelated browser-install dependencies.

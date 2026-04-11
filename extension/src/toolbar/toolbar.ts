@@ -1,49 +1,62 @@
 // Toolbar injected into the page's MAIN world via chrome.scripting.executeScript({ func }).
 //
-// CRITICAL: This function must be entirely self-contained. It is serialized via
-// Function.prototype.toString() and executed in the page context, so:
-//   - No external imports or module-level variable references allowed inside the body
-//   - All helpers must be defined as inner functions
-//   - All constants (SVGs, CSS) must be defined inside the function body
-//   - TypeScript type annotations are stripped at compile time — they are safe to use
+// CRITICAL: entirely self-contained. The function is serialized via
+// Function.prototype.toString(), so no external imports, no module-level refs,
+// all helpers as inner functions, all constants defined inline. TS type
+// annotations are stripped at compile time — safe to use.
 //
-// The function uses window.__playwriterPinCount as a shared MAIN-world counter so the
-// toolbar and the right-click context menu flow never assign conflicting element names.
+// window.__playwriterPinCount is a shared MAIN-world counter so toolbar pins
+// and right-click menu pins never collide on globalThis.playwriterPinnedElemN.
+//
+// `config` carries the CLI session summary fetched by the service worker from
+// /extension/sessions. Cached in closure so pin-click builds the shell command
+// without network. Re-injects route updates through window.__playwriterUpdateSessions.
 
-// Augment the global Window interface with Playwriter's injected properties.
-// declare global is module-level and stripped at compile time — not serialized into the func.
+export interface ToolbarConfig {
+  sessions: Array<{ id: string; stateKeys: string[] }>
+  nextSuggested: string
+}
+
 declare global {
   interface Window {
     __playwriterToolbarInstalled?: boolean
     __playwriterToolbarDestroy?: () => void
+    __playwriterUpdateSessions?: (config: ToolbarConfig) => void
     __playwriterPinCount?: number
     // Template literal index for pinned element globals (playwriterPinnedElem1, etc.)
     [key: `playwriterPinnedElem${number}`]: Element | undefined
   }
 }
 
-export function initPlaywriterToolbar(): void {
-  // Guard: don't inject twice in the same page context (survives SPA route changes)
-  if (window.__playwriterToolbarInstalled) return
+export function initPlaywriterToolbar(config?: ToolbarConfig): void {
+  // Guarded re-init: refresh session closure without rebuilding the toolbar.
+  if (window.__playwriterToolbarInstalled) {
+    if (config) window.__playwriterUpdateSessions?.(config)
+    return
+  }
   window.__playwriterToolbarInstalled = true
 
-  // Only inject in the top-level frame — never in iframes
+  // Top-level frame only — skip iframes (cross-origin access throws).
   try {
     if (window !== window.top) return
   } catch {
-    // Cross-origin window.top access throws — we're inside a cross-origin iframe, skip
     return
   }
-
-  // ── Declare all mutable state up front so inner functions can close over them ──
 
   let pinModeActive = false
   let pinCount = 0
   let toastTimer: number | null = null
   let overlayEl: HTMLDivElement | null = null
-  // pinBtn is assigned in the DOM-building section below; declared here so
-  // setPinMode (a hoisted function declaration) can reference it safely at call time
+  // Declared here so the hoisted setPinMode can reference it before assignment.
   let pinBtn!: HTMLButtonElement
+
+  let currentSessions: ToolbarConfig['sessions'] = config?.sessions ?? []
+  let nextSuggested: string = config?.nextSuggested ?? '1'
+
+  window.__playwriterUpdateSessions = (next: ToolbarConfig): void => {
+    currentSessions = Array.isArray(next?.sessions) ? next.sessions : []
+    nextSuggested = typeof next?.nextSuggested === 'string' ? next.nextSuggested : '1'
+  }
 
   // ── Create shadow-DOM host ─────────────────────────────────────────────────
 
@@ -309,6 +322,67 @@ export function initPlaywriterToolbar(): void {
     else hideOverlay()
   }
 
+  // Prefer an existing session so the agent stays in its current state;
+  // fall back to nextSuggested (typically "1") so the command is structurally valid.
+  function pickSessionId(): string {
+    if (currentSessions.length > 0 && currentSessions[0]?.id) {
+      return currentSessions[0].id
+    }
+    return nextSuggested || '1'
+  }
+
+  // POSIX-safe single-quote wrapping: close, escape, reopen.
+  function shellSingleQuote(s: string): string {
+    return `'${s.replace(/'/g, `'\\''`)}'`
+  }
+
+  // Synchronous DOM snapshot for the clipboard summary. Baked into the eval
+  // code via JSON.stringify so pin-click is free of any async/CDP work.
+  function describeElement(el: Element, n: number): string {
+    const tag = el.tagName ? el.tagName.toLowerCase() : ''
+    const id = el.id || ''
+    const cls = typeof (el as HTMLElement).className === 'string' ? (el as HTMLElement).className : ''
+    const role = el.getAttribute('role') || ''
+    const aria = el.getAttribute('aria-label') || ''
+    const nameAttr = el.getAttribute('name') || ''
+    const href = el.getAttribute('href') || ''
+    const typeAttr = el.getAttribute('type') || ''
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300)
+    const r = el.getBoundingClientRect()
+    const rect = `x=${Math.round(r.x)} y=${Math.round(r.y)} w=${Math.round(r.width)} h=${Math.round(r.height)}`
+    const visible = r.width > 0 && r.height > 0
+    const lines: Array<string | false> = [
+      `Pinned #${n} (globalThis.playwriterPinnedElem${n})`,
+      `URL: ${location.href}`,
+      `Tag: ${tag}`,
+      !!id && `ID: ${id}`,
+      !!cls && `Classes: ${cls.slice(0, 200)}`,
+      !!role && `Role: ${role}`,
+      !!aria && `Aria-label: ${aria}`,
+      !!nameAttr && `Name: ${nameAttr}`,
+      !!href && `Href: ${href.slice(0, 200)}`,
+      !!typeAttr && `Type: ${typeAttr}`,
+      !!text && `Text: ${text}`,
+      `Rect: ${rect}`,
+      `Visible: ${visible}`,
+    ]
+    return lines.filter((line): line is string => typeof line === 'string').join('\n')
+  }
+
+  // Two ;-separated statements: pick the page by URL with first-page fallback,
+  // then log the pre-baked summary + live outerHTML of globalThis.playwriterPinnedElem<N>.
+  // JSON.stringify'd literals never emit single quotes, so the whole thing
+  // wraps safely in bash single quotes.
+  function buildInspectionCode(n: number, url: string, summary: string): string {
+    const URL_LIT = JSON.stringify(url)
+    const SUMMARY_LIT = JSON.stringify(summary)
+    return (
+      `state.page=context.pages().find(x=>x.url()===${URL_LIT})||context.pages()[0]; ` +
+      `console.log(${SUMMARY_LIT}+"\\n\\nouterHTML:\\n"+` +
+      `await state.page.evaluate(n=>globalThis["playwriterPinnedElem"+n]?.outerHTML,${n}))`
+    )
+  }
+
   function onClick(e: MouseEvent): void {
     if (isOverToolbar(e)) return
     e.preventDefault()
@@ -318,15 +392,18 @@ export function initPlaywriterToolbar(): void {
     if (!target) return
 
     const name = allocatePinName()
+    const n = pinCount
     window[name] = target
 
     flashElement(target)
 
-    const ref = `globalThis.${name}`
-    // Prefix tells both the user and any AI agent what this string is for
-    const clipboardText = `see playwriter reference: ${ref}`
-    copyText(clipboardText)
-    showToast(`Copied: ${ref}`)
+    const url = location.href
+    const summary = describeElement(target, n)
+    const sessionId = pickSessionId()
+    const code = buildInspectionCode(n, url, summary)
+    const shellCommand = `playwriter -s ${sessionId} -e ${shellSingleQuote(code)}`
+    copyText(shellCommand)
+    showToast(`Copied: playwriter -s ${sessionId} -e '…' (pin #${n})`)
     setPinMode(false)
   }
 
@@ -371,8 +448,11 @@ export function initPlaywriterToolbar(): void {
   // Clipboard / pin element button
   pinBtn = document.createElement('button')
   pinBtn.className = 'btn'
-  pinBtn.setAttribute('aria-label', 'Pin element — click any element to copy its Playwriter reference')
-  pinBtn.setAttribute('title', 'Pin element (click to copy reference)')
+  pinBtn.setAttribute(
+    'aria-label',
+    'Pin element — click any element to copy a playwriter CLI command that inspects it',
+  )
+  pinBtn.setAttribute('title', 'Pin element (click to copy playwriter -s … -e inspection command)')
   pinBtn.innerHTML = CLIPBOARD_SVG
   pinBtn.addEventListener('click', (e: MouseEvent) => {
     e.stopPropagation()
@@ -410,6 +490,7 @@ export function initPlaywriterToolbar(): void {
     host.remove()
     delete window.__playwriterToolbarInstalled
     delete window.__playwriterToolbarDestroy
+    delete window.__playwriterUpdateSessions
     delete window.__playwriterPinCount
   }
 }

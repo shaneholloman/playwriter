@@ -8,7 +8,7 @@ declare const __PLAYWRITER_OPEN_WELCOME_PAGE__: boolean
 
 import { createStore } from 'zustand/vanilla'
 import type { ExtensionState, ConnectionState, TabState, TabInfo } from './types'
-import { initPlaywriterToolbar } from './toolbar/toolbar'
+import { initPlaywriterToolbar, type ToolbarConfig } from './toolbar/toolbar'
 import type { CDPEvent, Protocol } from 'playwriter/src/cdp-types'
 import type { ExtensionCommandMessage, ExtensionResponseMessage } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
@@ -39,6 +39,26 @@ type ExtensionIdentity = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// CLI session list for the in-page toolbar. Safe fallback on any failure
+// (relay down, old relay without this endpoint, timeout, malformed JSON)
+// so the toolbar still copies a valid `playwriter -s 1 -e '…'` command.
+async function fetchSessionSummary(): Promise<ToolbarConfig> {
+  try {
+    const response = await fetch(`http://${RELAY_HOST}:${RELAY_PORT}/extension/sessions`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(1500),
+    })
+    if (!response.ok) return { sessions: [], nextSuggested: '1' }
+    const data = (await response.json()) as ToolbarConfig
+    return {
+      sessions: Array.isArray(data?.sessions) ? data.sessions : [],
+      nextSuggested: typeof data?.nextSuggested === 'string' ? data.nextSuggested : '1',
+    }
+  } catch {
+    return { sessions: [], nextSuggested: '1' }
+  }
 }
 
 function createInstallId(): string {
@@ -1319,17 +1339,22 @@ async function attachTab(
       skipAttachedEvent,
     )
 
-    // Inject the in-page toolbar into the MAIN world (best-effort: silently
-    // fails on restricted pages like chrome:// or about:blank)
-    chrome.scripting
-      .executeScript({
-        target: { tabId, allFrames: false },
-        world: 'MAIN',
-        func: initPlaywriterToolbar,
-      })
-      .catch((err: Error) => {
-        logger.debug('Could not inject toolbar (restricted page):', err.message)
-      })
+    // Inject the toolbar into MAIN world (best-effort: fails silently on
+    // restricted pages). Passes the current session summary so pin-click
+    // can build the `playwriter -s <id> -e '…'` command offline.
+    void (async () => {
+      const summary = await fetchSessionSummary()
+      chrome.scripting
+        .executeScript({
+          target: { tabId, allFrames: false },
+          world: 'MAIN',
+          func: initPlaywriterToolbar,
+          args: [summary],
+        })
+        .catch((err: Error) => {
+          logger.debug('Could not inject toolbar (restricted page):', err.message)
+        })
+    })()
 
     return { targetInfo, sessionId }
   } catch (error) {
@@ -2101,13 +2126,18 @@ chrome.webNavigation.onDOMContentLoaded.addListener((details) => {
   const tabInfo = tabs.get(details.tabId)
   if (!tabInfo || tabInfo.state !== 'connected') return
 
-  chrome.scripting
-    .executeScript({
-      target: { tabId: details.tabId, allFrames: false },
-      world: 'MAIN',
-      func: initPlaywriterToolbar,
-    })
-    .catch((err: Error) => {
-      logger.debug('Could not re-inject toolbar after navigation:', err.message)
-    })
+  // Re-fetch sessions so re-injected toolbars see fresh ids.
+  void (async () => {
+    const summary = await fetchSessionSummary()
+    chrome.scripting
+      .executeScript({
+        target: { tabId: details.tabId, allFrames: false },
+        world: 'MAIN',
+        func: initPlaywriterToolbar,
+        args: [summary],
+      })
+      .catch((err: Error) => {
+        logger.debug('Could not re-inject toolbar after navigation:', err.message)
+      })
+  })()
 })

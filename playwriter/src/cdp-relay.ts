@@ -886,6 +886,20 @@ export async function startPlayWriterCDPRelayServer({
     })
   })
 
+  // Public: session list for the in-page toolbar. Lives outside /cli/*
+  // because that middleware rejects the cross-site Sec-Fetch-Site sent by
+  // chrome-extension fetches to 127.0.0.1. Read-only, same data as `session list`.
+  app.get('/extension/sessions', async (c) => {
+    try {
+      const manager = await getExecutorManager()
+      const sessions = manager.listSessions().map((s) => ({ id: s.id, stateKeys: s.stateKeys }))
+      return c.json({ sessions, nextSuggested: String(nextSessionNumber) })
+    } catch (e: any) {
+      logger?.error('Error listing sessions for /extension/sessions:', e)
+      return c.json({ sessions: [], nextSuggested: String(nextSessionNumber) })
+    }
+  })
+
   app.get('/extensions/status', (c) => {
     const extensions = Array.from(store.getState().extensions.values()).map((ext) => {
       return {
