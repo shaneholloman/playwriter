@@ -68,29 +68,29 @@ export function initPlaywriterToolbar(): void {
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 4px;
+      gap: 2px;
+      padding: 3px;
       background: #fff;
-      border-radius: 12px;
+      border-radius: 10px;
       pointer-events: all;
       user-select: none;
       box-shadow: 0px 0px 0.5px rgba(0,0,0,0.18), 0px 3px 8px rgba(0,0,0,0.1), 0px 1px 3px rgba(0,0,0,0.1);
     }
     .divider {
       width: 1px;
-      height: 16px;
+      height: 12px;
       background: rgba(0, 0, 0, 0.08);
-      margin: 0 2px;
+      margin: 0 1px;
       flex-shrink: 0;
     }
     .btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
+      width: 26px;
+      height: 26px;
       border: none;
-      border-radius: 8px;
+      border-radius: 7px;
       background: transparent;
       color: #000;
       cursor: pointer;
