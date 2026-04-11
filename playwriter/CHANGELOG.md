@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.108
+
+1. **Remove `GET /extension/sessions`** added in 0.0.107. The extension's in-page toolbar no longer plumbs a session id into the copied clipboard payload — it copies raw JS eval code that the agent wraps in their own `playwriter -s <session> -e '…'` call, so the relay no longer needs to expose the session list to chrome-extension fetches.
+
 ## 0.0.107
 
 1. **New public relay endpoint `GET /extension/sessions`** returns the active CLI session list as `{ sessions: [{ id, stateKeys }], nextSuggested }`. Used by the extension service worker to pass session ids into the injected toolbar so pin-click can build a full `playwriter -s <id> -e '…'` command. Sits outside the `/cli/*` privileged middleware (which rejects cross-site `Sec-Fetch-Site`, blocking chrome-extension fetches to localhost). Read-only, already equivalent to what `playwriter session list` exposes, so there's no new attack surface.

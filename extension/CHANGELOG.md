@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.84
+
+### Changes
+
+- **Drop session-id plumbing from the pin-click clipboard**. The toolbar now copies only the raw JS eval code (the two `;`-separated statements that pick the page by URL and log the pre-baked summary + live `outerHTML`). The agent wraps it in their own `playwriter -s <session> -e '<paste>'` call, using whichever session they already have or creating a new one. Removes `fetchSessionSummary`, `ToolbarConfig`, `__playwriterUpdateSessions`, `pickSessionId`, and `shellSingleQuote` — along with all the per-inject relay fetches. Toolbar state shrinks back to just `pinModeActive`/`pinCount`/`toastTimer`/`overlayEl`.
+
 ## 0.0.83
 
 ### Changes
