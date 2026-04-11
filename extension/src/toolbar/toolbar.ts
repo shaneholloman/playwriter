@@ -335,11 +335,15 @@ export function initPlaywriterToolbar(): void {
 
   // Two ;-separated statements: pick the page by URL with first-page fallback,
   // then log the pre-baked summary + live outerHTML of globalThis.playwriterPinnedElem<N>.
-  // JSON.stringify'd literals never emit single quotes, so the whole thing
-  // wraps safely in bash single quotes.
+  //
+  // JSON.stringify does NOT escape literal ' characters, so "Don't save"
+  // stays "Don't save" in the output. That would break the outer bash '…'
+  // wrapper. Replace ' with \u0027 — valid JSON, parses back to ' in the
+  // JS engine — so the whole code is single-quote-free and slots safely
+  // into the bash 'playwriter -e …' wrapper regardless of element text.
   function buildInspectionCode(n: number, url: string, summary: string): string {
-    const URL_LIT = JSON.stringify(url)
-    const SUMMARY_LIT = JSON.stringify(summary)
+    const URL_LIT = JSON.stringify(url).replace(/'/g, '\\u0027')
+    const SUMMARY_LIT = JSON.stringify(summary).replace(/'/g, '\\u0027')
     return (
       `state.page=context.pages().find(x=>x.url()===${URL_LIT})||context.pages()[0]; ` +
       `console.log(${SUMMARY_LIT}+"\\n\\nouterHTML:\\n"+` +
@@ -361,15 +365,17 @@ export function initPlaywriterToolbar(): void {
 
     flashElement(target)
 
-    // Copy the raw JS eval code — the agent wraps it in their own
-    // `playwriter -s <session> -e '<paste>'` call. JSON.stringify'd literals
-    // inside the code contain no single quotes so it slots into single or
-    // double quotes without further escaping.
+    // Copy a natural-language prompt the agent can read: "see the element I
+    // pinned in the playwriter tab `playwriter -e '<code>'`". The agent reads
+    // this, adds their own `-s <session>` (or uses PLAYWRITER_SESSION), and
+    // runs it. `code` is JSON.stringify'd so it never contains single quotes
+    // and slots cleanly into the '…' wrapper.
     const url = location.href
     const summary = describeElement(target, n)
     const code = buildInspectionCode(n, url, summary)
-    copyText(code)
-    showToast(`Copied inspection code (pin #${n})`)
+    const clipboardText = "see the element I pinned in the playwriter tab `playwriter -e '" + code + "'`"
+    copyText(clipboardText)
+    showToast(`Copied pin #${n}`)
     setPinMode(false)
   }
 

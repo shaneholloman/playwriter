@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.85
+
+### Changes
+
+- **Clipboard is now a natural-language prompt wrapping the `playwriter -e` command**. Pin-click copies `` see the element I pinned in the playwriter tab `playwriter -e '<code>'` `` instead of just the raw JS snippet. The agent reads this as a prompt, adds its own `-s <session>` (or relies on `PLAYWRITER_SESSION`), and runs it. Makes the intent obvious when the user pastes the clipboard into a chat message — the agent sees the goal plus the exact code it should run.
+- **Bash-safe single-quote wrapping**: `buildInspectionCode` now replaces every literal `'` in the JSON-stringified URL and element summary with `\u0027` (a valid JSON escape that the JS engine parses back to `'`). Previously, element text containing a single quote (e.g. "Don't save", an apostrophe in an `aria-label`) leaked into the code and broke the outer bash `'…'` wrapper. The generated code is now guaranteed to be single-quote-free regardless of page content.
+
 ## 0.0.84
 
 ### Changes
