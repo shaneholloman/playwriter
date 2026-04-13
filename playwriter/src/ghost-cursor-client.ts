@@ -475,7 +475,11 @@ if (isTopFrame) {
       document.addEventListener(
         'DOMContentLoaded',
         () => {
-          api.enable()
+          try {
+            api.enable()
+          } catch {
+            // Non-fatal — DOM may be in an unexpected state.
+          }
         },
         { once: true },
       )

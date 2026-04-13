@@ -72,18 +72,24 @@ export class GhostCursorController {
     const previousMouseAction = this.previousMouseActionByPage.get(page)
 
     page.onMouseAction = async (event) => {
-      const pendingCursorApply = this.cursorApplyQueueByPage.get(page) || Promise.resolve()
-      const nextCursorApply = pendingCursorApply
-        .then(async () => {
-          await applyGhostCursorMouseAction({ page, event })
-        })
-        .catch((error) => {
-          if (page.isClosed()) {
-            return
-          }
-          this.logger.error('[playwriter] Failed to apply ghost cursor action', error)
-        })
-      this.cursorApplyQueueByPage.set(page, nextCursorApply)
+      // Ghost cursor must never crash the main Playwright action (click, move, etc).
+      // Wrap the entire cursor logic in try/catch so errors stay cosmetic.
+      try {
+        const pendingCursorApply = this.cursorApplyQueueByPage.get(page) || Promise.resolve()
+        const nextCursorApply = pendingCursorApply
+          .then(async () => {
+            await applyGhostCursorMouseAction({ page, event })
+          })
+          .catch((error) => {
+            if (page.isClosed()) {
+              return
+            }
+            this.logger.error('[playwriter] Failed to apply ghost cursor action', error)
+          })
+        this.cursorApplyQueueByPage.set(page, nextCursorApply)
+      } catch (error) {
+        this.logger.error('[playwriter] Ghost cursor onMouseAction error (non-fatal)', error)
+      }
 
       if (!previousMouseAction) {
         return
@@ -104,12 +110,20 @@ export class GhostCursorController {
   }
 
   async show(options: { page: Page; cursorOptions?: GhostCursorClientOptions }): Promise<void> {
-    const { page, cursorOptions } = options
-    await enableGhostCursor({ page, cursorOptions })
+    try {
+      const { page, cursorOptions } = options
+      await enableGhostCursor({ page, cursorOptions })
+    } catch {
+      // Non-fatal — page may be closing or navigating.
+    }
   }
 
   async hide(options: { page: Page }): Promise<void> {
-    const { page } = options
-    await disableGhostCursor({ page })
+    try {
+      const { page } = options
+      await disableGhostCursor({ page })
+    } catch {
+      // Non-fatal — page may be closing or navigating.
+    }
   }
 }
