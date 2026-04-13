@@ -116,11 +116,12 @@ export function initPlaywriterToolbar(): void {
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
       white-space: nowrap;
       z-index: 1;
+      --toast-transform: translateX(-50%);
       animation: toast-in 0.15s ease;
     }
     @keyframes toast-in {
-      from { opacity: 0; transform: translate(-50%, 4px); }
-      to   { opacity: 1; transform: translate(-50%, 0); }
+      from { opacity: 0; transform: var(--toast-transform) translateY(4px); }
+      to   { opacity: 1; transform: var(--toast-transform); }
     }
   `
 
@@ -156,7 +157,12 @@ export function initPlaywriterToolbar(): void {
 
       toastEl.style.left = Math.max(8, Math.min(centerX, window.innerWidth - 8)) + 'px'
       toastEl.style.top = top + 'px'
-      toastEl.style.transform = fitsBelow ? 'translateX(-50%)' : 'translateX(-50%) translateY(-100%)'
+      // Set base transform via CSS variable so the @keyframes animation includes it.
+      // Without this, the keyframe overrides the inline transform during animation
+      // and the toast jumps when positioned above the anchor (translateY(-100%)).
+      const baseTransform = fitsBelow ? 'translateX(-50%)' : 'translateX(-50%) translateY(-100%)'
+      toastEl.style.setProperty('--toast-transform', baseTransform)
+      toastEl.style.transform = baseTransform
       toastEl.style.transformOrigin = transformOrigin
     } else {
       // Fallback: bottom-center of viewport
