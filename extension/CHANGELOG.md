@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.0.89
+
+### Changes
+
+- **"Copied" toast now appears near the pinned element** instead of bottom-center of the viewport. Positioned like a tooltip just below the selection rectangle, horizontally centered on the element. Flips above if near the viewport bottom. Falls back to bottom-center when no anchor rect is provided.
+
+## 0.0.88
+
+### Changes
+
+- **Debounced idle hide for the ghost cursor**. The cursor now fades out after 5 seconds of no Playwright-driven mouse activity so it doesn't bother the user during manual browsing sessions. Any new action (move, click, wheel) wakes it back up by teleporting to the new target position and fading back in with the snappy 140ms press duration. The fade-out uses a gentler 600ms curve so it "dims away" rather than blinking off. All state is browser-side inside `ghost-cursor-client.ts` — no Node-side timers, no extra CDP round-trips. Constants `IDLE_HIDE_DELAY_MS = 5000` and `IDLE_FADE_OUT_MS = 600` live at the top of the file for easy tuning.
+
+## 0.0.87
+
+### Changes
+
+- **Ghost cursor animation polish** (Emil Kowalski design-engineering principles applied). Four changes, all in `playwriter/src/ghost-cursor-client.ts`:
+  1. Move easing switched from strong ease-out `cubic-bezier(0.16, 1, 0.3, 1)` to easeInOutCubic `cubic-bezier(0.65, 0, 0.35, 1)`. The cursor now accelerates smoothly out of its rest position and decelerates into the target instead of starting at full speed — feels like a hand gliding, not a lurch. Emil's rule: "on-screen movement → ease-in-out".
+  2. Press feedback has a dedicated fast duration (140ms) and strong ease-out curve (`cubic-bezier(0.23, 1, 0.32, 1)`), independent of the move transition's 220-1500ms range. Previously the scale-down animation on click inherited the move duration — a click during a long diagonal sweep would scale down over 1500ms, which looked broken.
+  3. Press scale subtlety: dropped from 0.82 (dot) / 0.93 (minimal) / 0.94 (screenstudio) to 0.92 / 0.95 / 0.95. Follows Emil's "subtle (0.95-0.98)" button press guideline. The old 0.82 dot press looked like the cursor was disappearing.
+  4. `transform-origin` anchored to the cursor hotspot (arrow tip / pointer anchor). Default center origin was causing a ~0.7px tip shift on every press scale change — subtle but visible to attentive eyes. Now the tip stays pinned while the cursor "pulses" around it.
+- **Split CSS transitions for transform vs opacity**: opacity changes (press feedback dimming) always use the fast 140ms press duration, so they never inherit the move transition's long duration. Cursor fades and press pulses stay crisp even during long sweeps.
+
+## 0.0.86
+
+### Changes
+
+- **Always-on ghost cursor**. The ghost cursor overlay is now injected into every Playwriter-attached tab the moment the debugger attaches, via `Page.addScriptToEvaluateOnNewDocument` + `Runtime.evaluate` in MAIN world. The bundle is the same `ghost-cursor-client.js` artifact used by `page.evaluate`-based callers, inlined into `background.js` at build time with vite's `?raw` loader so there is a single source of truth. The cursor auto-enables in the top frame (iframes early-return) and stays on the last spot that Playwright clicked or moved to. Recording no longer toggles it on and off — the cursor is always visible. `ghostCursor.show/hide` is still available for changing the style or hiding the overlay on demand.
+- **Cursor torn down on tab detach**. `detachTab` now calls `__playwriterGhostCursor?.disable()` via `chrome.scripting.executeScript`, mirroring the existing toolbar-destroy pattern, so tabs that leave Playwriter control don't retain a stale cursor overlay.
+
 ## 0.0.85
 
 ### Changes

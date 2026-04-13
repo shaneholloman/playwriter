@@ -1,9 +1,18 @@
 /**
- * Browser-side ghost cursor renderer.
- * Injected into the page to visualize automated mouse actions with smooth easing.
+ * Browser-side ghost cursor renderer, injected into every Playwriter-attached tab.
+ * Auto-enables on load (top frame only). Idles out after 5s of no activity.
  */
 
 import { SCREENSTUDIO_POINTER_MACOS_TAHOE_DATA_URL } from './assets/cursors/screen-studio/pointer-macos-tahoe-data-url.js'
+
+// Top-frame only — skip iframes. try/catch for sandboxed iframes that throw.
+const isTopFrame = (() => {
+  try {
+    return window === window.top
+  } catch {
+    return false
+  }
+})()
 
 type GhostCursorActionType = 'move' | 'down' | 'up' | 'wheel'
 type GhostCursorButton = 'left' | 'right' | 'middle' | 'none'
@@ -46,6 +55,7 @@ interface GhostCursorRuntimeState {
   scale: number
   hasPosition: boolean
   enabled: boolean
+  idleHidden: boolean
 }
 
 interface GhostCursorApi {
@@ -66,15 +76,26 @@ const SCREENSTUDIO_HOTSPOT_Y_RATIO = 0.06
 const MINIMAL_TRIANGLE_HOTSPOT_X_RATIO = 0.07
 const MINIMAL_TRIANGLE_HOTSPOT_Y_RATIO = 0.06
 
+// Animation curves from Emil Kowalski's guidelines (https://animations.dev):
+// moves use ease-in-out (accel/decel), presses use strong ease-out (100-160ms).
+const MOVE_EASING = 'cubic-bezier(0.65, 0, 0.35, 1)' // easeInOutCubic
+const PRESS_EASING = 'cubic-bezier(0.23, 1, 0.32, 1)' // strong ease-out
+const PRESS_DURATION_MS = 140
+
+// Cursor fades out after 5s of no activity, wakes on next action.
+const IDLE_HIDE_DELAY_MS = 5000
+const IDLE_FADE_OUT_MS = 600
+
 const DEFAULT_OPTIONS: GhostCursorRuntimeOptions = {
   style: 'minimal',
   color: '#111827',
   size: 22,
   zIndex: 2147483647,
-  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-  minDurationMs: 24,
-  maxDurationMs: 320,
-  speedPxPerMs: 4,
+  easing: MOVE_EASING,
+  // Slow enough to track with the eye. Override per-call via ghostCursor.show().
+  minDurationMs: 220,
+  maxDurationMs: 1500,
+  speedPxPerMs: 1.2,
 }
 
 const runtime: GhostCursorRuntimeState = {
@@ -85,7 +106,10 @@ const runtime: GhostCursorRuntimeState = {
   scale: 1,
   hasPosition: false,
   enabled: false,
+  idleHidden: false,
 }
+
+let idleHideTimer: ReturnType<typeof setTimeout> | null = null
 
 function clamp(options: { value: number; min: number; max: number }): number {
   const { value, min, max } = options
@@ -231,6 +255,10 @@ function applyRuntimeVisualOptions(): void {
   runtime.cursorElement.style.zIndex = `${runtime.options.zIndex}`
   runtime.cursorElement.style.transitionTimingFunction = runtime.options.easing
 
+  // Scale around the hotspot so press doesn't shift the arrow tip.
+  const hotspot = getHotspotOffsetPx()
+  runtime.cursorElement.style.transformOrigin = `${hotspot.x}px ${hotspot.y}px`
+
   if (runtime.options.style === 'screenstudio') {
     runtime.cursorElement.style.borderRadius = '0'
     runtime.cursorElement.style.border = 'none'
@@ -247,7 +275,6 @@ function applyRuntimeVisualOptions(): void {
   }
 
   if (runtime.options.style === 'minimal') {
-    // White fill with dark border stroke, like a standard macOS cursor
     const triangleSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="-1 -1 26 26"><path fill="white" stroke="${runtime.options.color}" stroke-width="1.5" stroke-linejoin="round" d="m23.284 19.124l-6.866-6.895a.4.4 0 0 1-.118-.296a.43.43 0 0 1 .163-.282l4.439-3.077a1.48 1.48 0 0 0 .621-1.48a1.48 1.48 0 0 0-1.036-1.198L1.623.302a1.14 1.14 0 0 0-1.11.282A1.13 1.13 0 0 0 .29 1.649L5.928 20.44a1.48 1.48 0 0 0 1.183 1.035a1.48 1.48 0 0 0 1.48-.621l3.078-4.44a.37.37 0 0 1 .31-.118a.43.43 0 0 1 .296.104l6.91 6.91a1.48 1.48 0 0 0 2.087 0l2.086-2.086a1.48 1.48 0 0 0-.074-2.101"/></svg>`
     const triangleDataUrl = `url("data:image/svg+xml,${encodeURIComponent(triangleSvg)}")`
     runtime.cursorElement.style.borderRadius = '0'
@@ -274,6 +301,40 @@ function applyRuntimeVisualOptions(): void {
   runtime.cursorElement.style.opacity = getBaseOpacity()
 }
 
+function clearIdleHideTimer(): void {
+  if (idleHideTimer !== null) {
+    clearTimeout(idleHideTimer)
+    idleHideTimer = null
+  }
+}
+
+function scheduleIdleHide(): void {
+  clearIdleHideTimer()
+  idleHideTimer = setTimeout(() => {
+    idleHideTimer = null
+    if (!runtime.enabled || !runtime.cursorElement) {
+      return
+    }
+    runtime.idleHidden = true
+    runtime.cursorElement.style.transitionDuration = `${IDLE_FADE_OUT_MS}ms`
+    runtime.cursorElement.style.transitionTimingFunction = PRESS_EASING
+    runtime.cursorElement.style.opacity = '0'
+  }, IDLE_HIDE_DELAY_MS)
+}
+
+function wakeFromIdle(options: { x: number; y: number }): void {
+  // Update runtime position so the subsequent moveCursor sees zero distance
+  // and doesn't animate from the stale 5s-old spot.
+  runtime.x = options.x
+  runtime.y = options.y
+  runtime.hasPosition = true
+  if (runtime.cursorElement) {
+    runtime.cursorElement.style.transitionDuration = `${PRESS_DURATION_MS}ms`
+    runtime.cursorElement.style.transitionTimingFunction = PRESS_EASING
+    runtime.cursorElement.style.opacity = getBaseOpacity()
+  }
+}
+
 function moveCursor(options: { x: number; y: number }): void {
   if (!runtime.enabled) {
     return
@@ -282,6 +343,7 @@ function moveCursor(options: { x: number; y: number }): void {
   const element = ensureCursorElement()
   const durationMs = computeDurationMs({ targetX: options.x, targetY: options.y })
   element.style.transitionDuration = `${Math.round(durationMs)}ms`
+  element.style.transitionTimingFunction = runtime.options.easing
 
   runtime.x = options.x
   runtime.y = options.y
@@ -295,13 +357,14 @@ function setPressed(options: { pressed: boolean }): void {
   }
 
   const element = ensureCursorElement()
+  // Subtle press feedback (0.95). Dot style uses 0.92 — needs a bigger pulse.
   runtime.scale = options.pressed
-    ? runtime.options.style === 'screenstudio'
-      ? 0.94
-      : runtime.options.style === 'minimal'
-        ? 0.93
-      : 0.82
+    ? runtime.options.style === 'dot'
+      ? 0.92
+      : 0.95
     : 1
+  element.style.transitionDuration = `${PRESS_DURATION_MS}ms`
+  element.style.transitionTimingFunction = PRESS_EASING
   element.style.opacity = options.pressed ? '1' : getBaseOpacity()
   applyTransform()
 }
@@ -319,13 +382,21 @@ function enable(options?: GhostCursorClientOptions): void {
     runtime.hasPosition = true
   }
 
+  runtime.idleHidden = false
+  if (runtime.cursorElement) {
+    runtime.cursorElement.style.opacity = getBaseOpacity()
+  }
+
   applyTransform()
+  scheduleIdleHide()
 }
 
 function disable(): void {
   runtime.enabled = false
   runtime.scale = 1
   runtime.hasPosition = false
+  runtime.idleHidden = false
+  clearIdleHideTimer()
 
   if (runtime.cursorElement) {
     runtime.cursorElement.remove()
@@ -338,21 +409,22 @@ function applyMouseAction(action: GhostCursorAction): void {
     return
   }
 
+  if (runtime.idleHidden) {
+    runtime.idleHidden = false
+    wakeFromIdle({ x: action.x, y: action.y })
+  }
+
   if (action.type === 'move' || action.type === 'wheel') {
     moveCursor({ x: action.x, y: action.y })
-    return
-  }
-
-  if (action.type === 'down') {
+  } else if (action.type === 'down') {
     moveCursor({ x: action.x, y: action.y })
     setPressed({ pressed: true })
-    return
-  }
-
-  if (action.type === 'up') {
+  } else if (action.type === 'up') {
     moveCursor({ x: action.x, y: action.y })
     setPressed({ pressed: false })
   }
+
+  scheduleIdleHide()
 }
 
 const api: GhostCursorApi = {
@@ -364,6 +436,27 @@ const api: GhostCursorApi = {
   },
 }
 
-globalThis.__playwriterGhostCursor = api
+if (isTopFrame) {
+  globalThis.__playwriterGhostCursor = api
+
+  // Auto-enable. Defer for early injection (addScriptToEvaluateOnNewDocument)
+  // when DOM isn't ready yet. Node-side GhostCursorController rehydrates
+  // position/style after hard navigations via framenavigated listener.
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          api.enable()
+        },
+        { once: true },
+      )
+    } else {
+      api.enable()
+    }
+  } catch {
+    // Restricted contexts (chrome://, devtools://) — silently skip.
+  }
+}
 
 export {}

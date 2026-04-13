@@ -193,4 +193,34 @@ describe('onMouseAction callback', () => {
 
     await safeCloseCDPBrowser(directBrowser)
   }, 30000)
+
+  // Always-on ghost cursor: the Chrome extension injects the ghost-cursor-client.js
+  // bundle into MAIN world the moment it attaches a tab (see attachTab in
+  // extension/src/background.ts). This test verifies the cursor element exists on
+  // a freshly-attached tab WITHOUT any explicit enableGhostCursor call.
+  it('should inject ghost cursor into attached tabs without explicit enable', async () => {
+    const browserContext = testCtx!.browserContext
+    const serviceWorker = await getExtensionServiceWorker(browserContext)
+
+    const page = await browserContext.newPage()
+    await page.goto('data:text/html,<html><body><h1>always-on-cursor</h1></body></html>')
+    await page.bringToFront()
+
+    await serviceWorker.evaluate(async () => {
+      await (globalThis as any).toggleExtensionForActiveTab()
+    })
+    await new Promise((r) => {
+      setTimeout(r, 300)
+    })
+
+    const cursorPresent = await page.evaluate(() => {
+      return {
+        apiPresent: Boolean((globalThis as any).__playwriterGhostCursor),
+        elementPresent: Boolean(document.getElementById('__playwriter_ghost_cursor__')),
+      }
+    })
+
+    expect(cursorPresent.apiPresent).toBe(true)
+    expect(cursorPresent.elementPresent).toBe(true)
+  }, 30000)
 })

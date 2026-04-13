@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.111
+
+1. **Debounced idle hide for the always-on ghost cursor**. After 5 seconds of no mouse activity, the cursor gently fades out (600ms opacity transition) so it doesn't visually clutter the page during manual browsing. The next Playwright-driven mouse action wakes it back up: it teleports to the new target and fades in over 140ms. Timer runs entirely in the browser via `setTimeout` — no Node-side scheduling. See `IDLE_HIDE_DELAY_MS` and `IDLE_FADE_OUT_MS` in `ghost-cursor-client.ts` to tune.
+
+## 0.0.110
+
+1. **Ghost cursor animation polish** following Emil Kowalski's design engineering guidelines (https://animations.dev). See extension 0.0.87 CHANGELOG for the full list of changes: easing switched from strong ease-out to easeInOutCubic for moves, dedicated 140ms press duration with strong ease-out, subtler press scales (0.92/0.95 vs 0.82/0.94), transform-origin anchored to the cursor hotspot, and split transform/opacity transitions so press feedback never inherits the move's 1500ms. Default `speedPxPerMs`/`minDurationMs`/`maxDurationMs` unchanged.
+
+## 0.0.109
+
+1. **Always-on ghost cursor**. The cursor overlay is now visible on every Playwriter-attached tab from the moment the debugger attaches, not just during `recording.start()`. The Chrome extension injects the `ghost-cursor-client.js` bundle via CDP `Page.addScriptToEvaluateOnNewDocument` + `Runtime.evaluate` so the overlay survives hard navigations, and the bundle auto-enables itself on load (skipping iframes). The cursor stays on the last spot Playwright clicked or moved to.
+2. **`GhostCursorController` replaces `RecordingGhostCursorController`**. Renamed and refactored: the controller now exposes `attachToPage`/`detachFromPage` for always-on `onMouseAction` wiring instead of `enableForRecording`/`disableForRecording`. `show()`/`hide()` stay as explicit overrides for style changes. `PlaywrightExecutor` owns a single controller instance and attaches it to every page via `setupPageListeners`, so the wiring survives across `execute()` calls.
+3. **Navigation rehydration**. The controller tracks the last Playwright-driven mouse action, the last style options set via `show()`, and the hidden state set via `hide()` per page. On `framenavigated` for the main frame it replays the last mouse action (as a `move`) so the cursor settles on the previous click position instead of snapping back to the viewport center after a hard navigation. It also re-applies non-default styles and re-hides the cursor if `hide()` had been called.
+4. **Recording no longer toggles the cursor**. `createRecordingApi` still takes the controller (for `resolveRecordingTargetPage`) but no longer calls enable/disable — the overlay is managed independently of the recording lifecycle.
+5. **Quieter cursor-apply errors on page close**. The fire-and-forget `applyGhostCursorMouseAction` queue now swallows rejections on closed pages instead of logging noisy `[playwriter] Failed to apply ghost cursor action` errors when a page is torn down mid-animation.
+
 ## 0.0.108
 
 1. **Remove `GET /extension/sessions`** added in 0.0.107. The extension's in-page toolbar no longer plumbs a session id into the copied clipboard payload — it copies raw JS eval code that the agent wraps in their own `playwriter -s <session> -e '…'` call, so the relay no longer needs to expose the session list to chrome-extension fetches.

@@ -16,7 +16,7 @@ import type {
   IsRecordingResult,
   CancelRecordingResult,
 } from './protocol.js'
-import { RecordingGhostCursorController } from './recording-ghost-cursor.js'
+import { GhostCursorController } from './ghost-cursor-controller.js'
 
 /**
  * Generate a CLI command that starts a managed Playwriter browser with the
@@ -117,7 +117,7 @@ interface CreateRecordingApiOptions {
   context: BrowserContext
   defaultPage: Page
   relayPort: number
-  ghostCursorController: RecordingGhostCursorController
+  ghostCursorController: GhostCursorController
   onStart: () => void
   onFinish: () => void
   getExecutionTimestamps: () => ExecutionTimestamp[]
@@ -137,7 +137,7 @@ interface CancelRecordingWithDefaultsOptions {
 function resolveRecordingTargetPage(options: {
   context: BrowserContext
   defaultPage: Page
-  ghostCursorController: RecordingGhostCursorController
+  ghostCursorController: GhostCursorController
   target?: RecordingTargetOptions
 }): Page {
   return options.ghostCursorController.resolveRecordingTargetPage({
@@ -214,7 +214,6 @@ export function createRecordingApi(options: CreateRecordingApiOptions): {
 
     const result = await startWithDefaults(opts)
     onStart()
-    await ghostCursorController.enableForRecording({ page: targetPage })
 
     // Schedule auto-stop to prevent unbounded recordings filling disk.
     // Default 15 min. Set maxDurationMs to 0 or Infinity to disable.
@@ -253,7 +252,6 @@ export function createRecordingApi(options: CreateRecordingApiOptions): {
     const result = await stopWithDefaults(opts)
     const executionTimestamps = [...getExecutionTimestamps()]
     onFinish()
-    await ghostCursorController.disableForRecording({ page: targetPage })
     await restoreViewport(targetPage)
     return { ...result, executionTimestamps }
   }
@@ -263,7 +261,6 @@ export function createRecordingApi(options: CreateRecordingApiOptions): {
     const targetPage = resolveRecordingTargetPage({ context, defaultPage, ghostCursorController, target: opts })
     await cancelWithDefaults(opts)
     onFinish()
-    await ghostCursorController.disableForRecording({ page: targetPage })
     await restoreViewport(targetPage)
   }
 

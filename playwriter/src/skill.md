@@ -833,11 +833,11 @@ state.recordingResult = await recording.stop({ page: state.page })
 // Other: recording.isRecording({ page }), recording.cancel({ page })
 ```
 
-**ghostCursor.show / ghostCursor.hide** - show/hide cursor overlay for screenshots and demos:
+**ghostCursor.show / ghostCursor.hide** - the ghost cursor overlay is always on: the extension injects it on every Playwriter-attached tab and it stays visible at the last spot Playwright clicked or moved. These methods only matter if you want to change the cursor style or temporarily hide it:
 
 ```js
-await ghostCursor.show({ page: state.page, style: 'minimal' }) // 'minimal', 'dot', 'screenstudio'
-await ghostCursor.hide({ page: state.page })
+await ghostCursor.show({ page: state.page, style: 'screenstudio' }) // 'minimal' (default), 'dot', 'screenstudio'
+await ghostCursor.hide({ page: state.page }) // hide until next show() or hard navigation
 ```
 
 **createDemoVideo** - speeds up idle sections (time between execute() calls) while keeping interactions at normal speed. Requires `ffmpeg`/`ffprobe`. Timestamps are tracked automatically during recording and returned by `recording.stop()`. **Timeout**: can take 60–120+ seconds, always pass `--timeout 120000` or higher.

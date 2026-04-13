@@ -37,7 +37,7 @@ import { getPageMarkdown, type GetPageMarkdownOptions } from './page-markdown.js
 import { createRecordingApi } from './screen-recording.js'
 import { createDemoVideo } from './ffmpeg.js'
 import { type GhostCursorClientOptions } from './ghost-cursor.js'
-import { RecordingGhostCursorController } from './recording-ghost-cursor.js'
+import { GhostCursorController } from './ghost-cursor-controller.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -312,6 +312,8 @@ export class PlaywrightExecutor {
   private sessionCwd: string | null
   private hasWarnedExtensionOutdated = false
 
+  private ghostCursorController: GhostCursorController
+
   constructor(options: ExecutorOptions) {
     this.cdpConfig = options.cdpConfig
     this.logger = options.logger || { log: console.log, error: console.error }
@@ -323,6 +325,13 @@ export class PlaywrightExecutor {
       this.sessionCwd || undefined,
     )
     this.sandboxedRequire = this.createSandboxedRequire(require)
+    this.ghostCursorController = new GhostCursorController({
+      logger: {
+        error: (...args: unknown[]) => {
+          this.logger.error(...args)
+        },
+      },
+    })
   }
 
   private createSandboxedRequire(originalRequire: NodeRequire): NodeRequire {
@@ -437,6 +446,10 @@ export class PlaywrightExecutor {
     this.setupPageCloseDetection(page)
     this.setupPageConsoleListener(page)
     this.setupNewPageLogging(page)
+    this.ghostCursorController.attachToPage({ page })
+    page.on('close', () => {
+      this.ghostCursorController.detachFromPage({ page })
+    })
   }
 
   private setupPageCloseDetection(page: Page) {
@@ -1061,13 +1074,7 @@ export class PlaywrightExecutor {
       // This permission is granted when the user clicks the Playwriter extension icon on a tab.
       const relayPort = this.cdpConfig.port || 19988
       const self = this
-      const recordingGhostCursor = new RecordingGhostCursorController({
-        logger: {
-          error: (...args: unknown[]) => {
-            self.logger.error(...args)
-          },
-        },
-      })
+      const ghostCursorController = this.ghostCursorController
 
       const showGhostCursor = async (options?: ({ page?: Page } & GhostCursorClientOptions)) => {
         const targetPage = options?.page || page
@@ -1080,19 +1087,19 @@ export class PlaywrightExecutor {
           return rest
         })()
 
-        await recordingGhostCursor.show({ page: targetPage, cursorOptions })
+        await ghostCursorController.show({ page: targetPage, cursorOptions })
       }
 
       const hideGhostCursor = async (options?: { page?: Page }) => {
         const targetPage = options?.page || page
-        await recordingGhostCursor.hide({ page: targetPage })
+        await ghostCursorController.hide({ page: targetPage })
       }
 
       const recordingApi = createRecordingApi({
         context,
         defaultPage: page,
         relayPort,
-        ghostCursorController: recordingGhostCursor,
+        ghostCursorController,
         onStart: () => {
           self.recordingStartedAt = Date.now()
           self.executionTimestamps = []

@@ -106,9 +106,6 @@ export function initPlaywriterToolbar(): void {
     .btn.active .logo-inner { fill: #0d99ff; }
     .toast {
       position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
       background: #0f172a;
       border-radius: 8px;
       padding: 9px 18px;
@@ -119,11 +116,11 @@ export function initPlaywriterToolbar(): void {
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
       white-space: nowrap;
       z-index: 1;
-      animation: fadein 0.15s ease;
+      animation: toast-in 0.15s ease;
     }
-    @keyframes fadein {
-      from { opacity: 0; transform: translateX(-50%) translateY(4px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translate(-50%, 4px); }
+      to   { opacity: 1; transform: translate(-50%, 0); }
     }
   `
 
@@ -137,7 +134,7 @@ export function initPlaywriterToolbar(): void {
 
   // ── Helper: toast notification ─────────────────────────────────────────────
 
-  function showToast(msg: string): void {
+  function showToast(msg: string, anchorRect?: DOMRect): void {
     shadow.querySelectorAll('.toast').forEach((el) => {
       el.remove()
     })
@@ -145,6 +142,29 @@ export function initPlaywriterToolbar(): void {
     const toastEl = document.createElement('div')
     toastEl.className = 'toast'
     toastEl.textContent = msg
+
+    if (anchorRect) {
+      // Position like a tooltip just below the element, centered horizontally
+      const GAP = 8
+      const centerX = anchorRect.left + anchorRect.width / 2
+      const belowY = anchorRect.bottom + GAP
+
+      // Flip above if too close to viewport bottom (toast is ~30px tall)
+      const fitsBelow = belowY + 36 < window.innerHeight
+      const top = fitsBelow ? belowY : anchorRect.top - GAP
+      const transformOrigin = fitsBelow ? 'top center' : 'bottom center'
+
+      toastEl.style.left = Math.max(8, Math.min(centerX, window.innerWidth - 8)) + 'px'
+      toastEl.style.top = top + 'px'
+      toastEl.style.transform = fitsBelow ? 'translateX(-50%)' : 'translateX(-50%) translateY(-100%)'
+      toastEl.style.transformOrigin = transformOrigin
+    } else {
+      // Fallback: bottom-center of viewport
+      toastEl.style.bottom = '20px'
+      toastEl.style.left = '50%'
+      toastEl.style.transform = 'translateX(-50%)'
+    }
+
     shadow.appendChild(toastEl)
     toastTimer = window.setTimeout(() => {
       toastEl.remove()
@@ -375,7 +395,7 @@ export function initPlaywriterToolbar(): void {
     const code = buildInspectionCode(n, url, summary)
     const clipboardText = "see the element I pinned in the playwriter tab `playwriter -e '" + code + "'`"
     copyText(clipboardText)
-    showToast(`Copied pin #${n}`)
+    showToast(`Copied pin #${n}`, target.getBoundingClientRect())
     setPinMode(false)
   }
 

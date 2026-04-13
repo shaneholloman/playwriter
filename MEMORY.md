@@ -169,6 +169,24 @@ Fix: custom `[Symbol.for('nodejs.util.inspect.custom')]` on ChannelOwner
 prototype + on the channel proxy target. See
 `playwright/packages/playwright-core/src/client/channelOwner.ts`.
 
+## Always-on MAIN world bundle injection from extension (Apr 2026)
+
+To inject a playwriter/dist/*.js bundle into every Playwriter-attached tab at
+the extension layer: use `Page.addScriptToEvaluateOnNewDocument` + `Runtime.evaluate`
+in `attachTab`, NOT `chrome.scripting.executeScript({ func })`. The CDP pair
+survives hard navigations; executeScript is one-shot.
+
+Inline the bundle via vite `?raw` import (`import code from '../../playwriter/dist/foo.js?raw'`).
+Works because playwriter builds before the extension in pnpm filter order, and
+`vite/client` types in extension tsconfig.json cover the `?raw` import.
+
+Node-side state persistence: MAIN-world state is wiped on hard navigation, so
+anything that must persist across navigations (cursor position, style, hidden
+flag) has to be stored in a Node-side controller that rehydrates on
+`page.on('framenavigated', frame => frame === page.mainFrame())`. The bundle's
+IIFE-scoped `runtime` object is fresh on every injection — don't try to make it
+persist client-side.
+
 ## Vendored extract-zip needs get-stream 5 (Apr 2026)
 
 `playwright-core/src/zipBundle.ts` loads a vendored CommonJS `extract-zip.js`

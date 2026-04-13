@@ -12,6 +12,8 @@ import { initPlaywriterToolbar } from './toolbar/toolbar'
 import type { CDPEvent, Protocol } from 'playwriter/src/cdp-types'
 import type { ExtensionCommandMessage, ExtensionResponseMessage } from 'playwriter/src/protocol'
 import { handleGhostBrowserCommand, type GhostBrowserCommandParams } from 'playwriter/src/ghost-browser'
+// Inlined at build time via vite ?raw. Source: playwriter/src/ghost-cursor-client.ts
+import ghostCursorBundleCode from '../../playwriter/dist/ghost-cursor-client.js?raw'
 import {
   getActiveRecordings,
   handleStartRecording,
@@ -1261,6 +1263,16 @@ async function attachTab(
     await chrome.debugger.sendCommand(debuggee, 'Page.addScriptToEvaluateOnNewDocument', { source: contextMenuScript })
     await chrome.debugger.sendCommand(debuggee, 'Runtime.evaluate', { expression: contextMenuScript })
 
+    // Ghost cursor — survives navigations via addScriptToEvaluateOnNewDocument.
+    try {
+      await chrome.debugger.sendCommand(debuggee, 'Page.addScriptToEvaluateOnNewDocument', {
+        source: ghostCursorBundleCode,
+      })
+      await chrome.debugger.sendCommand(debuggee, 'Runtime.evaluate', { expression: ghostCursorBundleCode })
+    } catch (err) {
+      logger.debug('Could not inject ghost cursor (restricted page):', (err as Error).message)
+    }
+
     const result = (await chrome.debugger.sendCommand(
       debuggee,
       'Target.getTargetInfo',
@@ -1359,6 +1371,16 @@ function detachTab(tabId: number, shouldDetachDebugger: boolean): void {
       world: 'MAIN',
       func: () => {
         ;(window as any).__playwriterToolbarDestroy?.()
+      },
+    })
+    .catch(() => {})
+
+  void chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        ;(globalThis as any).__playwriterGhostCursor?.disable?.()
       },
     })
     .catch(() => {})
