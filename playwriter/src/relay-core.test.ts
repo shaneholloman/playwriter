@@ -13,6 +13,7 @@ import {
   js,
   tryJsonParse,
   createSimpleServer,
+  safeCloseCDPBrowser,
 } from './test-utils.js'
 import './test-declarations.js'
 
@@ -273,6 +274,122 @@ describe('Relay Core Tests', () => {
       }
     `)
   }, 120000)
+
+  it('should ignore duplicate dialog dismissals from multiple CDP clients', async () => {
+    const browserContext = getBrowserContext()
+    const serviceWorker = await getExtensionServiceWorker(browserContext)
+    const logFilePath = `${process.cwd()}/relay-server.log`
+    const logLineCountBefore = fs.existsSync(logFilePath)
+      ? fs
+          .readFileSync(logFilePath, 'utf-8')
+          .split('\n')
+          .filter((line) => {
+            return line.trim().length > 0
+          }).length
+      : 0
+
+    const server = await createSimpleServer({
+      routes: {
+        '/': `<!doctype html>
+<html>
+  <body>
+    <button id="open-dialog">Open dialog</button>
+    <script>
+      document.getElementById('open-dialog').addEventListener('click', () => {
+        alert('shared dialog')
+      })
+    </script>
+  </body>
+</html>`,
+      },
+    })
+
+    const page = await browserContext.newPage()
+    let browserA: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null
+    let browserB: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null
+
+    try {
+      await page.goto(server.baseUrl, { waitUntil: 'domcontentloaded' })
+      await page.bringToFront()
+
+      await serviceWorker.evaluate(async () => {
+        await globalThis.toggleExtensionForActiveTab()
+      })
+
+      await new Promise((r) => {
+        setTimeout(r, 100)
+      })
+
+      browserA = await withTimeout({
+        promise: chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT })),
+        timeoutMs: 10000,
+        errorMessage: 'Timed out connecting first CDP client for dialog test',
+      })
+      browserB = await withTimeout({
+        promise: chromium.connectOverCDP(getCdpUrl({ port: TEST_PORT })),
+        timeoutMs: 10000,
+        errorMessage: 'Timed out connecting second CDP client for dialog test',
+      })
+
+      const getConnectedPage = (browser: Awaited<ReturnType<typeof chromium.connectOverCDP>>) => {
+        return browser
+          .contexts()[0]
+          ?.pages()
+          .find((candidatePage) => {
+            return candidatePage.url() === server.baseUrl + '/'
+          })
+      }
+
+      const connectedPageA = getConnectedPage(browserA)
+      const connectedPageB = getConnectedPage(browserB)
+
+      expect(connectedPageA).toBeDefined()
+      expect(connectedPageB).toBeDefined()
+
+      await withTimeout({
+        promise: connectedPageA!.click('#open-dialog'),
+        timeoutMs: 5000,
+        errorMessage: 'Timed out opening dialog with first CDP client',
+      })
+
+      const secondClientResult = await withTimeout({
+        promise: connectedPageB!.evaluate(() => {
+          return 2 + 2
+        }),
+        timeoutMs: 5000,
+        errorMessage: 'Second CDP client stopped responding after shared dialog dismissal',
+      })
+
+      expect(secondClientResult).toBe(4)
+
+      await new Promise((r) => {
+        setTimeout(r, 200)
+      })
+    } finally {
+      if (browserA) {
+        await safeCloseCDPBrowser(browserA)
+      }
+      if (browserB) {
+        await safeCloseCDPBrowser(browserB)
+      }
+      await page.close()
+      await server.close()
+    }
+
+    const logLinesAfter = fs
+      .readFileSync(logFilePath, 'utf-8')
+      .split('\n')
+      .filter((line) => {
+        return line.trim().length > 0
+      })
+      .slice(logLineCountBefore)
+
+    const unexpectedRelayCrashes = logLinesAfter.filter((line) => {
+      return line.includes('Unhandled Rejection:')
+    })
+
+    expect(unexpectedRelayCrashes).toEqual([])
+  }, 60000)
 
   it('should execute code and capture console output', async () => {
     await client.callTool({

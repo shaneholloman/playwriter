@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.112
+
+1. **Stop crashes on shared JavaScript dialogs**. When multiple `connectOverCDP()` clients are attached to the same Playwriter tab, a single `alert()`/`confirm()`/`prompt()` can be auto-dismissed more than once. The fix now lives in the Playwright fork's `Dialog.close()` abstraction instead of the relay: duplicate best-effort closes that lose the race now get ignored instead of surfacing an unhandled rejection that kills the process.
+2. **Regression test for multi-client dialog handling**. Added an integration test that attaches two CDP clients to the same tab, opens a dialog, verifies both clients stay usable, and asserts the relay log stays free of `Unhandled Rejection:` entries.
+
 ## 0.0.111
 
 1. **Debounced idle hide for the always-on ghost cursor**. After 5 seconds of no mouse activity, the cursor gently fades out (600ms opacity transition) so it doesn't visually clutter the page during manual browsing. The next Playwright-driven mouse action wakes it back up: it teleports to the new target and fades in over 140ms. Timer runs entirely in the browser via `setTimeout` — no Node-side scheduling. See `IDLE_HIDE_DELAY_MS` and `IDLE_FADE_OUT_MS` in `ghost-cursor-client.ts` to tune.
