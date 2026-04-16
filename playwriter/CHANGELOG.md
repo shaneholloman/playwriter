@@ -1,37 +1,11 @@
 # Changelog
 
-## 0.0.112
+## 0.1.0
 
-1. **Stop crashes on shared JavaScript dialogs**. When multiple `connectOverCDP()` clients are attached to the same Playwriter tab, a single `alert()`/`confirm()`/`prompt()` can be auto-dismissed more than once. The fix now lives in the Playwright fork's `Dialog.close()` abstraction instead of the relay: duplicate best-effort closes that lose the race now get ignored instead of surfacing an unhandled rejection that kills the process.
-2. **Regression test for multi-client dialog handling**. Added an integration test that attaches two CDP clients to the same tab, opens a dialog, verifies both clients stay usable, and asserts the relay log stays free of `Unhandled Rejection:` entries.
-
-## 0.0.111
-
-1. **Debounced idle hide for the always-on ghost cursor**. After 5 seconds of no mouse activity, the cursor gently fades out (600ms opacity transition) so it doesn't visually clutter the page during manual browsing. The next Playwright-driven mouse action wakes it back up: it teleports to the new target and fades in over 140ms. Timer runs entirely in the browser via `setTimeout` — no Node-side scheduling. See `IDLE_HIDE_DELAY_MS` and `IDLE_FADE_OUT_MS` in `ghost-cursor-client.ts` to tune.
-
-## 0.0.110
-
-1. **Ghost cursor animation polish** following Emil Kowalski's design engineering guidelines (https://animations.dev). See extension 0.0.87 CHANGELOG for the full list of changes: easing switched from strong ease-out to easeInOutCubic for moves, dedicated 140ms press duration with strong ease-out, subtler press scales (0.92/0.95 vs 0.82/0.94), transform-origin anchored to the cursor hotspot, and split transform/opacity transitions so press feedback never inherits the move's 1500ms. Default `speedPxPerMs`/`minDurationMs`/`maxDurationMs` unchanged.
-
-## 0.0.109
-
-1. **Always-on ghost cursor**. The cursor overlay is now visible on every Playwriter-attached tab from the moment the debugger attaches, not just during `recording.start()`. The Chrome extension injects the `ghost-cursor-client.js` bundle via CDP `Page.addScriptToEvaluateOnNewDocument` + `Runtime.evaluate` so the overlay survives hard navigations, and the bundle auto-enables itself on load (skipping iframes). The cursor stays on the last spot Playwright clicked or moved to.
-2. **`GhostCursorController` replaces `RecordingGhostCursorController`**. Renamed and refactored: the controller now exposes `attachToPage`/`detachFromPage` for always-on `onMouseAction` wiring instead of `enableForRecording`/`disableForRecording`. `show()`/`hide()` stay as explicit overrides for style changes. `PlaywrightExecutor` owns a single controller instance and attaches it to every page via `setupPageListeners`, so the wiring survives across `execute()` calls.
-3. **Recording no longer toggles the cursor**. `createRecordingApi` still takes the controller (for `resolveRecordingTargetPage`) but no longer calls enable/disable — the overlay is managed independently of the recording lifecycle.
-5. **Quieter cursor-apply errors on page close**. The fire-and-forget `applyGhostCursorMouseAction` queue now swallows rejections on closed pages instead of logging noisy `[playwriter] Failed to apply ghost cursor action` errors when a page is torn down mid-animation.
-
-## 0.0.108
-
-1. **Remove `GET /extension/sessions`** added in 0.0.107. The extension's in-page toolbar no longer plumbs a session id into the copied clipboard payload — it copies raw JS eval code that the agent wraps in their own `playwriter -s <session> -e '…'` call, so the relay no longer needs to expose the session list to chrome-extension fetches.
-
-## 0.0.107
-
-1. **New public relay endpoint `GET /extension/sessions`** returns the active CLI session list as `{ sessions: [{ id, stateKeys }], nextSuggested }`. Used by the extension service worker to pass session ids into the injected toolbar so pin-click can build a full `playwriter -s <id> -e '…'` command. Sits outside the `/cli/*` privileged middleware (which rejects cross-site `Sec-Fetch-Site`, blocking chrome-extension fetches to localhost). Read-only, already equivalent to what `playwriter session list` exposes, so there's no new attack surface.
-
-## 0.0.106
-
-1. **Keep `playwriter --help` and `playwriter serve` decoupled from browser launch internals**. The CLI now lazy-loads the browser-start modules only when `playwriter browser start` is actually executed, so generic startup/help paths no longer pull `@xmorse/playwright-core` and fail early on unrelated browser-install dependencies.
-2. **Regression coverage for CLI help startup**. Added a black-box test that runs `playwriter --help` and `playwriter serve --help` through `vite-node` and verifies both commands render successfully.
+1. **New in-page toolbar with pin mode** — every attached tab now gets a floating toolbar you can use to pin elements directly from the page. Pinning copies a natural-language prompt plus the exact `playwriter -e '…'` code needed to inspect that element later, so pasted prompts are immediately useful to an agent instead of just exposing a fragile DOM handle.
+2. **Always-on ghost cursor with better motion** — the cursor overlay now appears on every Playwriter-attached tab, survives hard navigations, uses smoother move/press animation timing, and fades away after 5 seconds of idle time so manual browsing stays uncluttered. The next Playwright-driven mouse action brings it back instantly.
+3. **`playwriter --help` and `playwriter serve --help` work on clean installs again** — browser-launch code is now lazy-loaded only when `playwriter browser start` actually runs, so generic CLI entrypoints no longer fail early on unrelated browser-install dependencies.
+4. **Shared JavaScript dialogs no longer crash multi-client sessions** — when multiple `connectOverCDP()` clients auto-close the same `alert()`/`confirm()`/`prompt()`, duplicate best-effort closes are now ignored instead of surfacing an unhandled rejection that kills the process.
 
 ## 0.0.105
 
