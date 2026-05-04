@@ -239,12 +239,7 @@ async function executeCode(options: {
   try {
     const response = await fetch(executeUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token || process.env.PLAYWRITER_TOKEN
-          ? { Authorization: `Bearer ${token || process.env.PLAYWRITER_TOKEN}` }
-          : {}),
-      },
+      headers: buildAuthHeaders({ token, json: true }),
       body: JSON.stringify({ sessionId, code, timeout, cwd }),
     })
 
@@ -808,6 +803,14 @@ cli
       console.error('Error: Authentication token is required when binding to a public host.')
       console.error('Provide --token <token> or set PLAYWRITER_TOKEN environment variable.')
       process.exit(1)
+    }
+
+    // Expose the token to in-process callers (screen-recording.ts, etc.) so
+    // they can attach Authorization: Bearer ... when calling the relay's own
+    // privileged endpoints. Required because we no longer bypass auth for
+    // loopback — see commit history for the tunnel-agent threat model.
+    if (token) {
+      process.env.PLAYWRITER_TOKEN = token
     }
 
     // Check if server is already running on the port

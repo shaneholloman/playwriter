@@ -12,7 +12,10 @@
 
 import { chromium } from '@xmorse/playwright-core'
 
-const TOKEN = process.env.PLAYWRITER_TOKEN || 'secret_token'
+const TOKEN = process.env.PLAYWRITER_TOKEN
+if (!TOKEN) {
+  throw new Error('Set PLAYWRITER_TOKEN env var to the token you passed to `playwriter serve --token …`.')
+}
 const CLIENT_ID = `cdp-demo-${Date.now()}`
 // Set HOST to your tunnel for remote test, e.g. "wss://mcp.ivanleo.com",
 // or leave default for local.

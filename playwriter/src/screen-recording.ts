@@ -19,6 +19,21 @@ import type {
 import { GhostCursorController } from './ghost-cursor-controller.js'
 
 /**
+ * Build headers for the relay's privileged /recording/* HTTP endpoints.
+ * Reads PLAYWRITER_TOKEN from env so in-process callers (executor running
+ * inside `playwriter serve --token …`) authenticate against their own relay.
+ * The `serve` command sets the env var at startup.
+ */
+function recordingHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = process.env.PLAYWRITER_TOKEN
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
+/**
  * Generate a CLI command that starts a managed Playwriter browser with the
  * bundled extension preloaded. This enables screen recording without a manual
  * extension click on fresh automation sessions.
@@ -293,7 +308,7 @@ export async function startRecording(options: StartRecordingOptions): Promise<Re
 
   const response = await fetch(`http://127.0.0.1:${relayPort}/recording/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: recordingHeaders(),
     body: JSON.stringify({
       sessionId,
       frameRate,
@@ -341,7 +356,7 @@ export async function stopRecording(
 
   const response = await fetch(`http://127.0.0.1:${relayPort}/recording/stop`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: recordingHeaders(),
     body: JSON.stringify({ sessionId }),
   })
 
@@ -368,7 +383,8 @@ export async function isRecording(options: {
   if (sessionId) {
     url.searchParams.set('sessionId', sessionId)
   }
-  const response = await fetch(url.toString())
+  // GET request — only the Authorization header matters here
+  const response = await fetch(url.toString(), { headers: recordingHeaders() })
   const result = (await response.json()) as IsRecordingResult
 
   return { isRecording: result.isRecording, startedAt: result.startedAt, tabId: result.tabId }
@@ -386,7 +402,7 @@ export async function cancelRecording(options: {
 
   const response = await fetch(`http://127.0.0.1:${relayPort}/recording/cancel`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: recordingHeaders(),
     body: JSON.stringify({ sessionId }),
   })
 

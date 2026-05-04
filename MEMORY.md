@@ -1,5 +1,14 @@
 # Memory
 
+## Loopback ≠ trusted under tunnel agents (Apr 2026)
+
+Tunnel agents (traforo, ngrok, cloudflared) run as local processes that
+forward public traffic to `localhost:19988`. The relay sees every public
+request as `socket.remoteAddress = 127.0.0.1`, so any loopback-based auth
+bypass becomes a full bypass. Always require the token on every request
+regardless of source; in-process callers must attach it themselves via
+`PLAYWRITER_TOKEN` env (set by `serve` at startup).
+
 ## Auto-returned values in playwriter CLI: skip useless Playwright handles (Apr 2026)
 
 The CLI auto-returns single-expression code (e.g. `await page.goto(url)`).

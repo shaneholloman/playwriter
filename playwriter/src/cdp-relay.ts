@@ -1763,20 +1763,24 @@ export async function startPlayWriterCDPRelayServer({
   }
 
   // ============================================================================
-  // Security middleware for privileged HTTP routes (/cli/*, /recording/*)
+  // Security middleware for privileged HTTP routes (/cli/*, /recording/*, /mcp-log)
   //
   // CORS alone does NOT prevent cross-origin POST attacks. Browsers skip the
   // preflight for "simple" requests (POST + Content-Type: text/plain), so a
   // malicious website can fire-and-forget a POST to localhost:19988/cli/execute
   // and the code executes before CORS even enters the picture.
   //
-  // Two layers of defense:
+  // Three layers of defense:
   // 1. Sec-Fetch-Site: browsers set this forbidden header on every request.
   //    If present and not "same-origin"/"none", it's a cross-origin browser
   //    request → reject. Node.js clients don't send it → unaffected.
   // 2. Content-Type must be application/json on POST. This forces a CORS
   //    preflight as a fallback, which our CORS policy already blocks.
-  // 3. When token mode is enabled (remote access), require the token.
+  // 3. When token mode is enabled (remote access), require the token on EVERY
+  //    request, including loopback. Tunnel agents (traforo, ngrok, cloudflared)
+  //    forward public traffic from 127.0.0.1, so a loopback bypass would be
+  //    a full auth bypass. In-process callers attach the token themselves
+  //    via PLAYWRITER_TOKEN env (set by the `serve` command at startup).
   // ============================================================================
   const privilegedRouteMiddleware = async (
     c: Parameters<Parameters<typeof app.use>[1]>[0],
@@ -1801,27 +1805,22 @@ export async function startPlayWriterCDPRelayServer({
       }
     }
 
-    // When token mode is enabled (remote/serve mode), require authentication.
-    // Loopback connections (127.0.0.1, ::1) bypass the token check because they
-    // can only originate from in-process code (executor calling its own relay
-    // for /recording/* etc.) — that code already runs downstream of an
-    // authenticated /cdp/* WebSocket session, so re-checking the token would
-    // mean smuggling it into every internal helper for no real security gain.
+    // When token mode is enabled (remote/serve mode), require authentication
+    // on EVERY request, including loopback. Earlier versions bypassed the
+    // check for 127.0.0.1/::1 to spare in-process callers, but that's unsafe:
+    // when the relay is fronted by a tunnel agent (traforo, ngrok, cloudflared,
+    // etc.) running as a local process, every public request reaches the relay
+    // from 127.0.0.1 and would skip auth. In-process callers must instead
+    // attach the token themselves — they read PLAYWRITER_TOKEN from env, which
+    // the `serve` command sets at startup.
     if (token) {
-      const remoteAddr = getConnInfo(c).remote.address || ''
-      const isLoopback =
-        remoteAddr === '127.0.0.1' ||
-        remoteAddr === '::1' ||
-        remoteAddr === '::ffff:127.0.0.1'
-      if (!isLoopback) {
-        const authHeader = c.req.header('authorization') || ''
-        const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-        const url = new URL(c.req.url, 'http://localhost')
-        const queryToken = url.searchParams.get('token')
-        if (bearerToken !== token && queryToken !== token) {
-          logger?.log(pc.red(`Rejecting ${c.req.path}: invalid or missing token`))
-          return c.text('Unauthorized', 401)
-        }
+      const authHeader = c.req.header('authorization') || ''
+      const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+      const url = new URL(c.req.url, 'http://localhost')
+      const queryToken = url.searchParams.get('token')
+      if (bearerToken !== token && queryToken !== token) {
+        logger?.log(pc.red(`Rejecting ${c.req.path}: invalid or missing token`))
+        return c.text('Unauthorized', 401)
       }
     }
 

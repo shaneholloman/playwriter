@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+1. **Security: remove loopback auth bypass on privileged HTTP routes** — `0.1.5` skipped the token check on `/cli/*`, `/recording/*`, and `/mcp-log` for connections from `127.0.0.1`/`::1`. Under the recommended remote-access topology (traforo/ngrok/cloudflared running as a local agent forwarding public traffic to `localhost:19988`), every public request reaches the relay from `127.0.0.1`, which made the bypass equivalent to no auth at all — anyone with the public tunnel URL could call `/cli/execute` for full RCE in the user's Chrome. The middleware now requires the token on every request, regardless of source.
+2. **In-process callers attach the token from env** — `playwriter serve --token …` now sets `PLAYWRITER_TOKEN` in the relay process so `screen-recording.ts` (and any future in-process privileged caller) can include `Authorization: Bearer …` in its loopback HTTP calls. Mirrors what `mcp.ts` already does for `/mcp-log`.
+3. **`/cli/execute` uses the shared `buildAuthHeaders` helper** — was still building the header inline; now consistent with the other five `/cli/*` fetch sites.
+4. **`connect-cdp-demo.ts` no longer ships a hardcoded `'secret_token'` fallback** — fails fast with a clear message if `PLAYWRITER_TOKEN` is unset.
+
 ## 0.1.5
 
 1. **`--token` now works on every remote subcommand** — `session new`, `session list`, `session delete`, `session reset`, and `browser list` all accept `--token <token>` (or `PLAYWRITER_TOKEN` env var) and forward `Authorization: Bearer …` to the relay's `/cli/*` endpoints. Previously only `playwriter -e` sent the token, so against a token-protected `playwriter serve` every other command returned `401 Unauthorized`. Thanks to @ivanleomk for the original fix.
