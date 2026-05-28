@@ -287,7 +287,7 @@ export class PlaywrightExecutor {
   private context: BrowserContext | null = null
 
   private userState: Record<string, any> = {}
-  private browserLogs: Map<string, string[]> = new Map()
+  private browserLogs: Map<Page, string[]> = new Map()
   private lastSnapshots: WeakMap<Page, Map<string, string>> = new WeakMap()
   private lastRefToLocator: WeakMap<Page, Map<string, string>> = new WeakMap()
   private warningEvents: WarningEvent[] = []
@@ -531,41 +531,63 @@ export class PlaywrightExecutor {
   }
 
   private setupPageConsoleListener(page: Page) {
-    // Use targetId() if available, fallback to internal _guid for CDP connections
-    const targetId = page.targetId() || ((page as any)._guid as string | undefined)
-    if (!targetId) {
-      return
-    }
-
-    if (!this.browserLogs.has(targetId)) {
-      this.browserLogs.set(targetId, [])
+    if (!this.browserLogs.has(page)) {
+      this.browserLogs.set(page, [])
     }
 
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame()) {
-        this.browserLogs.set(targetId, [])
+        this.browserLogs.set(page, [])
       }
     })
 
     page.on('close', () => {
-      this.browserLogs.delete(targetId)
+      this.browserLogs.delete(page)
     })
 
     page.on('console', (msg) => {
       try {
         const logEntry = `[${msg.type()}] ${msg.text()}`
-        if (!this.browserLogs.has(targetId)) {
-          this.browserLogs.set(targetId, [])
-        }
-        const pageLogs = this.browserLogs.get(targetId)!
-        pageLogs.push(logEntry)
-        if (pageLogs.length > MAX_LOGS_PER_PAGE) {
-          pageLogs.shift()
-        }
+        this.addBrowserLog({ page, logEntry })
       } catch (e) {
         this.logger.error('[Executor] Failed to get console message text:', e)
       }
     })
+
+    page.on('pageerror', (error) => {
+      this.addBrowserLog({ page, logEntry: `[pageerror] ${error.message}` })
+    })
+  }
+
+  private addBrowserLog(options: { page: Page; logEntry: string }) {
+    if (!this.browserLogs.has(options.page)) {
+      this.browserLogs.set(options.page, [])
+    }
+    const pageLogs = this.browserLogs.get(options.page)!
+    pageLogs.push(options.logEntry)
+    if (pageLogs.length > MAX_LOGS_PER_PAGE) {
+      pageLogs.shift()
+    }
+  }
+
+  private pagesRelatedToPage(page: Page): Page[] {
+    const frameUrls = new Set(
+      page
+        .frames()
+        .map((frame) => {
+          return frame.url()
+        })
+        .filter((url) => {
+          return url && url !== 'about:blank'
+        }),
+    )
+
+    return page
+      .context()
+      .pages()
+      .filter((candidate) => {
+        return candidate === page || frameUrls.has(candidate.url())
+      })
   }
 
   private async checkExtensionStatus(): Promise<{
@@ -981,13 +1003,10 @@ export class PlaywrightExecutor {
         let allLogs: string[] = []
 
         if (filterPage) {
-          // Use targetId() if available, fallback to internal _guid for CDP connections
-          const targetId = filterPage.targetId() || ((filterPage as any)._guid as string | undefined)
-          if (!targetId) {
-            throw new Error('Could not get page targetId')
-          }
-          const pageLogs = this.browserLogs.get(targetId) || []
-          allLogs = [...pageLogs]
+          const relatedPages = this.pagesRelatedToPage(filterPage)
+          allLogs = relatedPages.flatMap((relatedPage) => {
+            return this.browserLogs.get(relatedPage) || []
+          })
         } else {
           for (const pageLogs of this.browserLogs.values()) {
             allLogs.push(...pageLogs)

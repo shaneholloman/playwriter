@@ -730,6 +730,7 @@ describe('Relay Core Tests', () => {
             console.error('Test error 67890');
             console.warn('Test warning 11111');
             console.log('Test log 2 with', { data: 'object' });
+            setTimeout(() => { throw new Error('Test pageerror 22222'); }, 0);
           });
           // Wait for logs to be captured
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -752,6 +753,7 @@ describe('Relay Core Tests', () => {
     expect(output).toContain('[log] Test log 12345')
     expect(output).toContain('[error] Test error 67890')
     expect(output).toContain('[warning] Test warning 11111')
+    expect(output).toContain('[pageerror] Test pageerror 22222')
 
     // Test filtering by search string
     const errorLogsResult = await client.callTool({
