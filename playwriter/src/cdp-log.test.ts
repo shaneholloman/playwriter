@@ -16,6 +16,19 @@ function makeEntry(i: number): CdpLogEntry {
   }
 }
 
+function readIds(logFile: string): number[] {
+  return fs
+    .readFileSync(logFile, 'utf-8')
+    .trim()
+    .split('\n')
+    .filter((l) => {
+      return l.length > 0
+    })
+    .map((l) => {
+      return JSON.parse(l).message.id as number
+    })
+}
+
 describe('CDP log rotation', () => {
   it('rotates when lineCount exceeds maxEntries, keeping last half', async () => {
     const tmpDir = makeTmpDir()
@@ -26,30 +39,30 @@ describe('CDP log rotation', () => {
     for (let i = 0; i < 25; i++) {
       logger.log(makeEntry(i))
     }
-    // Wait for the async queue to drain
-    await new Promise((resolve) => {
-      setTimeout(resolve, 500)
-    })
+    await logger.flush()
 
-    const content = fs.readFileSync(logFile, 'utf-8').trim()
-    const lines = content.split('\n').filter((l) => {
-      return l.length > 0
-    })
+    const ids = readIds(logFile)
 
-    // After rotation at entry 21 (0-indexed 20), we keep last 10 entries (half of 20),
-    // then entries 21-24 are appended = 10 + 4 = 14 lines
-    // The kept entries should be the last 10 before rotation (entries 11-20),
-    // plus entries 21-24 appended after rotation
-    expect(lines.length).toBeLessThanOrEqual(20)
-    expect(lines.length).toBeGreaterThanOrEqual(10)
-
-    // Verify the last entry is the most recent one (entry 24)
-    const lastEntry = JSON.parse(lines[lines.length - 1])
-    expect(lastEntry.message.id).toBe(24)
-
-    // Verify oldest kept entry is not from the very beginning
-    const firstEntry = JSON.parse(lines[0])
-    expect(firstEntry.message.id).toBeGreaterThan(0)
+    // Rotation triggers after entry 20 is written (lineCount becomes 21 > 20).
+    // It keeps last 10 (entries 11-20), then entries 21-24 are appended.
+    expect(ids).toMatchInlineSnapshot(`
+      [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+      ]
+    `)
 
     fs.rmSync(tmpDir, { recursive: true })
   })
@@ -62,19 +75,12 @@ describe('CDP log rotation', () => {
     for (let i = 0; i < 30; i++) {
       logger.log(makeEntry(i))
     }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 300)
-    })
+    await logger.flush()
 
-    const lines = fs
-      .readFileSync(logFile, 'utf-8')
-      .trim()
-      .split('\n')
-      .filter((l) => {
-        return l.length > 0
-      })
-
-    expect(lines.length).toBe(30)
+    const ids = readIds(logFile)
+    expect(ids.length).toBe(30)
+    expect(ids[0]).toBe(0)
+    expect(ids[29]).toBe(29)
 
     fs.rmSync(tmpDir, { recursive: true })
   })
@@ -88,25 +94,37 @@ describe('CDP log rotation', () => {
     for (let i = 0; i < 35; i++) {
       logger.log(makeEntry(i))
     }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 500)
-    })
+    await logger.flush()
 
-    const lines = fs
-      .readFileSync(logFile, 'utf-8')
-      .trim()
-      .split('\n')
-      .filter((l) => {
-        return l.length > 0
-      })
+    const ids = readIds(logFile)
 
-    // Should never exceed maxEntries + a small buffer from writes between check and rotation
-    expect(lines.length).toBeLessThanOrEqual(15)
-    expect(lines.length).toBeGreaterThanOrEqual(5)
+    // File should never exceed maxEntries
+    expect(ids.length).toBeLessThanOrEqual(15)
+    expect(ids.length).toBeGreaterThanOrEqual(5)
 
-    // Last entry should be the most recent
-    const lastEntry = JSON.parse(lines[lines.length - 1])
-    expect(lastEntry.message.id).toBe(34)
+    // Last entry should always be the most recent
+    expect(ids[ids.length - 1]).toBe(34)
+    // No entries from the very beginning should survive multiple rotations
+    expect(ids[0]).toBeGreaterThan(10)
+
+    fs.rmSync(tmpDir, { recursive: true })
+  })
+
+  it('uses atomic rename for rotation', async () => {
+    const tmpDir = makeTmpDir()
+    const logFile = path.join(tmpDir, 'cdp.jsonl')
+    const logger = createCdpLogger({ logFilePath: logFile, maxEntries: 10 })
+
+    for (let i = 0; i < 15; i++) {
+      logger.log(makeEntry(i))
+    }
+    await logger.flush()
+
+    // Temp file should not remain after successful rotation
+    expect(fs.existsSync(`${logFile}.tmp`)).toBe(false)
+
+    const ids = readIds(logFile)
+    expect(ids[ids.length - 1]).toBe(14)
 
     fs.rmSync(tmpDir, { recursive: true })
   })
