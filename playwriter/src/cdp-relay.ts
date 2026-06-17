@@ -661,6 +661,20 @@ export async function startPlayWriterCDPRelayServer({
     sessionId?: CDPCommand['sessionId']
     source?: CDPCommand['source']
   }) {
+    // Block CDP commands that are destructive across the entire browser profile.
+    // Network.clearBrowserCookies wipes ALL cookies for every domain (not just current page).
+    // Network.clearBrowserCache wipes the entire browser cache.
+    // These are catastrophic in an extension context where the user's real Chrome profile is at risk.
+    const blockedCdpCommands: Record<string, string> = {
+      'Network.clearBrowserCookies':
+        'Network.clearBrowserCookies is blocked because it clears ALL cookies across every domain in the browser profile. Use Network.getCookies + Network.deleteCookies to clear cookies for specific domains instead.',
+      'Network.clearBrowserCache':
+        'Network.clearBrowserCache is blocked because it clears the entire browser cache for all sites. This is destructive in an extension context.',
+    }
+    if (blockedCdpCommands[method]) {
+      throw new Error(blockedCdpCommands[method])
+    }
+
     const conn = getExtensionConnection(extensionId)
     const connectedTargets = conn?.connectedTargets || new Map<string, relayState.ConnectedTarget>()
     const resolvedExtensionId = conn?.id || extensionId

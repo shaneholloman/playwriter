@@ -201,3 +201,7 @@ persist client-side.
 `playwright-core/src/zipBundle.ts` loads a vendored CommonJS `extract-zip.js`
 that still does `require('get-stream')`. Do not bump `playwright-core`
 to `get-stream@9+` unless the vendored unzip code is rewritten or replaced.
+
+## Network.clearBrowserCookies nukes entire profile (Jul 2026)
+
+`Network.clearBrowserCookies` clears ALL cookies for every domain in the Chrome profile, not just the current page. It wiped Gmail, GitHub, and all authenticated sessions. The relay now blocks this command (and `Network.clearBrowserCache`). Use `Network.getCookies` + `Network.deleteCookies` to clear cookies per-domain instead.
